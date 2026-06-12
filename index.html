@@ -35,6 +35,9 @@ const API = {
     toggleWahl:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c5c92775b671421aa209f784cd6aff1a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YrzOet19S_HU0iyi_CIdiW76dQ27eihTEoXkS44qbMU",
     getErgebnisse: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e524a7cab9a847879371cce7a4cf34e7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=rNW7r-f5brXdkANm7TOGlJ5qzGbMU8dclveFaQxLK60",
     deleteToken:   "PLATZHALTER_WAHL_DeleteToken",
+    getAlle:       "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/79c1ffeaa7f84fe29fee758ff0f3fe93/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=G_FnGLRFJCbppHDH_bmyfmKUasq4BecWm9HDm0Ijrns",
+    saveWahllokal: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/95e56fdda66442fc85ee7246861bda0e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lDqIDur370XvJCkwPj-xm9J_i8XrtfcIatVs3jYaan8",
+    deleteWahllokal: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/224d0149b1474e21a170cf87d89e290b/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-xA1XoBby58QJu0RFKFbEqhedoQF5CuXdUrl1r4beg4",
   }
 };
 
@@ -198,13 +201,15 @@ function generateToken() {
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════════
 function App() {
-  const [view, setView] = useState("wahllokal");
-  const [leitungAuth, setLeitungAuth] = useState(null);
+  const urlParams = new URL(window.location.href).searchParams;
+  const wahllokalID = urlParams.get("wahllokal") || "EOK";
+  const ansicht = urlParams.get("ansicht") || "";
+
+  const [view, setView] = useState(ansicht === "ergebnisse" ? "ergebnisse" : ansicht === "leitung" ? "leitung" : ansicht === "superadmin" ? "superadmin" : "wahllokal");
+  const [leitungAuth, setLeitungAuth] = useState(ansicht === "leitung" ? null : null);
   const [superadminAuth, setSuperadminAuth] = useState(false);
   const [appData, setAppData] = useState(null);
   const [loadError, setLoadError] = useState(null);
-
-  const wahllokalID = "EOK"; // In Produktion: new URL(window.location.href).searchParams.get("wahllokal") || "EOK"
 
   // Daten beim Start laden
   useEffect(() => {
@@ -290,8 +295,13 @@ function App() {
           <DemoSwitcher
             onLeitung={() => setView("leitung")}
             onSuperadmin={() => setView("superadmin")}
+            onErgebnisse={() => setView("ergebnisse")}
           />
         </>
+      )}
+
+      {view === "ergebnisse" && appData && (
+        <ErgebnisDashboard appData={appData} wahllokalID={wahllokalID} />
       )}
 
       {view === "leitung" && (
@@ -329,9 +339,10 @@ function App() {
 }
 
 // ─── DEMO SWITCHER ────────────────────────────────────────────────────────────
-function DemoSwitcher({ onLeitung, onSuperadmin }) {
+function DemoSwitcher({ onLeitung, onSuperadmin, onErgebnisse }) {
   return (
     <div style={{ position: "fixed", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 999 }}>
+      <button onClick={onErgebnisse} style={{ ...S.btn, ...S.btnSuccess, fontSize: 12, opacity: 0.8 }}>📊 Ergebnisse</button>
       <button onClick={onLeitung} style={{ ...S.btn, ...S.btnPrimary, fontSize: 12, opacity: 0.8 }}>📋 Wahlleitung</button>
       <button onClick={onSuperadmin} style={{ ...S.btn, ...S.btnPurple, fontSize: 12, opacity: 0.8 }}>⚙️ Superadmin</button>
     </div>
@@ -946,6 +957,18 @@ function LeitungErgebnisse({ appData, eventID, onDataChange }) {
 // EBENE 3: SUPERADMIN
 // ═══════════════════════════════════════════════════════════════════════════════
 function SuperadminView({ appData, onExit, onDataChange }) {
+  // Superadmin lädt alle Wahllokale über separaten Flow
+  const [alleWahllokale, setAlleWahllokale] = useState(appData.wahllokale);
+
+  useEffect(() => {
+    async function loadAlle() {
+      try {
+        const result = await callFlow("getAlle", {});
+        setAlleWahllokale((result || []).map(mapWahllokal));
+      } catch (e) { console.error(e); }
+    }
+    loadAlle();
+  }, []);
   const [tab, setTab] = useState("uebersicht");
   const tabs = [
     { id: "uebersicht", label: "🏠 Übersicht" },
@@ -969,8 +992,8 @@ function SuperadminView({ appData, onExit, onDataChange }) {
         <div style={S.navTabs}>
           {tabs.map(t => <button key={t.id} style={{ ...S.navTab, ...(tab === t.id ? { ...S.navTabActive, background: C.superadmin, borderColor: C.superadmin } : {}) }} onClick={() => setTab(t.id)}>{t.label}</button>)}
         </div>
-        {tab === "uebersicht" && <SuperadminUebersicht appData={appData} />}
-        {tab === "wahllokale" && <SuperadminWahllokale appData={appData} onDataChange={onDataChange} />}
+        {tab === "uebersicht" && <SuperadminUebersicht appData={appData} alleWahllokale={alleWahllokale} />}
+        {tab === "wahllokale" && <SuperadminWahllokale alleWahllokale={alleWahllokale} onDataChange={async () => { onDataChange(); const r = await callFlow("getAlle", {}); setAlleWahllokale((r||[]).map(mapWahllokal)); }} />}
         {tab === "alle_wahlen" && <SuperadminAlleWahlen appData={appData} onDataChange={onDataChange} />}
         {tab === "einstellungen" && <SuperadminEinstellungen />}
       </div>
@@ -1089,6 +1112,176 @@ function SuperadminEinstellungen() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ERGEBNIS DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════════
+function ErgebnisDashboard({ appData, wahllokalID }) {
+  const wahllokal = appData.wahllokale.find(w => w.eventID === wahllokalID);
+  const wahlen = appData.wahlen.filter(w => w.eventID === wahllokalID);
+  const [selectedWahlID, setSelectedWahlID] = useState(wahlen[0]?.id || "");
+  const [ergebnisse, setErgebnisse] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [letzteAktualisierung, setLetzteAktualisierung] = useState(null);
+  const [vollbild, setVollbild] = useState(false);
+
+  useEffect(() => {
+    if (wahlen.length > 0 && !selectedWahlID) setSelectedWahlID(wahlen[0].id);
+  }, [wahlen.length]);
+
+  async function laden() {
+    if (!selectedWahlID) return;
+    setLoading(true);
+    try {
+      const result = await callFlow("getErgebnisse", { wahlID: parseInt(selectedWahlID), eventID: wahllokalID });
+      setErgebnisse(result.value || result.abstimmungen || []);
+      setLetzteAktualisierung(new Date());
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }
+
+  useEffect(() => { laden(); }, [selectedWahlID]);
+
+  // Auto-Refresh alle 30 Sekunden
+  useEffect(() => {
+    const t = setInterval(laden, 30000);
+    return () => clearInterval(t);
+  }, [selectedWahlID]);
+
+  const wahl = wahlen.find(w => w.id === selectedWahlID);
+  const total = ergebnisse?.length || 0;
+  const optErgebnisse = wahl?.optionen.map(opt => ({
+    ...opt,
+    stimmen: ergebnisse?.filter(a => {
+      try {
+        const pos = JSON.parse(a.Positionen || a.positionen || "[]");
+        return pos.some(p => String(p.optionID) === opt.id);
+      } catch { return false; }
+    }).length || 0,
+  })).sort((a, b) => b.stimmen - a.stimmen) || [];
+  const maxS = Math.max(...optErgebnisse.map(e => e.stimmen), 1);
+  const nichtenthaltung = optErgebnisse.filter(e => !e.istEnthaltung);
+  const fuehrend = nichtenthaltung[0];
+
+  const containerStyle = vollbild ? {
+    position: "fixed", inset: 0, background: C.primary, zIndex: 9999,
+    display: "flex", flexDirection: "column", padding: 48, overflow: "auto"
+  } : {
+    minHeight: "100vh", background: C.bg, padding: 24
+  };
+
+  return (
+    <div style={containerStyle}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: vollbild ? "rgba(255,255,255,0.6)" : C.textLight, marginBottom: 4 }}>
+            Evangelische Landeskirche in Baden
+          </div>
+          <h1 style={{ fontSize: vollbild ? 32 : 24, fontWeight: 800, color: vollbild ? "#fff" : C.primary, margin: 0 }}>
+            {wahllokal?.name || wahllokalID} — Wahlergebnisse
+          </h1>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            style={{ ...S.btn, ...S.btnGhost, fontSize: 12, ...(vollbild ? { background: "rgba(255,255,255,0.15)", color: "#fff", border: "none" } : {}) }}
+            onClick={laden}
+            disabled={loading}
+          >
+            {loading ? "…" : "🔄 Aktualisieren"}
+          </button>
+          <button
+            style={{ ...S.btn, fontSize: 12, ...(vollbild ? { background: "rgba(255,255,255,0.15)", color: "#fff", border: "none" } : { ...S.btnPrimary }) }}
+            onClick={() => setVollbild(!vollbild)}
+          >
+            {vollbild ? "✕ Vollbild beenden" : "⛶ Vollbild"}
+          </button>
+        </div>
+      </div>
+
+      {/* Wahl auswählen */}
+      {wahlen.length > 1 && (
+        <div style={{ marginBottom: 24 }}>
+          <select
+            style={{ ...S.select, maxWidth: 400, ...(vollbild ? { background: "rgba(255,255,255,0.1)", color: "#fff", borderColor: "rgba(255,255,255,0.3)" } : {}) }}
+            value={selectedWahlID}
+            onChange={e => setSelectedWahlID(e.target.value)}
+          >
+            {wahlen.map(w => <option key={w.id} value={w.id}>{w.titel}</option>)}
+          </select>
+        </div>
+      )}
+
+      {wahl && (
+        <>
+          {/* Wahl-Titel */}
+          <div style={{ fontSize: vollbild ? 24 : 18, fontWeight: 700, color: vollbild ? "#fff" : C.primary, marginBottom: 8 }}>
+            {wahl.titel}
+          </div>
+
+          {/* Statistik */}
+          <div style={{ display: "flex", gap: 24, marginBottom: 32, flexWrap: "wrap" }}>
+            <div style={{ fontSize: vollbild ? 48 : 36, fontWeight: 900, color: vollbild ? C.accent : C.primary, lineHeight: 1 }}>
+              {total}
+              <span style={{ fontSize: vollbild ? 16 : 13, fontWeight: 400, color: vollbild ? "rgba(255,255,255,0.6)" : C.textLight, marginLeft: 8 }}>
+                Stimme{total !== 1 ? "n" : ""} abgegeben
+              </span>
+            </div>
+            {fuehrend && total > 0 && (
+              <div style={{ fontSize: vollbild ? 16 : 13, color: vollbild ? "rgba(255,255,255,0.7)" : C.textLight, alignSelf: "flex-end", paddingBottom: 8 }}>
+                Führend: <strong style={{ color: vollbild ? "#fff" : C.text }}>{fuehrend.name}</strong> mit {fuehrend.stimmen} Stimme{fuehrend.stimmen !== 1 ? "n" : ""} ({Math.round(fuehrend.stimmen / total * 100)}%)
+              </div>
+            )}
+          </div>
+
+          {/* Balkendiagramm */}
+          <div style={{ display: "flex", flexDirection: "column", gap: vollbild ? 24 : 16 }}>
+            {optErgebnisse.map((e, idx) => (
+              <div key={e.id}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: vollbild ? 10 : 6, alignItems: "baseline" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {!e.istEnthaltung && idx === 0 && total > 0 && (
+                      <span style={{ fontSize: 18 }}>🏆</span>
+                    )}
+                    <span style={{ fontWeight: 700, fontSize: vollbild ? 20 : 15, color: vollbild ? "#fff" : C.text }}>
+                      {e.name}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: vollbild ? 20 : 14, fontWeight: 700, color: vollbild ? C.accent : C.primary }}>
+                    {e.stimmen} {total > 0 ? `(${Math.round(e.stimmen / total * 100)}%)` : ""}
+                  </span>
+                </div>
+                <div style={{ background: vollbild ? "rgba(255,255,255,0.15)" : C.border, borderRadius: 8, height: vollbild ? 32 : 16, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%",
+                    width: `${total > 0 ? (e.stimmen / maxS) * 100 : 0}%`,
+                    background: e.istEnthaltung ? (vollbild ? "rgba(255,255,255,0.3)" : C.textLight) : (vollbild ? C.accent : C.primary),
+                    borderRadius: 8,
+                    transition: "width 0.8s ease",
+                    minWidth: e.stimmen > 0 ? 8 : 0,
+                  }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Letzter Refresh */}
+          {letzteAktualisierung && (
+            <div style={{ marginTop: 32, fontSize: 12, color: vollbild ? "rgba(255,255,255,0.4)" : C.textLight, textAlign: "right" }}>
+              Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")} · Auto-Refresh alle 30 Sekunden
+            </div>
+          )}
+        </>
+      )}
+
+      {!wahl && (
+        <div style={{ textAlign: "center", color: vollbild ? "rgba(255,255,255,0.5)" : C.textLight, padding: 48 }}>
+          Keine Wahl ausgewählt
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── SHARED ───────────────────────────────────────────────────────────────────
 function StatCard({ num, label, color }) {
   return (
@@ -1132,6 +1325,22 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
             </div>
           ))}
           <button style={{ ...S.btn, ...S.btnGhost, marginTop: 4 }} onClick={addOption}>+ Kandidat hinzufügen</button>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={f.optionen.some(o => o.istEnthaltung)}
+              onChange={e => {
+                if (e.target.checked) {
+                  setF(x => ({ ...x, optionen: [...x.optionen.filter(o => !o.istEnthaltung), { id: "enthaltung", name: "Enthaltung", istEnthaltung: true }] }));
+                } else {
+                  setF(x => ({ ...x, optionen: x.optionen.filter(o => !o.istEnthaltung) }));
+                }
+              }}
+            />
+            Enthaltung als Option anbieten
+          </label>
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={{ ...S.btn, ...S.btnGhost }} onClick={onCancel}>Abbrechen</button>
