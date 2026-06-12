@@ -313,7 +313,7 @@ function App() {
               onDataChange={loadAppData}
             />
           : <LeitungLoginScreen
-              wahllokale={appData.wahllokale}
+              wahllokale={appData?.wahllokale || []}
               onAuth={(eventID) => setLeitungAuth(eventID)}
               onBack={() => setView("wahllokal")}
             />
@@ -1001,26 +1001,26 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   );
 }
 
-function SuperadminUebersicht({ appData }) {
+function SuperadminUebersicht({ appData, alleWahllokale }) {
+  const wl = alleWahllokale || appData.wahllokale || [];
   return (
     <div>
       <div style={S.statGrid}>
-        <StatCard num={appData.wahllokale.length} label="Wahllokale" color={C.superadmin} />
-        <StatCard num={appData.wahllokale.filter(w => w.aktiv).length} label="Aktiv" color={C.accent} />
+        <StatCard num={wl.length} label="Wahllokale" color={C.superadmin} />
+        <StatCard num={wl.filter(w => w.aktiv).length} label="Aktiv" color={C.accent} />
         <StatCard num={appData.wahlen.length} label="Wahlen" color={C.primary} />
         <StatCard num={appData.optionen.length} label="Optionen" color={C.textLight} />
       </div>
       <div style={S.card}>
         <div style={S.sectionLabel}>Wahllokale</div>
         <table style={S.table}>
-          <thead><tr><th style={S.th}>Name</th><th style={S.th}>EventID</th><th style={S.th}>Wahlen</th><th style={S.th}>Status</th></tr></thead>
+          <thead><tr><th style={S.th}>Name</th><th style={S.th}>EventID</th><th style={S.th}>Status</th></tr></thead>
           <tbody>
-            {appData.wahllokale.map(wl => (
-              <tr key={wl.id}>
-                <td style={S.td}><strong>{wl.name}</strong></td>
-                <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700 }}>{wl.eventID}</td>
-                <td style={S.td}>{appData.wahlen.filter(w => w.eventID === wl.eventID).length}</td>
-                <td style={S.td}><span style={{ ...S.badge, ...(wl.aktiv ? S.badgeGreen : S.badgeGray) }}>{wl.aktiv ? "aktiv" : "inaktiv"}</span></td>
+            {wl.map(w => (
+              <tr key={w.id}>
+                <td style={S.td}><strong>{w.name}</strong></td>
+                <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700 }}>{w.eventID}</td>
+                <td style={S.td}><span style={{ ...S.badge, ...(w.aktiv ? S.badgeGreen : S.badgeGray) }}>{w.aktiv ? "aktiv" : "inaktiv"}</span></td>
               </tr>
             ))}
           </tbody>
