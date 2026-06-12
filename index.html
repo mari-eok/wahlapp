@@ -849,7 +849,8 @@ function LeitungWaehler({ appData, eventID, onDataChange }) {
   }
 
   function importCSV() {
-    const lines = csvInput.split(/[
+    const lines = csvInput.split(/[\n\r,;]+/).map(l => l.trim().toLowerCase()).filter(l => l.includes("@"));
+
 ,;]/).map(l => l.trim().toLowerCase()).filter(l => l.includes("@"));
     const neu = lines.filter(email => !waehlerListe.find(w => w.email === email)).map(email => ({ email, token: generateToken() }));
     setWaehlerListe(prev => [...prev, ...neu]);
