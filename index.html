@@ -1029,6 +1029,153 @@ function SuperadminUebersicht({ appData, alleWahllokale }) {
 
 
 
+
+function SuperadminWahllokale({ alleWahllokale, onDataChange }) {
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [fehler, setFehler] = useState(null);
+
+  async function saveWahllokal(f) {
+    setSaving(true);
+    setFehler(null);
+    try {
+      await callFlow("saveWahllokal", {
+        wahllokalID: f.isNew ? null : parseInt(f.id),
+        name: f.name,
+        eventID: f.eventID.toUpperCase(),
+        aktiv: f.aktiv,
+        leitungPIN: f.leitungPIN,
+      });
+      await onDataChange();
+      setForm(null);
+    } catch (e) {
+      setFehler(e.message);
+    }
+    setSaving(false);
+  }
+
+  async function toggleAktiv(wl) {
+    try {
+      await callFlow("saveWahllokal", {
+        wahllokalID: parseInt(wl.id),
+        name: wl.name,
+        eventID: wl.eventID,
+        aktiv: !wl.aktiv,
+        leitungPIN: wl.leitungPIN,
+      });
+      await onDataChange();
+    } catch (e) {
+      setFehler(e.message);
+    }
+  }
+
+  async function deleteWahllokal(wl) {
+    if (!confirm(`Wahllokal "${wl.name}" wirklich löschen?`)) return;
+    try {
+      await callFlow("deleteWahllokal", { wahllokalID: parseInt(wl.id) });
+      await onDataChange();
+    } catch (e) {
+      setFehler(e.message);
+    }
+  }
+
+  if (form) {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setForm(null)}>← Zurück</button>
+          <h3 style={{ margin: 0, color: C.superadmin }}>{form.isNew ? "Neues Wahllokal" : "Wahllokal bearbeiten"}</h3>
+        </div>
+        {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
+        <div style={S.card}>
+          <div style={S.formGroup}>
+            <label style={S.label}>Name</label>
+            <input style={S.input} value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="z.B. Synode Ortenau" />
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>EventID (URL-Parameter)</label>
+            <input style={S.input} value={form.eventID} onChange={e => setForm(x => ({ ...x, eventID: e.target.value.toUpperCase() }))} placeholder="z.B. EOK" />
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Wahlleitung-PIN</label>
+            <input style={S.input} value={form.leitungPIN} onChange={e => setForm(x => ({ ...x, leitungPIN: e.target.value }))} placeholder="z.B. 5678" />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
+              <input type="checkbox" checked={form.aktiv} onChange={e => setForm(x => ({ ...x, aktiv: e.target.checked }))} />
+              Wahllokal aktiv
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setForm(null)}>Abbrechen</button>
+            <button style={{ ...S.btn, ...S.btnPurple }} onClick={() => saveWahllokal(form)} disabled={saving}>
+              {saving ? "Speichern…" : "Speichern"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ margin: 0, color: C.superadmin }}>Wahllokale verwalten</h3>
+        <button style={{ ...S.btn, ...S.btnPurple }} onClick={() => setForm({ id: null, name: "", eventID: "", aktiv: true, leitungPIN: "", isNew: true })}>
+          + Neues Wahllokal
+        </button>
+      </div>
+      <div style={S.card}>
+        {alleWahllokale.length === 0 ? (
+          <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Wahllokale angelegt.</p>
+        ) : (
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={S.th}>Name</th>
+                <th style={S.th}>EventID</th>
+                <th style={S.th}>PIN</th>
+                <th style={S.th}>URL</th>
+                <th style={S.th}>Status</th>
+                <th style={S.th}>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alleWahllokale.map(wl => (
+                <tr key={wl.id}>
+                  <td style={S.td}><strong>{wl.name}</strong></td>
+                  <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700 }}>{wl.eventID}</td>
+                  <td style={{ ...S.td, fontFamily: "monospace" }}>{wl.leitungPIN}</td>
+                  <td style={{ ...S.td, fontSize: 11 }}>
+                    <a href={`?wahllokal=${wl.eventID}`} target="_blank" style={{ color: C.primary }}>
+                      ?wahllokal={wl.eventID}
+                    </a>
+                  </td>
+                  <td style={S.td}>
+                    <span style={{ ...S.badge, ...(wl.aktiv ? S.badgeGreen : S.badgeGray) }}>
+                      {wl.aktiv ? "aktiv" : "inaktiv"}
+                    </span>
+                  </td>
+                  <td style={S.td}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setForm({ ...wl })}>Bearbeiten</button>
+                      <button style={{ ...S.btn, ...(wl.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(wl)}>
+                        {wl.aktiv ? "Deaktivieren" : "Aktivieren"}
+                      </button>
+                      <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => deleteWahllokal(wl)}>Löschen</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SuperadminAlleWahlen({ appData, onDataChange }) {
   return (
     <div>
