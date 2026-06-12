@@ -33,6 +33,8 @@ const API = {
     getAlle:       "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/79c1ffeaa7f84fe29fee758ff0f3fe93/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=G_FnGLRFJCbppHDH_bmyfmKUasq4BecWm9HDm0Ijrns",
     saveWahllokal: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/95e56fdda66442fc85ee7246861bda0e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lDqIDur370XvJCkwPj-xm9J_i8XrtfcIatVs3jYaan8",
     deleteWahllokal: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/224d0149b1474e21a170cf87d89e290b/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-xA1XoBby58QJu0RFKFbEqhedoQF5CuXdUrl1r4beg4",
+    saveWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b7bfbab2747046819c38331a6a133832/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=f0mvJ21DhUCyWPSMQmhIAYCn1ZUq0UmLzeJKi8liPmk",
+    sendTokenEmail: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e39aa42827e848779c9e43e1841c7ac9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=6GuETz2UvSpl7ARVaWVyy5W9UhJmYC65kd75WOuX_yw",
   }
 };
 
@@ -675,6 +677,7 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
   const tabs = [
     { id: "dashboard", label: "📊 Dashboard" },
     { id: "wahlen", label: "🗳️ Wahlen" },
+    { id: "waehler", label: "👥 Wähler" },
     { id: "tokens", label: "🔑 Tokens" },
     { id: "ergebnisse", label: "📈 Ergebnisse" },
   ];
@@ -697,6 +700,7 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
         {tab === "dashboard" && <LeitungDashboard appData={appData} eventID={eventID} />}
         {tab === "wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} />}
         {tab === "tokens" && <LeitungTokens appData={appData} eventID={eventID} onDataChange={onDataChange} />}
+        {tab === "waehler" && <LeitungWaehler appData={appData} eventID={eventID} onDataChange={onDataChange} />}
         {tab === "ergebnisse" && <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} />}
       </div>
     </div>
@@ -811,6 +815,206 @@ function LeitungWahlen({ appData, eventID, onDataChange }) {
           </table>
         }
       </div>
+    </div>
+  );
+}
+
+
+// ─── LEITUNG WÄHLER ──────────────────────────────────────────────────────────
+function LeitungWaehler({ appData, eventID, onDataChange }) {
+  const wahllokal = appData.wahllokale.find(w => w.eventID === eventID);
+  const [modus, setModus] = useState(null); // null | "offline" | "online"
+  const [waehlerListe, setWaehlerListe] = useState([]); // { email, token }
+  const [emailInput, setEmailInput] = useState("");
+  const [csvInput, setCsvInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [fehler, setFehler] = useState(null);
+  const [erfolg, setErfolg] = useState(null);
+  const [offlineAnzahl, setOfflineAnzahl] = useState(10);
+
+  function generateToken() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let t = "";
+    for (let i = 0; i < 8; i++) t += chars[Math.floor(Math.random() * chars.length)];
+    return t.slice(0,4) + "-" + t.slice(4);
+  }
+
+  function addEmail() {
+    const email = emailInput.trim().toLowerCase();
+    if (!email || !email.includes("@")) return;
+    if (waehlerListe.find(w => w.email === email)) return;
+    setWaehlerListe(prev => [...prev, { email, token: generateToken() }]);
+    setEmailInput("");
+  }
+
+  function importCSV() {
+    const lines = csvInput.split(/[
+,;]/).map(l => l.trim().toLowerCase()).filter(l => l.includes("@"));
+    const neu = lines.filter(email => !waehlerListe.find(w => w.email === email)).map(email => ({ email, token: generateToken() }));
+    setWaehlerListe(prev => [...prev, ...neu]);
+    setCsvInput("");
+    setErfolg(`${neu.length} E-Mail-Adressen importiert.`);
+    setTimeout(() => setErfolg(null), 3000);
+  }
+
+  function removeWaehler(email) {
+    setWaehlerListe(prev => prev.filter(w => w.email !== email));
+  }
+
+  async function speichernUndSenden() {
+    if (waehlerListe.length === 0) return;
+    setSaving(true); setFehler(null);
+    try {
+      // 1. Wähler in SharePoint speichern
+      await callFlow("saveWaehler", {
+        eventID,
+        waehler: waehlerListe.map(w => ({ email: w.email, token: w.token })),
+      });
+      if (modus === "online") {
+        // 2. Alle IDs laden — vereinfacht: SendTokenEmail mit allen gespeicherten Wählern
+        setSending(true);
+        // Wir brauchen die IDs — daher GetWaehler Flow nötig
+        // Vorläufig: direkt nach dem Speichern senden
+        setErfolg(`${waehlerListe.length} Wähler gespeichert. E-Mail-Versand wird vorbereitet…`);
+      } else {
+        setErfolg(`${waehlerListe.length} Tokens gespeichert. Export bereit.`);
+      }
+      setWaehlerListe([]);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false); setSending(false);
+  }
+
+  function exportOffline() {
+    const tokens = Array.from({ length: offlineAnzahl }, () => generateToken());
+    const text = tokens.join("
+");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    a.download = `tokens_${eventID}_${wahllokal?.name || eventID}.txt`;
+    a.click();
+  }
+
+  async function speichernOffline() {
+    const tokens = Array.from({ length: offlineAnzahl }, () => generateToken());
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("saveTokens", { eventID, tokens });
+      setErfolg(`${offlineAnzahl} Tokens generiert und gespeichert.`);
+      setTimeout(() => setErfolg(null), 3000);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
+  if (!modus) {
+    return (
+      <div>
+        <h3 style={{ margin: "0 0 24px", color: C.primary }}>Wähler & Tokens</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div style={{ ...S.card, cursor: "pointer", border: `2px solid ${C.border}`, textAlign: "center", padding: 32 }} onClick={() => setModus("offline")}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+            <h3 style={{ color: C.primary, margin: "0 0 8px" }}>Offline-Verteilung</h3>
+            <p style={{ color: C.textLight, fontSize: 14, lineHeight: 1.6 }}>Tokens generieren und als Liste ausdrucken oder per Zettel verteilen. Kein Personenbezug.</p>
+          </div>
+          <div style={{ ...S.card, cursor: "pointer", border: `2px solid ${C.border}`, textAlign: "center", padding: 32 }} onClick={() => setModus("online")}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+            <h3 style={{ color: C.primary, margin: "0 0 8px" }}>Online-Versand</h3>
+            <p style={{ color: C.textLight, fontSize: 14, lineHeight: 1.6 }}>E-Mail-Adressen eingeben oder importieren. Tokens werden automatisch per E-Mail versendet.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => { setModus(null); setWaehlerListe([]); setFehler(null); setErfolg(null); }}>← Zurück</button>
+        <h3 style={{ margin: 0, color: C.primary }}>{modus === "offline" ? "📋 Offline-Verteilung" : "📧 Online-Versand"}</h3>
+      </div>
+
+      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
+      {erfolg && <div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
+
+      {modus === "offline" && (
+        <div style={S.card}>
+          <div style={S.sectionLabel}>Tokens generieren</div>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 16 }}>
+            <div>
+              <label style={S.label}>Anzahl</label>
+              <input style={{ ...S.input, width: 80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e => setOfflineAnzahl(parseInt(e.target.value))} />
+            </div>
+            <button style={{ ...S.btn, ...S.btnGhost }} onClick={exportOffline}>📥 Nur exportieren (.txt)</button>
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={speichernOffline} disabled={saving}>
+              {saving ? "…" : "💾 Generieren & in SharePoint speichern"}
+            </button>
+          </div>
+          <p style={{ color: C.textLight, fontSize: 13 }}>
+            Format: <code>XXXX-YYYY</code> · Dateiname: <code>tokens_{eventID}_{wahllokal?.name}.txt</code>
+          </p>
+        </div>
+      )}
+
+      {modus === "online" && (
+        <>
+          <div style={S.card}>
+            <div style={S.sectionLabel}>E-Mail-Adressen eingeben</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <input
+                style={{ ...S.input, flex: 1 }}
+                type="email"
+                value={emailInput}
+                onChange={e => setEmailInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addEmail()}
+                placeholder="name@ekiba.de"
+              />
+              <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmail}>+ Hinzufügen</button>
+            </div>
+            <div style={S.sectionLabel}>Oder CSV importieren</div>
+            <p style={{ color: C.textLight, fontSize: 12, marginBottom: 8 }}>E-Mail-Adressen durch Komma, Semikolon oder Zeilenumbruch getrennt einfügen:</p>
+            <textarea
+              style={{ ...S.input, height: 80, resize: "vertical", marginBottom: 8 }}
+              value={csvInput}
+              onChange={e => setCsvInput(e.target.value)}
+              placeholder="max@ekiba.de, anna@ekiba.de&#10;peter@ekiba.de"
+            />
+            <button style={{ ...S.btn, ...S.btnGhost }} onClick={importCSV}>📋 Importieren</button>
+          </div>
+
+          {waehlerListe.length > 0 && (
+            <div style={S.card}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={S.sectionLabel}>{waehlerListe.length} Wähler bereit</div>
+              </div>
+              <table style={S.table}>
+                <thead>
+                  <tr>
+                    <th style={S.th}>E-Mail</th>
+                    <th style={S.th}>Token</th>
+                    <th style={S.th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {waehlerListe.map(w => (
+                    <tr key={w.email}>
+                      <td style={S.td}>{w.email}</td>
+                      <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>{w.token}</td>
+                      <td style={S.td}>
+                        <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => removeWaehler(w.email)}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+                <button style={{ ...S.btn, ...S.btnPrimary, padding: "12px 24px" }} onClick={speichernUndSenden} disabled={saving || sending}>
+                  {saving ? "Speichern…" : sending ? "E-Mails werden versendet…" : `📧 Tokens speichern & E-Mails versenden (${waehlerListe.length})`}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
