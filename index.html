@@ -548,13 +548,22 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
 
   if (aktiveWahlen.length === 0) {
     const diff = naechsteWahl ? Math.max(0, Math.floor((new Date(naechsteWahl.startzeit) - nowTime) / 1000)) : null;
+    const formatCountdown = (s) => {
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (d > 0) return `${d}T ${String(h).padStart(2,"0")}h ${String(m).padStart(2,"0")}m`;
+      if (h > 0) return `${h}h ${String(m).padStart(2,"0")}m ${String(sec).padStart(2,"0")}s`;
+      return `${m}m ${String(sec).padStart(2,"0")}s`;
+    };
     return (
       <div style={S.wlContainer}>
         <WlHeader name={wahllokal?.name} />
         <div style={S.closedScreen}>
           <div style={{ fontSize: 48 }}>{naechsteWahl ? "⏰" : "🔒"}</div>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: C.primary, margin: 0 }}>{naechsteWahl ? "Abstimmung beginnt in Kürze" : "Das Wahllokal ist geschlossen."}</h2>
-          {naechsteWahl && diff !== null && <div style={{ fontSize: 28, fontWeight: 700, color: C.accent }}>{Math.floor(diff / 60)}m {String(diff % 60).padStart(2, "0")}s</div>}
+          {naechsteWahl && diff !== null && <div style={{ fontSize: 28, fontWeight: 700, color: C.accent }}>{formatCountdown(diff)}</div>}
           {!naechsteWahl && <p style={{ color: C.textLight, lineHeight: 1.7 }}>Die Abstimmung hat noch nicht begonnen oder wurde bereits beendet.</p>}
         </div>
       </div>
