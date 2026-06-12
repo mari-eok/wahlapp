@@ -887,8 +887,7 @@ function LeitungWaehler({ appData, eventID, onDataChange }) {
 
   function exportOffline() {
     const tokens = Array.from({ length: offlineAnzahl }, () => generateToken());
-    const text = tokens.join("
-");
+    const text = tokens.join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
     a.download = `tokens_${eventID}_${wahllokal?.name || eventID}.txt`;
@@ -976,7 +975,7 @@ function LeitungWaehler({ appData, eventID, onDataChange }) {
               style={{ ...S.input, height: 80, resize: "vertical", marginBottom: 8 }}
               value={csvInput}
               onChange={e => setCsvInput(e.target.value)}
-              placeholder="max@ekiba.de, anna@ekiba.de&#10;peter@ekiba.de"
+              placeholder="max@ekiba.de, anna@ekiba.de, peter@ekiba.de"
             />
             <button style={{ ...S.btn, ...S.btnGhost }} onClick={importCSV}>📋 Importieren</button>
           </div>
