@@ -296,7 +296,7 @@ function App() {
       )}
 
       {view === "ergebnisse" && appData && (
-        <ErgebnisDashboard appData={appData} wahllokalID={wahllokalID} />
+        <ErgebnisDashboard appData={appData} wahllokalID={wahllokalID} onBack={() => setView("wahllokal")} />
       )}
 
       {view === "leitung" && (
@@ -308,7 +308,6 @@ function App() {
               onDataChange={loadAppData}
             />
           : <LeitungLoginScreen
-              wahllokale={appData?.wahllokale || []}
               onAuth={(eventID) => setLeitungAuth(eventID)}
               onBack={() => setView("wahllokal")}
             />
@@ -374,12 +373,27 @@ function PinScreen({ title, subtitle, color, onAuth, onBack }) {
 }
 
 // ─── LEITUNG LOGIN ────────────────────────────────────────────────────────────
-function LeitungLoginScreen({ wahllokale, onAuth, onBack }) {
-  const [selectedEventID, setSelectedEventID] = useState(wahllokale[0]?.eventID || "");
+function LeitungLoginScreen({ onAuth, onBack }) {
+  const [wahllokale, setWahllokale] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedEventID, setSelectedEventID] = useState("");
   const [step, setStep] = useState("waehlen");
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
   const selectedWahllokal = wahllokale.find(w => w.eventID === selectedEventID);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const result = await callFlow("getAlle", {});
+        const alle = (result || []).map(mapWahllokal).filter(w => w.aktiv);
+        setWahllokale(alle);
+        if (alle.length > 0) setSelectedEventID(alle[0].eventID);
+      } catch (e) { console.error(e); }
+      setLoading(false);
+    }
+    load();
+  }, []);
 
   function submit() {
     if (selectedWahllokal && pin === selectedWahllokal.leitungPIN) { onAuth(selectedEventID); return; }
@@ -397,12 +411,18 @@ function LeitungLoginScreen({ wahllokale, onAuth, onBack }) {
         {step === "waehlen" && (
           <>
             <p style={{ color: C.textLight, fontSize: 14, marginBottom: 24 }}>Bitte wählen Sie Ihr Wahllokal.</p>
+            {loading ? (
+              <p style={{ color: C.textLight, fontSize: 14, marginBottom: 24 }}>Wahllokale werden geladen…</p>
+            ) : wahllokale.length === 0 ? (
+              <p style={{ color: C.error, fontSize: 14, marginBottom: 24 }}>Keine aktiven Wahllokale gefunden.</p>
+            ) : (
             <div style={S.formGroup}>
               <select style={{ ...S.select, textAlign: "center" }} value={selectedEventID} onChange={e => setSelectedEventID(e.target.value)}>
                 {wahllokale.map(wl => <option key={wl.id} value={wl.eventID}>{wl.name} ({wl.eventID})</option>)}
               </select>
             </div>
-            <button onClick={() => setStep("pin")} style={{ ...S.btn, ...S.btnPrimary, width: "100%", padding: "12px", marginBottom: 8 }}>Weiter →</button>
+            )}
+            <button onClick={() => setStep("pin")} disabled={loading || wahllokale.length === 0} style={{ ...S.btn, ...S.btnPrimary, width: "100%", padding: "12px", marginBottom: 8 }}>Weiter →</button>
             <button onClick={onBack} style={{ ...S.btn, ...S.btnGhost, width: "100%", padding: "10px" }}>← Zurück</button>
           </>
         )}
@@ -1230,7 +1250,7 @@ function SuperadminEinstellungen() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ERGEBNIS DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
-function ErgebnisDashboard({ appData, wahllokalID }) {
+function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === wahllokalID);
   const wahlen = appData.wahlen.filter(w => w.eventID === wahllokalID);
   const [selectedWahlID, setSelectedWahlID] = useState(wahlen[0]?.id || "");
