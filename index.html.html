@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Digitales Wahllokal – EKIBA</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: #f5f7fa; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// API KONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════════
+const API = {
+  key: "EKIBA_VOTING_2026!?",
+  flows: {
+    getDaten:      "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/99831a14f2384a65ace5c5f9963bf3f8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=hTAxY7dGyOM4DY0dLENSMjyRRGenPZHMtE0QJ2LGfeE",
+    checkToken:    "PLATZHALTER_WAHL_CheckToken",
+    submitStimme:  "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/dbdfcae4d18d43df9c91f4d232743572/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cTKBtrRgswEVbVTF54NcoiKzuXaO5tE45kffR1uYm8Q",
+    saveTokens:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/49e7daee878348e3acb2af6271eb9486/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=eIGAW5M-pzskPEkVvjLRqdoo8RcsS2WItBUdzpgnr9Y",
+    saveWahl:      "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3596ad6dcd674d1fb5c5ffc0c115d956/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=a2Fv8aYUzeVIzlVIz-06ne4E-Rax5fnJdp-772BmZwo",
+    saveOptionen:  "PLATZHALTER_WAHL_SaveOptionen",
+    toggleWahl:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c5c92775b671421aa209f784cd6aff1a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YrzOet19S_HU0iyi_CIdiW76dQ27eihTEoXkS44qbMU",
+    getErgebnisse: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e524a7cab9a847879371cce7a4cf34e7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=rNW7r-f5brXdkANm7TOGlJ5qzGbMU8dclveFaQxLK60",
+    deleteToken:   "PLATZHALTER_WAHL_DeleteToken",
+  }
+};
+
+async function callFlow(flowName, body) {
+  const url = API.flows[flowName];
+  if (url.startsWith("PLATZHALTER")) {
+    throw new Error(`Flow '${flowName}' noch nicht konfiguriert.`);
+  }
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ apiKey: API.key, ...body }),
+  });
+  if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
+  return res.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DATEN-MAPPING (SharePoint → App)
+// ═══════════════════════════════════════════════════════════════════════════════
+function mapWahllokal(item) {
+  return {
+    id: String(item.ID),
+    eventID: item.EventID,
+    name: item.Title,
+    aktiv: item.Aktiv,
+    leitungPIN: item.LeitungPIN,
+  };
+}
+
+function mapWahl(item) {
+  return {
+    id: String(item.ID),
+    eventID: item.EventID,
+    titel: item.Title,
+    aktiv: item.Aktiv,
+    startzeit: item.Startzeit,
+    mehrfach: item.Mehrfach,
+    exakt: item.Exakt,
+    maxAuswahl: item.MaxAuswahl || 1,
+    optionen: [],
+  };
+}
+
+function mapOption(item) {
+  return {
+    id: String(item.ID),
+    wahlID: String(item.WahlID),
+    eventID: item.EventID,
+    name: item.Title,
+    istEnthaltung: item.IstEnthaltung,
+  };
+}
+
+function mapToken(item) {
+  return {
+    id: String(item.ID),
+    code: item.Title,
+    eventID: item.EventID,
+    verwendet: item.Verwendet,
+    usedForWahlID: item.UsedForWahlID ? String(item.UsedForWahlID) : null,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FARBEN
+// ═══════════════════════════════════════════════════════════════════════════════
+const C = {
+  primary: "#1a3a5c",
+  primaryLight: "#2a5a8c",
+  accent: "#4a9b6f",
+  bg: "#f5f7fa",
+  bgWhite: "#ffffff",
+  border: "#dde3ea",
+  text: "#1a2733",
+  textLight: "#5a6a7a",
+  error: "#c0392b",
+  errorBg: "#fde8e8",
+  success: "#27ae60",
+  successBg: "#e8f8ee",
+  warning: "#d4a017",
+  warningBg: "#fef9e7",
+  disabled: "#b0bec5",
+  superadmin: "#2d1b4e",
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════════════════════════════════════
+const S = {
+  app: { minHeight: "100vh", background: C.bg, fontFamily: "'Segoe UI', system-ui, sans-serif", color: C.text },
+  wlContainer: { maxWidth: 680, margin: "0 auto", padding: "24px 16px", minHeight: "100vh", display: "flex", flexDirection: "column" },
+  wlHeader: { textAlign: "center", marginBottom: 32 },
+  wlLogo: { fontSize: 13, fontWeight: 700, letterSpacing: "0.15em", color: C.primary, textTransform: "uppercase", marginBottom: 8 },
+  wlTitle: { fontSize: 26, fontWeight: 700, color: C.primary, margin: 0 },
+  card: { background: C.bgWhite, borderRadius: 12, padding: 24, marginBottom: 16, border: `1px solid ${C.border}`, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" },
+  sectionLabel: { fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: C.textLight, marginBottom: 12 },
+  tokenGrid: { display: "flex", gap: 6, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  tokenCell: { width: 44, height: 52, borderRadius: 8, border: `2px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, fontFamily: "monospace", background: C.bg, transition: "border-color 0.15s", position: "relative" },
+  tokenCellActive: { borderColor: C.primary, background: "#eef4fb" },
+  tokenCellFilled: { borderColor: C.accent, background: C.bgWhite },
+  tokenDash: { fontSize: 20, color: C.textLight, margin: "0 2px" },
+  select: { width: "100%", padding: "12px 16px", borderRadius: 8, border: `1.5px solid ${C.border}`, fontSize: 15, color: C.text, background: C.bgWhite, cursor: "pointer", outline: "none", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a6a7a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center", paddingRight: 36 },
+  optionRow: { display: "flex", alignItems: "center", padding: "14px 16px", borderRadius: 8, marginBottom: 8, border: `1.5px solid ${C.border}`, cursor: "pointer", transition: "all 0.12s", background: C.bgWhite, gap: 12 },
+  optionRowSelected: { borderColor: C.accent, background: "#f0faf4" },
+  checkbox: { width: 20, height: 20, borderRadius: 4, border: `2px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" },
+  checkboxChecked: { background: C.accent, borderColor: C.accent },
+  counter: { textAlign: "center", fontSize: 13, color: C.textLight, marginTop: 8 },
+  counterOk: { color: C.accent, fontWeight: 600 },
+  btnSubmit: { width: "100%", padding: "16px", borderRadius: 10, border: "none", fontSize: 16, fontWeight: 700, cursor: "pointer", transition: "all 0.15s", letterSpacing: "0.03em" },
+  btnSubmitActive: { background: C.primary, color: "#fff" },
+  btnSubmitDisabled: { background: C.border, color: C.disabled, cursor: "not-allowed" },
+  statusScreen: { position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 },
+  statusTitle: { fontSize: 36, fontWeight: 900, letterSpacing: "0.05em", textTransform: "uppercase", margin: 0 },
+  statusMsg: { fontSize: 16, textAlign: "center", maxWidth: 400, lineHeight: 1.6, margin: 0 },
+  spinner: { width: 48, height: 48, border: `5px solid ${C.border}`, borderTop: `5px solid ${C.primary}`, borderRadius: "50%", animation: "spin 0.9s linear infinite" },
+  closedScreen: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, textAlign: "center", padding: 32 },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
+  th: { textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.textLight, borderBottom: `2px solid ${C.border}` },
+  td: { padding: "12px 12px", borderBottom: `1px solid ${C.border}`, verticalAlign: "middle" },
+  badge: { display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 },
+  badgeGreen: { background: "#e8f8ee", color: C.success },
+  badgeGray: { background: C.bg, color: C.textLight },
+  badgePurple: { background: "#f0ebff", color: "#6b21a8" },
+  badgeOrange: { background: "#fff3e0", color: "#e65100" },
+  btn: { padding: "8px 16px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.12s" },
+  btnPrimary: { background: C.primary, color: "#fff" },
+  btnDanger: { background: C.error, color: "#fff" },
+  btnSuccess: { background: C.accent, color: "#fff" },
+  btnGhost: { background: C.bg, color: C.text, border: `1px solid ${C.border}` },
+  btnPurple: { background: C.superadmin, color: "#fff" },
+  input: { width: "100%", padding: "10px 12px", borderRadius: 8, border: `1.5px solid ${C.border}`, fontSize: 14, color: C.text, outline: "none", boxSizing: "border-box" },
+  label: { fontSize: 12, fontWeight: 600, color: C.textLight, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" },
+  formGroup: { marginBottom: 16 },
+  statGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginBottom: 24 },
+  statCard: { background: C.bgWhite, borderRadius: 10, padding: "16px 20px", border: `1px solid ${C.border}` },
+  statNum: { fontSize: 32, fontWeight: 800, color: C.primary, lineHeight: 1 },
+  statLabel: { fontSize: 12, color: C.textLight, marginTop: 4 },
+  navbar: { display: "flex", alignItems: "center", justifyContent: "space-between", height: 56, padding: "0 24px" },
+  navTitle: { color: "#fff", fontWeight: 800, fontSize: 16 },
+  navTabs: { display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" },
+  navTab: { padding: "8px 16px", borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.bgWhite, fontSize: 13, fontWeight: 600, cursor: "pointer", color: C.textLight },
+  navTabActive: { background: C.primary, color: "#fff", borderColor: C.primary },
+  alert: { padding: "12px 16px", borderRadius: 8, fontSize: 13, marginBottom: 16 },
+  alertWarning: { background: C.warningBg, color: "#7d5a0a", border: `1px solid ${C.warning}` },
+  alertError: { background: C.errorBg, color: "#7b2d2d", border: `1px solid ${C.error}` },
+  alertSuccess: { background: C.successBg, color: "#2d6a4f", border: `1px solid ${C.success}` },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOKEN GENERATOR
+// ═══════════════════════════════════════════════════════════════════════════════
+function generateToken() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let t = "";
+  for (let i = 0; i < 8; i++) t += chars[Math.floor(Math.random() * chars.length)];
+  return t;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════════════════════════════
+function App() {
+  const [view, setView] = useState("wahllokal");
+  const [leitungAuth, setLeitungAuth] = useState(null);
+  const [superadminAuth, setSuperadminAuth] = useState(false);
+  const [appData, setAppData] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+
+  const wahllokalID = "EOK"; // In Produktion: new URL(window.location.href).searchParams.get("wahllokal") || "EOK"
+
+  // Daten beim Start laden
+  useEffect(() => {
+    loadAppData();
+  }, []);
+
+  // Daten alle 10 Sekunden neu laden
+  useEffect(() => {
+    const t = setInterval(loadAppData, 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Fallback-Daten aus dem letzten erfolgreichen Flow-Aufruf
+  // (wird automatisch ersetzt wenn der Flow erreichbar ist)
+  const FALLBACK_DATA = {
+    wahllokale: [{ id: "1", eventID: "EOK", name: "Synode Ortenau", aktiv: true, leitungPIN: "5678" }],
+    wahlen: [{ id: "1", eventID: "EOK", titel: "Diakoniepfarrer*in", aktiv: true, startzeit: new Date(Date.now() - 60000).toISOString(), mehrfach: false, exakt: true, maxAuswahl: 1, optionen: [{ id: "1", wahlID: "1", eventID: "EOK", name: "Leon Hartmann", istEnthaltung: false }, { id: "2", wahlID: "1", eventID: "EOK", name: "Enthaltung", istEnthaltung: true }] }],
+    optionen: [{ id: "1", wahlID: "1", eventID: "EOK", name: "Leon Hartmann", istEnthaltung: false }, { id: "2", wahlID: "1", eventID: "EOK", name: "Enthaltung", istEnthaltung: true }],
+    tokens: [{ id: "1", code: "KIJI8JJK", eventID: "EOK", verwendet: false, usedForWahlID: null }],
+  };
+
+  async function loadAppData() {
+    try {
+      const raw = await callFlow("getDaten", { eventID: wahllokalID });
+      const wahllokale = (raw.wahllokale || []).map(mapWahllokal);
+      const wahlen = (raw.wahlen || []).map(mapWahl);
+      const optionen = (raw.optionen || []).map(mapOption);
+      wahlen.forEach(w => { w.optionen = optionen.filter(o => o.wahlID === w.id); });
+      setAppData({ wahllokale, wahlen, optionen, tokens: [] });
+      setLoadError(null);
+    } catch (e) {
+      // CORS im Artifact oder echter Verbindungsfehler
+      // Fallback auf eingebettete Testdaten
+      if (!appData) {
+        setAppData(FALLBACK_DATA);
+        setLoadError("cors_fallback");
+      }
+    }
+  }
+
+  const CSS = `
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button:hover { filter: brightness(1.08); }
+  `;
+
+  // Ladescreen
+  if (!appData && !loadError) {
+    return (
+      <div style={S.app}>
+        <style>{CSS}</style>
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+          <div style={S.spinner} />
+          <p style={{ color: C.textLight, fontSize: 14 }}>Wahllokal wird geladen…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // CORS-Fallback Banner (kein Fehlerscreen, App läuft weiter mit Testdaten)
+  const corsWarning = loadError === "cors_fallback";
+
+  return (
+    <div style={S.app}>
+      <style>{CSS}</style>
+
+      {view === "wahllokal" && (
+        <>
+          {corsWarning && (
+            <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000, background: C.warning, color: "#fff", fontSize: 12, padding: "6px 16px", textAlign: "center" }}>
+              ⚠️ Demo-Modus: Verbindung zu SharePoint nicht möglich (CORS). In der gehosteten App funktioniert alles normal.
+            </div>
+          )}
+          <WahllokalView
+            appData={appData}
+            wahllokalID={wahllokalID}
+            onDataChange={loadAppData}
+            corsWarning={corsWarning}
+          />
+          <DemoSwitcher
+            onLeitung={() => setView("leitung")}
+            onSuperadmin={() => setView("superadmin")}
+          />
+        </>
+      )}
+
+      {view === "leitung" && (
+        leitungAuth
+          ? <LeitungView
+              appData={appData}
+              eventID={leitungAuth}
+              onExit={() => { setView("wahllokal"); setLeitungAuth(null); }}
+              onDataChange={loadAppData}
+            />
+          : <LeitungLoginScreen
+              wahllokale={appData.wahllokale}
+              onAuth={(eventID) => setLeitungAuth(eventID)}
+              onBack={() => setView("wahllokal")}
+            />
+      )}
+
+      {view === "superadmin" && (
+        superadminAuth
+          ? <SuperadminView
+              appData={appData}
+              onExit={() => { setView("wahllokal"); setSuperadminAuth(false); }}
+              onDataChange={loadAppData}
+            />
+          : <PinScreen
+              title="Superadmin"
+              subtitle="Systemzugang für EKIBA-Administratoren."
+              color={C.superadmin}
+              onAuth={(pin) => { if (pin === "1234") { setSuperadminAuth(true); return true; } return false; }}
+              onBack={() => setView("wahllokal")}
+            />
+      )}
+    </div>
+  );
+}
+
+// ─── DEMO SWITCHER ────────────────────────────────────────────────────────────
+function DemoSwitcher({ onLeitung, onSuperadmin }) {
+  return (
+    <div style={{ position: "fixed", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 999 }}>
+      <button onClick={onLeitung} style={{ ...S.btn, ...S.btnPrimary, fontSize: 12, opacity: 0.8 }}>📋 Wahlleitung</button>
+      <button onClick={onSuperadmin} style={{ ...S.btn, ...S.btnPurple, fontSize: 12, opacity: 0.8 }}>⚙️ Superadmin</button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PIN SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
+function PinScreen({ title, subtitle, color, onAuth, onBack }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState(false);
+
+  function submit() {
+    if (onAuth(pin)) return;
+    setError(true); setPin("");
+    setTimeout(() => setError(false), 2000);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg }}>
+      <div style={{ ...S.card, width: 340, textAlign: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 16px" }}>🔐</div>
+        <h2 style={{ margin: "0 0 4px", color }}>{title}</h2>
+        <p style={{ color: C.textLight, fontSize: 14, marginBottom: 24 }}>{subtitle}</p>
+        <input type="password" value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} placeholder="PIN eingeben" style={{ ...S.input, textAlign: "center", fontSize: 20, letterSpacing: "0.2em", marginBottom: 8, borderColor: error ? C.error : C.border }} autoFocus />
+        {error && <p style={{ color: C.error, fontSize: 13, margin: "0 0 8px" }}>Falscher PIN.</p>}
+        {!error && <div style={{ height: 28 }} />}
+        <button onClick={submit} style={{ ...S.btn, background: color, color: "#fff", width: "100%", padding: "12px", marginBottom: 8 }}>Anmelden</button>
+        <button onClick={onBack} style={{ ...S.btn, ...S.btnGhost, width: "100%", padding: "10px" }}>← Zurück</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── LEITUNG LOGIN ────────────────────────────────────────────────────────────
+function LeitungLoginScreen({ wahllokale, onAuth, onBack }) {
+  const [selectedEventID, setSelectedEventID] = useState(wahllokale[0]?.eventID || "");
+  const [step, setStep] = useState("waehlen");
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState(false);
+  const selectedWahllokal = wahllokale.find(w => w.eventID === selectedEventID);
+
+  function submit() {
+    if (selectedWahllokal && pin === selectedWahllokal.leitungPIN) { onAuth(selectedEventID); return; }
+    setError(true); setPin("");
+    setTimeout(() => setError(false), 2000);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg }}>
+      <div style={{ ...S.card, width: 340, textAlign: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: "50%", background: C.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 16px" }}>
+          {step === "waehlen" ? "📍" : "🔐"}
+        </div>
+        <h2 style={{ margin: "0 0 4px", color: C.primary }}>Wahlleitung</h2>
+        {step === "waehlen" && (
+          <>
+            <p style={{ color: C.textLight, fontSize: 14, marginBottom: 24 }}>Bitte wählen Sie Ihr Wahllokal.</p>
+            <div style={S.formGroup}>
+              <select style={{ ...S.select, textAlign: "center" }} value={selectedEventID} onChange={e => setSelectedEventID(e.target.value)}>
+                {wahllokale.map(wl => <option key={wl.id} value={wl.eventID}>{wl.name} ({wl.eventID})</option>)}
+              </select>
+            </div>
+            <button onClick={() => setStep("pin")} style={{ ...S.btn, ...S.btnPrimary, width: "100%", padding: "12px", marginBottom: 8 }}>Weiter →</button>
+            <button onClick={onBack} style={{ ...S.btn, ...S.btnGhost, width: "100%", padding: "10px" }}>← Zurück</button>
+          </>
+        )}
+        {step === "pin" && (
+          <>
+            <p style={{ color: C.textLight, fontSize: 14, marginBottom: 4 }}>PIN für <strong style={{ color: C.primary }}>{selectedWahllokal?.name}</strong></p>
+            <p style={{ color: C.textLight, fontSize: 12, marginBottom: 20 }}>Der PIN wird von Ihrem Administrator vergeben.</p>
+            <input type="password" value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} placeholder="PIN eingeben" style={{ ...S.input, textAlign: "center", fontSize: 20, letterSpacing: "0.2em", marginBottom: 8, borderColor: error ? C.error : C.border }} autoFocus />
+            {error && <p style={{ color: C.error, fontSize: 13, margin: "0 0 8px" }}>Falscher PIN.</p>}
+            {!error && <div style={{ height: 28 }} />}
+            <button onClick={submit} style={{ ...S.btn, ...S.btnPrimary, width: "100%", padding: "12px", marginBottom: 8 }}>Anmelden</button>
+            <button onClick={() => setStep("waehlen")} style={{ ...S.btn, ...S.btnGhost, width: "100%", padding: "10px" }}>← Wahllokal ändern</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EBENE 1: WAHLLOKAL
+// ═══════════════════════════════════════════════════════════════════════════════
+function WahllokalView({ appData, wahllokalID, onDataChange }) {
+  const wahllokal = appData.wahllokale.find(w => w.eventID === wahllokalID);
+  const now = new Date();
+  const aktiveWahlen = appData.wahlen.filter(w => w.eventID === wahllokalID && w.aktiv && new Date(w.startzeit) <= now);
+  const naechsteWahl = appData.wahlen.filter(w => w.eventID === wahllokalID && w.aktiv && new Date(w.startzeit) > now).sort((a, b) => new Date(a.startzeit) - new Date(b.startzeit))[0];
+
+  const [selectedWahlID, setSelectedWahlID] = useState("");
+  const [tokenRaw, setTokenRaw] = useState("");
+  const [selected, setSelected] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [countdown, setCountdown] = useState(5);
+  const [nowTime, setNowTime] = useState(new Date());
+  const [submitting, setSubmitting] = useState(false);
+  const [flowFehler, setFlowFehler] = useState(null);
+
+  useEffect(() => { const t = setInterval(() => setNowTime(new Date()), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { if (aktiveWahlen.length > 0 && !selectedWahlID) setSelectedWahlID(aktiveWahlen[0].id); }, [aktiveWahlen.length]);
+
+  useEffect(() => {
+    if (status && status !== "pruefen") {
+      setCountdown(5);
+      const t = setInterval(() => {
+        setCountdown(c => {
+          if (c <= 1) { clearInterval(t); setStatus(null); setStatusMsg(""); setTokenRaw(""); setSelected([]); setFlowFehler(null); return 5; }
+          return c - 1;
+        });
+      }, 1000);
+      return () => clearInterval(t);
+    }
+  }, [status]);
+
+  const tokenClean = tokenRaw.replace(/-/g, "").toUpperCase().slice(0, 8);
+  const selectedWahl = appData.wahlen.find(w => w.id === selectedWahlID);
+
+  function toggleOption(opt) {
+    if (!selectedWahl) return;
+    const isSel = selected.find(s => s.id === opt.id);
+    if (isSel) { setSelected(selected.filter(s => s.id !== opt.id)); return; }
+    if (opt.istEnthaltung) { setSelected([opt]); return; }
+    const ohneEnthaltung = selected.filter(s => !s.istEnthaltung);
+    if (!selectedWahl.mehrfach) { setSelected([opt]); }
+    else if (ohneEnthaltung.length < selectedWahl.maxAuswahl) { setSelected([...ohneEnthaltung, opt]); }
+  }
+
+  function isValid() {
+    if (!selectedWahl || tokenClean.length !== 8 || selected.length === 0 || submitting) return false;
+    if (!selectedWahl.mehrfach && selected.length !== 1) return false;
+    if (selectedWahl.mehrfach && selectedWahl.exakt && selected.length !== selectedWahl.maxAuswahl) return false;
+    if (selectedWahl.mehrfach && !selectedWahl.exakt && selected.length > selectedWahl.maxAuswahl) return false;
+    return true;
+  }
+
+  async function submitStimme() {
+    if (!isValid()) return;
+    setSubmitting(true);
+    setStatus("pruefen");
+    setFlowFehler(null);
+
+    try {
+      // Flow noch nicht konfiguriert → simulieren
+      if (API.flows.submitStimme.startsWith("PLATZHALTER")) {
+        await new Promise(r => setTimeout(r, 2000));
+        setStatus("gueltig");
+        setStatusMsg(`Ihre Stimme wurde für die Wahl '${selectedWahl.titel}' gezählt. (Simuliert — Flow noch nicht verbunden)`);
+      } else {
+        const result = await callFlow("submitStimme", {
+          tokenCode: tokenClean,
+          eventID: wahllokalID,
+          wahlID: parseInt(selectedWahlID),
+          wahlTitel: selectedWahl.titel,
+          positionen: selected.map(s => ({ optionID: parseInt(s.id), name: s.name })),
+        });
+        if (result.status === "gueltig") {
+          setStatus("gueltig");
+          setStatusMsg(`Ihre Stimme wurde für die Wahl '${selectedWahl.titel}' gezählt.`);
+          onDataChange();
+        } else if (result.status === "doppelt") {
+          setStatus("doppelt");
+          setStatusMsg("Dieser Token wurde für diese Wahl bereits verwendet.");
+        } else {
+          setStatus("ungueltig");
+          setStatusMsg(`Ungültiger Token für die Wahl '${selectedWahl.titel}'. Bitte prüfen Sie Ihre Eingabe.`);
+        }
+      }
+    } catch (e) {
+      setStatus(null);
+      setFlowFehler(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Status Screens
+  if (status === "pruefen") return <div style={{ ...S.statusScreen, background: C.bg }}><div style={S.spinner} /><h2 style={{ ...S.statusTitle, color: C.primary }}>PRÜFUNG LÄUFT</h2><p style={{ color: C.textLight, fontSize: 15 }}>Ihre Stimme wird geprüft und gespeichert.</p></div>;
+  if (status === "gueltig") return <div style={{ ...S.statusScreen, background: C.successBg }}><div style={{ fontSize: 64 }}>✅</div><h2 style={{ ...S.statusTitle, color: C.success }}>STIMME GÜLTIG</h2><p style={{ ...S.statusMsg, color: "#2d6a4f" }}>{statusMsg}</p><p style={{ fontSize: 14, color: "rgba(0,0,0,0.4)" }}>Zurück in {countdown} Sekunden…</p></div>;
+  if (status === "ungueltig") return <div style={{ ...S.statusScreen, background: C.errorBg }}><div style={{ fontSize: 64 }}>❌</div><h2 style={{ ...S.statusTitle, color: C.error }}>STIMME UNGÜLTIG</h2><p style={{ ...S.statusMsg, color: "#7b2d2d" }}>{statusMsg}</p><p style={{ fontSize: 14, color: "rgba(0,0,0,0.4)" }}>Zurück in {countdown} Sekunden…</p></div>;
+  if (status === "doppelt") return <div style={{ ...S.statusScreen, background: C.warningBg }}><div style={{ fontSize: 64 }}>⚠️</div><h2 style={{ ...S.statusTitle, color: C.warning }}>TOKEN BEREITS VERWENDET</h2><p style={{ ...S.statusMsg, color: "#7d5a0a" }}>{statusMsg}</p><p style={{ fontSize: 14, color: "rgba(0,0,0,0.4)" }}>Zurück in {countdown} Sekunden…</p></div>;
+
+  if (!wahllokal || !wahllokal.aktiv) return <div style={S.wlContainer}><WlHeader /><div style={S.closedScreen}><div style={{ fontSize: 48 }}>🔒</div><h2 style={{ fontSize: 22, fontWeight: 700, color: C.primary, margin: 0 }}>Das Wahllokal ist geschlossen.</h2><p style={{ color: C.textLight, lineHeight: 1.7 }}>Bei Fragen wenden Sie sich an Ihre Wahlleitung.</p></div></div>;
+
+  if (aktiveWahlen.length === 0) {
+    const diff = naechsteWahl ? Math.max(0, Math.floor((new Date(naechsteWahl.startzeit) - nowTime) / 1000)) : null;
+    return (
+      <div style={S.wlContainer}>
+        <WlHeader name={wahllokal?.name} />
+        <div style={S.closedScreen}>
+          <div style={{ fontSize: 48 }}>{naechsteWahl ? "⏰" : "🔒"}</div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.primary, margin: 0 }}>{naechsteWahl ? "Abstimmung beginnt in Kürze" : "Das Wahllokal ist geschlossen."}</h2>
+          {naechsteWahl && diff !== null && <div style={{ fontSize: 28, fontWeight: 700, color: C.accent }}>{Math.floor(diff / 60)}m {String(diff % 60).padStart(2, "0")}s</div>}
+          {!naechsteWahl && <p style={{ color: C.textLight, lineHeight: 1.7 }}>Die Abstimmung hat noch nicht begonnen oder wurde bereits beendet.</p>}
+        </div>
+      </div>
+    );
+  }
+
+  const maxCount = selectedWahl?.mehrfach ? selectedWahl.maxAuswahl : 1;
+  const counterOk = selectedWahl && (!selectedWahl.mehrfach ? selected.length === 1 : selected.length > 0 && selected.length <= maxCount);
+
+  return (
+    <div style={S.wlContainer}>
+      <WlHeader name={wahllokal?.name} />
+
+      {flowFehler && <div style={{ ...S.alert, ...S.alertError }}>⚠️ {flowFehler}</div>}
+
+      {aktiveWahlen.length > 1 && (
+        <div style={S.card}>
+          <div style={S.sectionLabel}>Abstimmung</div>
+          <select style={S.select} value={selectedWahlID} onChange={e => { setSelectedWahlID(e.target.value); setSelected([]); }}>
+            {aktiveWahlen.map(w => <option key={w.id} value={w.id}>{w.titel}</option>)}
+          </select>
+        </div>
+      )}
+      {aktiveWahlen.length === 1 && (
+        <div style={{ ...S.card, padding: "16px 24px" }}>
+          <div style={S.sectionLabel}>Abstimmung</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.primary }}>{aktiveWahlen[0].titel}</div>
+        </div>
+      )}
+
+      <div style={S.card}>
+        <div style={S.sectionLabel}>Persönlicher Wahlcode (Token)</div>
+        <TokenInput value={tokenRaw} onChange={setTokenRaw} />
+      </div>
+
+      {selectedWahl && (
+        <div style={S.card}>
+          <div style={S.sectionLabel}>{selectedWahl.mehrfach ? `Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen.` : "Bitte wählen Sie genau 1 Person."}</div>
+          {selectedWahl.optionen.map(opt => {
+            const isSel = selected.find(s => s.id === opt.id);
+            return (
+              <div key={opt.id} style={{ ...S.optionRow, ...(isSel ? S.optionRowSelected : {}), ...(opt.istEnthaltung ? { background: C.bg } : {}) }} onClick={() => toggleOption(opt)}>
+                <div style={{ ...S.checkbox, ...(isSel ? S.checkboxChecked : {}) }}>{isSel && <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>✓</span>}</div>
+                <span style={{ fontSize: 15, fontWeight: 500, color: opt.istEnthaltung ? C.textLight : C.text }}>{opt.name}</span>
+              </div>
+            );
+          })}
+          <div style={{ ...S.counter, ...(counterOk ? S.counterOk : {}) }}>{selected.length} von {maxCount} gewählt {counterOk ? "✅" : ""}</div>
+        </div>
+      )}
+
+      <button style={{ ...S.btnSubmit, ...(isValid() ? S.btnSubmitActive : S.btnSubmitDisabled) }} onClick={submitStimme} disabled={!isValid()}>
+        {submitting ? "Wird übermittelt…" : "Stimme abgeben"}
+      </button>
+
+      {API.flows.submitStimme.startsWith("PLATZHALTER") && (
+        <p style={{ textAlign: "center", fontSize: 12, color: C.warning, marginTop: 8 }}>⚠️ Demo-Modus — Submit-Flow noch nicht verbunden</p>
+      )}
+    </div>
+  );
+}
+
+function WlHeader({ name }) {
+  return (
+    <div style={S.wlHeader}>
+      <div style={S.wlLogo}>Evangelische Landeskirche in Baden</div>
+      <h1 style={S.wlTitle}>{name || "Digitales Wahllokal"}</h1>
+    </div>
+  );
+}
+
+function TokenInput({ value, onChange }) {
+  const inputRef = useRef(null);
+  const clean = value.replace(/-/g, "").toUpperCase().slice(0, 8);
+  const [focused, setFocused] = useState(false);
+  const cells = Array.from({ length: 8 }, (_, i) => clean[i] || "");
+  const cursorPos = clean.length;
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={S.tokenGrid} onClick={() => inputRef.current?.focus()}>
+        {cells.slice(0, 4).map((char, i) => (
+          <div key={i} style={{ ...S.tokenCell, ...(char ? S.tokenCellFilled : {}), ...(focused && cursorPos === i ? S.tokenCellActive : {}) }}>
+            {char}
+            {focused && cursorPos === i && <span style={{ position: "absolute", bottom: 6, width: 2, height: 16, background: C.primary, animation: "pulse 1s ease infinite" }} />}
+          </div>
+        ))}
+        <div style={S.tokenDash}>–</div>
+        {cells.slice(4).map((char, i) => (
+          <div key={i + 4} style={{ ...S.tokenCell, ...(char ? S.tokenCellFilled : {}), ...(focused && cursorPos === i + 4 ? S.tokenCellActive : {}) }}>
+            {char}
+            {focused && cursorPos === i + 4 && <span style={{ position: "absolute", bottom: 6, width: 2, height: 16, background: C.primary, animation: "pulse 1s ease infinite" }} />}
+          </div>
+        ))}
+      </div>
+      <input ref={inputRef} type="text" value={clean} onChange={e => onChange(e.target.value.replace(/-/g, "").toUpperCase().slice(0, 8))} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} maxLength={8} style={{ position: "absolute", opacity: 0, top: 0, left: 0, width: "100%", height: "100%", cursor: "text", fontSize: 16 }} autoComplete="off" autoCapitalize="characters" spellCheck={false} />
+      <p style={{ textAlign: "center", fontSize: 12, color: C.textLight, marginTop: 8 }}>Tippen Sie hier um Ihren Code einzugeben</p>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EBENE 2: WAHLLEITUNG
+// ═══════════════════════════════════════════════════════════════════════════════
+function LeitungView({ appData, eventID, onExit, onDataChange }) {
+  const [tab, setTab] = useState("dashboard");
+  const wahllokal = appData.wahllokale.find(w => w.eventID === eventID);
+  const meineWahlen = appData.wahlen.filter(w => w.eventID === eventID);
+
+  const tabs = [
+    { id: "dashboard", label: "📊 Dashboard" },
+    { id: "wahlen", label: "🗳️ Wahlen" },
+    { id: "tokens", label: "🔑 Tokens" },
+    { id: "ergebnisse", label: "📈 Ergebnisse" },
+  ];
+
+  return (
+    <div style={{ background: C.bg, minHeight: "100vh" }}>
+      <div style={{ background: C.primary }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", ...S.navbar }}>
+          <div>
+            <span style={S.navTitle}>📋 Wahlleitung</span>
+            <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginLeft: 12 }}>{wahllokal?.name} ({eventID})</span>
+          </div>
+          <button onClick={onExit} style={{ ...S.btn, background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 12 }}>← Abmelden</button>
+        </div>
+      </div>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+        <div style={S.navTabs}>
+          {tabs.map(t => <button key={t.id} style={{ ...S.navTab, ...(tab === t.id ? S.navTabActive : {}) }} onClick={() => setTab(t.id)}>{t.label}</button>)}
+        </div>
+        {tab === "dashboard" && <LeitungDashboard appData={appData} eventID={eventID} />}
+        {tab === "wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} />}
+        {tab === "tokens" && <LeitungTokens appData={appData} eventID={eventID} onDataChange={onDataChange} />}
+        {tab === "ergebnisse" && <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} />}
+      </div>
+    </div>
+  );
+}
+
+function LeitungDashboard({ appData, eventID }) {
+  const wahlen = appData.wahlen.filter(w => w.eventID === eventID);
+  return (
+    <div>
+      <div style={S.statGrid}>
+        <StatCard num={wahlen.filter(w => w.aktiv).length} label="Aktive Wahlen" color={C.accent} />
+        <StatCard num={wahlen.length} label="Wahlen gesamt" color={C.primary} />
+      </div>
+      <div style={S.card}>
+        <div style={S.sectionLabel}>Aktive Wahlen</div>
+        {wahlen.filter(w => w.aktiv).length === 0
+          ? <p style={{ color: C.textLight, fontSize: 14 }}>Keine aktiven Wahlen.</p>
+          : wahlen.filter(w => w.aktiv).map(w => (
+            <div key={w.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{w.titel}</div>
+                <div style={{ fontSize: 12, color: C.textLight }}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzel"} · {w.optionen.length} Optionen</div>
+              </div>
+              <span style={{ ...S.badge, ...S.badgeGreen }}>aktiv</span>
+            </div>
+          ))
+        }
+      </div>
+      {API.flows.saveWahl.startsWith("PLATZHALTER") && (
+        <div style={{ ...S.alert, ...S.alertWarning }}>
+          ⚠️ Einige Flows sind noch nicht verbunden. Wahlen können noch nicht gespeichert werden.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeitungWahlen({ appData, eventID, onDataChange }) {
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [fehler, setFehler] = useState(null);
+  const wahlen = appData.wahlen.filter(w => w.eventID === eventID);
+
+  async function toggleAktiv(wahl) {
+    try {
+      if (API.flows.toggleWahl.startsWith("PLATZHALTER")) {
+        alert("Flow 'WAHL_ToggleWahl' noch nicht verbunden.");
+        return;
+      }
+      await callFlow("toggleWahl", { wahlID: parseInt(wahl.id), aktiv: !wahl.aktiv });
+      onDataChange();
+    } catch (e) { setFehler(e.message); }
+  }
+
+  async function saveWahl(f) {
+    setSaving(true); setFehler(null);
+    try {
+      if (API.flows.saveWahl.startsWith("PLATZHALTER")) {
+        alert("Flow 'WAHL_SaveWahl' noch nicht verbunden.");
+        setSaving(false); return;
+      }
+      await callFlow("saveWahl", {
+        wahlID: f.isNew ? null : parseInt(f.id),
+        eventID,
+        titel: f.titel,
+        aktiv: f.aktiv,
+        startzeit: f.startzeit,
+        mehrfach: f.mehrfach,
+        exakt: f.exakt,
+        maxAuswahl: f.maxAuswahl,
+        optionen: f.optionen,
+      });
+      await onDataChange();
+      setForm(null);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
+  if (form) return <WahlForm form={form} onSave={saveWahl} onCancel={() => setForm(null)} saving={saving} fehler={fehler} />;
+
+  return (
+    <div>
+      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ margin: 0, color: C.primary }}>Wahlen</h3>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={() => setForm({ id: Date.now().toString(), eventID, titel: "", aktiv: false, startzeit: new Date().toISOString().slice(0, 16), mehrfach: false, exakt: false, maxAuswahl: 1, optionen: [{ id: "o1", name: "", istEnthaltung: false }, { id: "enth", name: "Enthaltung", istEnthaltung: true }], isNew: true })}>
+          + Neue Wahl
+        </button>
+      </div>
+      <div style={S.card}>
+        {wahlen.length === 0
+          ? <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Wahlen. Legen Sie eine neue Wahl an.</p>
+          : <table style={S.table}>
+            <thead><tr><th style={S.th}>Titel</th><th style={S.th}>Typ</th><th style={S.th}>Optionen</th><th style={S.th}>Status</th><th style={S.th}>Aktionen</th></tr></thead>
+            <tbody>
+              {wahlen.map(w => (
+                <tr key={w.id}>
+                  <td style={S.td}><strong>{w.titel}</strong></td>
+                  <td style={S.td}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzel"}</td>
+                  <td style={S.td}>{w.optionen.length}</td>
+                  <td style={S.td}><span style={{ ...S.badge, ...(w.aktiv ? S.badgeGreen : S.badgeGray) }}>{w.aktiv ? "aktiv" : "inaktiv"}</span></td>
+                  <td style={S.td}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setForm({ ...w, optionen: [...w.optionen] })}>Bearbeiten</button>
+                      <button style={{ ...S.btn, ...(w.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(w)}>{w.aktiv ? "Stoppen" : "Starten"}</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+      </div>
+    </div>
+  );
+}
+
+function LeitungTokens({ appData, eventID, onDataChange }) {
+  const [anzahl, setAnzahl] = useState(10);
+  const [saving, setSaving] = useState(false);
+  const [fehler, setFehler] = useState(null);
+  const [lokalTokens, setLokalTokens] = useState([]);
+
+  async function generateTokens() {
+    setSaving(true); setFehler(null);
+    const neu = Array.from({ length: anzahl }, (_, i) => ({
+      id: "new_" + Date.now() + i,
+      code: generateToken(),
+      eventID,
+      verwendet: false,
+      usedForWahlID: null,
+      isNew: true,
+    }));
+
+    if (API.flows.saveTokens.startsWith("PLATZHALTER")) {
+      setLokalTokens(prev => [...prev, ...neu]);
+      setSaving(false);
+      return;
+    }
+
+    try {
+      await callFlow("saveTokens", {
+        eventID,
+        tokens: neu.map(t => t.code),
+      });
+      await onDataChange();
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
+  function exportTokens() {
+    const tokens = [...lokalTokens, ...(appData.tokens || []).filter(t => t.eventID === eventID)];
+    const unused = tokens.filter(t => !t.verwendet);
+    const text = unused.map(t => t.code.slice(0, 4) + "-" + t.code.slice(4)).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    a.download = `tokens_${eventID}.txt`;
+    a.click();
+  }
+
+  const alleTokens = [...lokalTokens, ...(appData.tokens || []).filter(t => t.eventID === eventID)];
+
+  return (
+    <div>
+      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
+      {API.flows.saveTokens.startsWith("PLATZHALTER") && (
+        <div style={{ ...S.alert, ...S.alertWarning }}>⚠️ Flow noch nicht verbunden — Tokens werden nur lokal gespeichert und beim Reload gelöscht.</div>
+      )}
+      <div style={{ ...S.card, marginBottom: 16 }}>
+        <div style={S.sectionLabel}>Tokens generieren</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div>
+            <label style={S.label}>Anzahl</label>
+            <input style={{ ...S.input, width: 80 }} type="number" min={1} max={500} value={anzahl} onChange={e => setAnzahl(parseInt(e.target.value))} />
+          </div>
+          <div style={{ display: "flex", gap: 8, paddingBottom: 0 }}>
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={generateTokens} disabled={saving}>{saving ? "…" : "Generieren"}</button>
+            <button style={{ ...S.btn, ...S.btnGhost }} onClick={exportTokens}>📥 Exportieren</button>
+          </div>
+        </div>
+      </div>
+      <div style={S.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={S.sectionLabel}>Tokens ({alleTokens.length})</div>
+          <div style={{ fontSize: 13, color: C.textLight }}>{alleTokens.filter(t => !t.verwendet).length} verfügbar</div>
+        </div>
+        {alleTokens.length === 0
+          ? <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Tokens generiert.</p>
+          : <table style={S.table}>
+            <thead><tr><th style={S.th}>Token</th><th style={S.th}>Status</th></tr></thead>
+            <tbody>
+              {alleTokens.slice(0, 50).map(t => (
+                <tr key={t.id}>
+                  <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>{t.code.slice(0, 4)}–{t.code.slice(4)}{t.isNew ? " 🆕" : ""}</td>
+                  <td style={S.td}><span style={{ ...S.badge, ...(t.verwendet ? S.badgeGray : S.badgeGreen) }}>{t.verwendet ? "verwendet" : "verfügbar"}</span></td>
+                </tr>
+              ))}
+              {alleTokens.length > 50 && <tr><td colSpan={2} style={{ ...S.td, color: C.textLight, fontSize: 12 }}>+ {alleTokens.length - 50} weitere — exportieren um alle zu sehen</td></tr>}
+            </tbody>
+          </table>
+        }
+      </div>
+    </div>
+  );
+}
+
+function LeitungErgebnisse({ appData, eventID, onDataChange }) {
+  const [selectedWahlID, setSelectedWahlID] = useState("");
+  const [ergebnisse, setErgebnisse] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const wahlen = appData.wahlen.filter(w => w.eventID === eventID);
+
+  useEffect(() => {
+    if (wahlen.length > 0 && !selectedWahlID) setSelectedWahlID(wahlen[0].id);
+  }, [wahlen.length]);
+
+  async function laden() {
+    if (!selectedWahlID) return;
+    setLoading(true);
+    try {
+      if (API.flows.getErgebnisse.startsWith("PLATZHALTER")) {
+        setErgebnisse([]);
+      } else {
+        const result = await callFlow("getErgebnisse", { wahlID: parseInt(selectedWahlID), eventID });
+        setErgebnisse(result.value || result.abstimmungen || []);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }
+
+  useEffect(() => { laden(); }, [selectedWahlID]);
+
+  const wahl = wahlen.find(w => w.id === selectedWahlID);
+  const total = ergebnisse?.length || 0;
+  const optErgebnisse = wahl?.optionen.map(opt => ({
+    ...opt,
+    stimmen: ergebnisse?.filter(a => {
+      try { const pos = JSON.parse(a.Positionen || "[]"); return pos.some(p => String(p.optionID) === opt.id); }
+      catch { return false; }
+    }).length || 0,
+  })) || [];
+  const maxS = Math.max(...optErgebnisse.map(e => e.stimmen), 1);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        <h3 style={{ margin: 0, color: C.primary }}>Ergebnisse</h3>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select style={{ ...S.select, width: 240 }} value={selectedWahlID} onChange={e => setSelectedWahlID(e.target.value)}>
+            {wahlen.map(w => <option key={w.id} value={w.id}>{w.titel}</option>)}
+          </select>
+          <button style={{ ...S.btn, ...S.btnGhost }} onClick={laden} disabled={loading}>{loading ? "…" : "🔄"}</button>
+        </div>
+      </div>
+
+      {API.flows.getErgebnisse.startsWith("PLATZHALTER") && (
+        <div style={{ ...S.alert, ...S.alertWarning }}>⚠️ Flow noch nicht verbunden — keine echten Ergebnisse verfügbar.</div>
+      )}
+
+      {wahl && ergebnisse !== null && (
+        <div style={S.card}>
+          <div style={{ marginBottom: 16, color: C.textLight, fontSize: 14 }}>{total} Stimme{total !== 1 ? "n" : ""} abgegeben</div>
+          {optErgebnisse.map(e => (
+            <div key={e.id} style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{e.name}</span>
+                <span style={{ fontSize: 14, color: C.textLight }}>{e.stimmen} · {total > 0 ? Math.round(e.stimmen / total * 100) : 0}%</span>
+              </div>
+              <div style={{ background: C.border, borderRadius: 4, height: 12, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${total > 0 ? (e.stimmen / maxS) * 100 : 0}%`, background: e.istEnthaltung ? C.textLight : C.primary, borderRadius: 4, transition: "width 0.5s ease" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EBENE 3: SUPERADMIN
+// ═══════════════════════════════════════════════════════════════════════════════
+function SuperadminView({ appData, onExit, onDataChange }) {
+  const [tab, setTab] = useState("uebersicht");
+  const tabs = [
+    { id: "uebersicht", label: "🏠 Übersicht" },
+    { id: "wahllokale", label: "📍 Wahllokale" },
+    { id: "alle_wahlen", label: "🗳️ Alle Wahlen" },
+    { id: "einstellungen", label: "⚙️ Einstellungen" },
+  ];
+
+  return (
+    <div style={{ background: C.bg, minHeight: "100vh" }}>
+      <div style={{ background: C.superadmin }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", ...S.navbar }}>
+          <div>
+            <span style={S.navTitle}>⚙️ Superadmin</span>
+            <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, marginLeft: 12 }}>EKIBA Systemverwaltung</span>
+          </div>
+          <button onClick={onExit} style={{ ...S.btn, background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 12 }}>← Abmelden</button>
+        </div>
+      </div>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+        <div style={S.navTabs}>
+          {tabs.map(t => <button key={t.id} style={{ ...S.navTab, ...(tab === t.id ? { ...S.navTabActive, background: C.superadmin, borderColor: C.superadmin } : {}) }} onClick={() => setTab(t.id)}>{t.label}</button>)}
+        </div>
+        {tab === "uebersicht" && <SuperadminUebersicht appData={appData} />}
+        {tab === "wahllokale" && <SuperadminWahllokale appData={appData} onDataChange={onDataChange} />}
+        {tab === "alle_wahlen" && <SuperadminAlleWahlen appData={appData} onDataChange={onDataChange} />}
+        {tab === "einstellungen" && <SuperadminEinstellungen />}
+      </div>
+    </div>
+  );
+}
+
+function SuperadminUebersicht({ appData }) {
+  return (
+    <div>
+      <div style={S.statGrid}>
+        <StatCard num={appData.wahllokale.length} label="Wahllokale" color={C.superadmin} />
+        <StatCard num={appData.wahllokale.filter(w => w.aktiv).length} label="Aktiv" color={C.accent} />
+        <StatCard num={appData.wahlen.length} label="Wahlen" color={C.primary} />
+        <StatCard num={appData.optionen.length} label="Optionen" color={C.textLight} />
+      </div>
+      <div style={S.card}>
+        <div style={S.sectionLabel}>Wahllokale</div>
+        <table style={S.table}>
+          <thead><tr><th style={S.th}>Name</th><th style={S.th}>EventID</th><th style={S.th}>Wahlen</th><th style={S.th}>Status</th></tr></thead>
+          <tbody>
+            {appData.wahllokale.map(wl => (
+              <tr key={wl.id}>
+                <td style={S.td}><strong>{wl.name}</strong></td>
+                <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700 }}>{wl.eventID}</td>
+                <td style={S.td}>{appData.wahlen.filter(w => w.eventID === wl.eventID).length}</td>
+                <td style={S.td}><span style={{ ...S.badge, ...(wl.aktiv ? S.badgeGreen : S.badgeGray) }}>{wl.aktiv ? "aktiv" : "inaktiv"}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ ...S.alert, ...S.alertWarning }}>
+        ℹ️ Wahllokale werden direkt in SharePoint verwaltet (Liste: WAHL_Wahllokale).
+      </div>
+    </div>
+  );
+}
+
+function SuperadminWahllokale({ appData }) {
+  return (
+    <div>
+      <h3 style={{ margin: "0 0 16px", color: C.superadmin }}>Wahllokale</h3>
+      <div style={{ ...S.alert, ...S.alertWarning }}>
+        ℹ️ Wahllokale werden direkt in SharePoint gepflegt — öffne die Liste <strong>WAHL_Wahllokale</strong> auf deiner SharePoint-Site um Wahllokale anzulegen, zu bearbeiten oder zu deaktivieren.
+      </div>
+      <div style={S.card}>
+        <div style={S.sectionLabel}>Aktuelle Wahllokale (aus SharePoint)</div>
+        <table style={S.table}>
+          <thead><tr><th style={S.th}>Name</th><th style={S.th}>EventID</th><th style={S.th}>Wahlleitung-PIN</th><th style={S.th}>Status</th></tr></thead>
+          <tbody>
+            {appData.wahllokale.map(wl => (
+              <tr key={wl.id}>
+                <td style={S.td}><strong>{wl.name}</strong></td>
+                <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700 }}>{wl.eventID}</td>
+                <td style={{ ...S.td, fontFamily: "monospace" }}>{wl.leitungPIN}</td>
+                <td style={S.td}><span style={{ ...S.badge, ...(wl.aktiv ? S.badgeGreen : S.badgeGray) }}>{wl.aktiv ? "aktiv" : "inaktiv"}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SuperadminAlleWahlen({ appData, onDataChange }) {
+  return (
+    <div>
+      <h3 style={{ margin: "0 0 16px", color: C.superadmin }}>Alle Wahlen</h3>
+      <div style={S.card}>
+        <table style={S.table}>
+          <thead><tr><th style={S.th}>Titel</th><th style={S.th}>Wahllokal</th><th style={S.th}>Typ</th><th style={S.th}>Status</th></tr></thead>
+          <tbody>
+            {appData.wahlen.map(w => (
+              <tr key={w.id}>
+                <td style={S.td}><strong>{w.titel}</strong></td>
+                <td style={S.td}><span style={{ ...S.badge, ...S.badgePurple }}>{w.eventID}</span></td>
+                <td style={S.td}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzel"}</td>
+                <td style={S.td}><span style={{ ...S.badge, ...(w.aktiv ? S.badgeGreen : S.badgeGray) }}>{w.aktiv ? "aktiv" : "inaktiv"}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SuperadminEinstellungen() {
+  return (
+    <div>
+      <h3 style={{ margin: "0 0 16px", color: C.superadmin }}>Flow-Konfiguration</h3>
+      <div style={S.card}>
+        <div style={S.sectionLabel}>Verbundene Flows</div>
+        <table style={S.table}>
+          <thead><tr><th style={S.th}>Flow</th><th style={S.th}>Status</th></tr></thead>
+          <tbody>
+            {Object.entries(API.flows).map(([name, url]) => (
+              <tr key={name}>
+                <td style={{ ...S.td, fontFamily: "monospace", fontSize: 13 }}>{name}</td>
+                <td style={S.td}>
+                  <span style={{ ...S.badge, ...(url.startsWith("PLATZHALTER") ? S.badgeOrange : S.badgeGreen) }}>
+                    {url.startsWith("PLATZHALTER") ? "⚠️ nicht verbunden" : "✅ verbunden"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ ...S.alert, ...S.alertWarning }}>
+        ℹ️ Um einen Flow zu verbinden, ersetze den PLATZHALTER-Wert im <code>API.flows</code>-Objekt ganz oben im Code mit der echten Flow-URL.
+      </div>
+    </div>
+  );
+}
+
+// ─── SHARED ───────────────────────────────────────────────────────────────────
+function StatCard({ num, label, color }) {
+  return (
+    <div style={S.statCard}>
+      <div style={{ ...S.statNum, color }}>{num}</div>
+      <div style={S.statLabel}>{label}</div>
+    </div>
+  );
+}
+
+function WahlForm({ form, onSave, onCancel, saving, fehler }) {
+  const [f, setF] = useState(form);
+  function setField(key, val) { setF(x => ({ ...x, [key]: val })); }
+  function addOption() { setF(x => ({ ...x, optionen: [...x.optionen.filter(o => !o.istEnthaltung), { id: Date.now().toString(), name: "", istEnthaltung: false }, ...x.optionen.filter(o => o.istEnthaltung)] })); }
+  function setOptName(id, name) { setF(x => ({ ...x, optionen: x.optionen.map(o => o.id === id ? { ...o, name } : o) })); }
+  function removeOpt(id) { setF(x => ({ ...x, optionen: x.optionen.filter(o => o.id !== id) })); }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <button style={{ ...S.btn, ...S.btnGhost }} onClick={onCancel}>← Zurück</button>
+        <h3 style={{ margin: 0, color: C.primary }}>{f.isNew ? "Neue Wahl" : "Wahl bearbeiten"}</h3>
+      </div>
+      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
+      <div style={S.card}>
+        <div style={S.formGroup}><label style={S.label}>Titel</label><input style={S.input} value={f.titel} onChange={e => setField("titel", e.target.value)} placeholder="z.B. Diakoniepfarrer*in" /></div>
+        <div style={S.formGroup}><label style={S.label}>Startzeit</label><input style={S.input} type="datetime-local" value={f.startzeit?.slice(0, 16)} onChange={e => setField("startzeit", e.target.value)} /></div>
+        <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}><input type="checkbox" checked={f.mehrfach} onChange={e => setField("mehrfach", e.target.checked)} />Mehrfachauswahl</label>
+          {f.mehrfach && <>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}><input type="checkbox" checked={f.exakt} onChange={e => setField("exakt", e.target.checked)} />Exakte Anzahl</label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>Max: <input style={{ ...S.input, width: 60 }} type="number" min={1} value={f.maxAuswahl} onChange={e => setField("maxAuswahl", parseInt(e.target.value))} /></label>
+          </>}
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Kandidaten</label>
+          {f.optionen.filter(o => !o.istEnthaltung).map(o => (
+            <div key={o.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input style={{ ...S.input, flex: 1 }} value={o.name} onChange={e => setOptName(o.id, e.target.value)} placeholder="Name" />
+              <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => removeOpt(o.id)}>✕</button>
+            </div>
+          ))}
+          <button style={{ ...S.btn, ...S.btnGhost, marginTop: 4 }} onClick={addOption}>+ Kandidat hinzufügen</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button style={{ ...S.btn, ...S.btnGhost }} onClick={onCancel}>Abbrechen</button>
+          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={() => onSave(f)} disabled={saving}>{saving ? "Speichern…" : "Speichern"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
