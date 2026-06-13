@@ -107,6 +107,7 @@ function mapWahl(item) {
     exakt: item.Exakt,
     maxAuswahl: item.MaxAuswahl || 1,
     mehrheitsregel: item.Mehrheitsregel || "relativ",
+    geschlossen: item.Geschlossen || false,
     optionen: [],
   };
 }
@@ -768,10 +769,20 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   const wahllokalURL = window.location.origin + window.location.pathname + "?wahllokal=" + eventID;
   const aktiveWahlen = wahlen.filter(w => w.aktiv);
 
+  async function schliesseWahl(wahl) {
+    if (!confirm(`Wahl "${wahl.titel}" endgültig schließen? Dies kann nicht rückgängig gemacht werden.`)) return;
+    setToggling(wahl.id);
+    try {
+      await callFlow("toggleWahl", { wahlID: parseInt(wahl.id), aktiv: false, geschlossen: true });
+      await onDataChange();
+    } catch (e) { console.error(e); }
+    setToggling(null);
+  }
+
   async function toggleWahl(wahl) {
     setToggling(wahl.id);
     try {
-      await callFlow("toggleWahl", { wahlID: parseInt(wahl.id), aktiv: !wahl.aktiv });
+      await callFlow("toggleWahl", { wahlID: parseInt(wahl.id), aktiv: !wahl.aktiv, geschlossen: wahl.geschlossen || false });
       await onDataChange();
     } catch (e) { console.error(e); }
     setToggling(null);
@@ -799,7 +810,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
               </div>
               <button
                 style={{ ...S.btn, ...S.btnDanger, fontWeight: 700 }}
-                onClick={() => toggleWahl(w)}
+                onClick={() => schliesseWahl(w)}
                 disabled={toggling === w.id}
               >
                 {toggling === w.id ? "…" : "■ Wahl schließen"}
@@ -822,15 +833,19 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {w.aktiv
                   ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
-                  : <span style={{ ...S.badge, ...S.badgeGray }}>geschlossen</span>
+                  : w.geschlossen
+                    ? <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" }}>🔒 geschlossen</span>
+                    : <span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>
                 }
-                <button
-                  style={{ ...S.btn, ...S.btnGhost, fontSize: 12 }}
-                  onClick={() => toggleWahl(w)}
-                  disabled={toggling === w.id}
-                >
-                  {toggling === w.id ? "…" : w.aktiv ? "Stoppen" : "Starten"}
-                </button>
+                {!w.geschlossen && (
+                  <button
+                    style={{ ...S.btn, ...S.btnGhost, fontSize: 12 }}
+                    onClick={() => toggleWahl(w)}
+                    disabled={toggling === w.id}
+                  >
+                    {toggling === w.id ? "…" : w.aktiv ? "Pausieren" : "Starten"}
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -918,7 +933,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
         alert("Flow 'WAHL_ToggleWahl' noch nicht verbunden.");
         return;
       }
-      await callFlow("toggleWahl", { wahlID: parseInt(wahl.id), aktiv: !wahl.aktiv });
+      await callFlow("toggleWahl", { wahlID: parseInt(wahl.id), aktiv: !wahl.aktiv, geschlossen: false });
       onDataChange();
     } catch (e) { setFehler(e.message); }
   }
@@ -982,7 +997,8 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
                   <td style={S.td}>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => openForm(w)}>Bearbeiten</button>
-                      <button style={{ ...S.btn, ...(w.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(w)}>{w.aktiv ? "Stoppen" : "Starten"}</button>
+                      {!w.geschlossen && <button style={{ ...S.btn, ...(w.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(w)}>{w.aktiv ? "Pausieren" : "Starten"}</button>}
+                      {w.geschlossen && <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b", fontSize: 11 }}>🔒 geschlossen</span>}
                       <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => deleteWahl(w)}>Löschen</button>
                     </div>
                   </td>
@@ -1461,7 +1477,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   const fuehrend = (nichtenthaltung || [])[0];
 
   // Nur Gewinner anzeigen wenn Wahl geschlossen
-  const wahlGeschlossen = wahl && !wahl.aktiv;
+  const wahlGeschlossen = wahl && (!wahl.aktiv || wahl.geschlossen);
 
   // Gleichstand-Erkennung
   const gewinnerSchwelle = gewinner.length > 0 ? gewinner[gewinner.length - 1].stimmen : 0;
