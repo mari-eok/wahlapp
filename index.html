@@ -767,7 +767,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   const [qrVollbild, setQrVollbild] = useState(false);
   const [toggling, setToggling] = useState(null);
   const wahllokalURL = window.location.origin + window.location.pathname + "?wahllokal=" + eventID;
-  const aktiveWahlen = wahlen.filter(w => w.aktiv);
+  const aktiveWahlen = wahlen.filter(w => w.aktiv && !w.geschlossen);
 
   async function schliesseWahl(wahl) {
     if (!confirm(`Wahl "${wahl.titel}" endgültig schließen? Dies kann nicht rückgängig gemacht werden.`)) return;
@@ -963,6 +963,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
         exakt: f.exakt,
         maxAuswahl: f.maxAuswahl,
         mehrheitsregel: f.mehrheitsregel || "relativ",
+        geschlossen: f.geschlossen || false,
         optionen: f.optionen,
       });
       await onDataChange();
