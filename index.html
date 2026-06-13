@@ -737,7 +737,7 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
         <div style={S.navTabs}>
           {tabs.map(t => <button key={t.id} style={{ ...S.navTab, ...(tab === t.id ? S.navTabActive : {}) }} onClick={() => setTab(t.id)}>{t.label}</button>)}
         </div>
-        {tab === "dashboard" && <LeitungDashboard appData={appData} eventID={eventID} />}
+        {tab === "dashboard" && <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} />}
         {tab === "wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} initialStichwahl={window._stichwahl} onStichwahl={() => { window._stichwahl = null; }} />}
         {tab === "tokens" && <LeitungTokens appData={appData} eventID={eventID} onDataChange={onDataChange} />}
         {tab === "waehler" && <LeitungWaehler appData={appData} eventID={eventID} onDataChange={onDataChange} />}
@@ -760,11 +760,22 @@ function QRCode({ url, size = 200 }) {
   );
 }
 
-function LeitungDashboard({ appData, eventID }) {
+function LeitungDashboard({ appData, eventID, onDataChange }) {
   const wahlen = appData.wahlen.filter(w => w.eventID === eventID);
   const tokenCount = appData.tokenCount || 0;
   const [qrVollbild, setQrVollbild] = useState(false);
+  const [toggling, setToggling] = useState(null);
   const wahllokalURL = window.location.origin + window.location.pathname + "?wahllokal=" + eventID;
+  const aktiveWahlen = wahlen.filter(w => w.aktiv);
+
+  async function toggleWahl(wahl) {
+    setToggling(wahl.id);
+    try {
+      await callFlow("toggleWahl", { wahlID: parseInt(wahl.id), aktiv: !wahl.aktiv });
+      await onDataChange();
+    } catch (e) { console.error(e); }
+    setToggling(null);
+  }
 
   return (
     <div>
@@ -775,17 +786,52 @@ function LeitungDashboard({ appData, eventID }) {
       </div>
 
       {/* Aktive Wahlen */}
+      {aktiveWahlen.length > 0 && (
+        <div style={{ ...S.card, border: `2px solid ${C.accent}`, marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ ...S.sectionLabel, color: C.accent }}>● Laufende Wahlen</div>
+          </div>
+          {aktiveWahlen.map(w => (
+            <div key={w.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{w.titel}</div>
+                <div style={{ fontSize: 12, color: C.textLight, marginTop: 2 }}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzelwahl"} · {w.optionen.length} Kandidaten</div>
+              </div>
+              <button
+                style={{ ...S.btn, ...S.btnDanger, fontWeight: 700 }}
+                onClick={() => toggleWahl(w)}
+                disabled={toggling === w.id}
+              >
+                {toggling === w.id ? "…" : "■ Wahl schließen"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={S.card}>
-        <div style={S.sectionLabel}>Aktive Wahlen</div>
-        {wahlen.filter(w => w.aktiv).length === 0
-          ? <p style={{ color: C.textLight, fontSize: 14 }}>Keine aktiven Wahlen.</p>
-          : wahlen.filter(w => w.aktiv).map(w => (
+        <div style={S.sectionLabel}>Alle Wahlen</div>
+        {wahlen.length === 0
+          ? <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Wahlen angelegt.</p>
+          : wahlen.map(w => (
             <div key={w.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontWeight: 600 }}>{w.titel}</div>
                 <div style={{ fontSize: 12, color: C.textLight }}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzel"} · {w.optionen.length} Optionen</div>
               </div>
-              <span style={{ ...S.badge, ...S.badgeGreen }}>aktiv</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {w.aktiv
+                  ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
+                  : <span style={{ ...S.badge, ...S.badgeGray }}>geschlossen</span>
+                }
+                <button
+                  style={{ ...S.btn, ...S.btnGhost, fontSize: 12 }}
+                  onClick={() => toggleWahl(w)}
+                  disabled={toggling === w.id}
+                >
+                  {toggling === w.id ? "…" : w.aktiv ? "Stoppen" : "Starten"}
+                </button>
+              </div>
             </div>
           ))
         }
