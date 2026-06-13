@@ -1928,11 +1928,17 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
       <div style={S.card}>
         <div style={S.formGroup}><label style={S.label}>Titel</label><input style={S.input} value={f.titel} onChange={e => setField("titel", e.target.value)} placeholder="z.B. Diakoniepfarrer*in" /></div>
         <div style={S.formGroup}><label style={S.label}>Startzeit</label><input style={S.input} type="datetime-local" value={f.startzeit?.slice(0, 16)} onChange={e => setField("startzeit", e.target.value)} /></div>
-        <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}><input type="checkbox" checked={f.mehrfach} onChange={e => setField("mehrfach", e.target.checked)} />Mehrfachauswahl</label>
+        <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap", opacity: f.hatStimmen ? 0.5 : 1, pointerEvents: f.hatStimmen ? "none" : "auto" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: f.hatStimmen ? "not-allowed" : "pointer", fontSize: 14 }}>
+            <input type="checkbox" checked={f.mehrfach} disabled={!!f.hatStimmen} onChange={e => setField("mehrfach", e.target.checked)} />Mehrfachauswahl
+          </label>
           {f.mehrfach && <>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}><input type="checkbox" checked={f.exakt} onChange={e => setField("exakt", e.target.checked)} />Exakte Anzahl</label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>Max: <input style={{ ...S.input, width: 60 }} type="number" min={1} value={f.maxAuswahl} onChange={e => setField("maxAuswahl", parseInt(e.target.value))} /></label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: f.hatStimmen ? "not-allowed" : "pointer", fontSize: 14 }}>
+              <input type="checkbox" checked={f.exakt} disabled={!!f.hatStimmen} onChange={e => setField("exakt", e.target.checked)} />Exakte Anzahl
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+              Max: <input style={{ ...S.input, width: 60 }} type="number" min={1} value={f.maxAuswahl} disabled={!!f.hatStimmen} onChange={e => setField("maxAuswahl", parseInt(e.target.value))} />
+            </label>
           </>}
         </div>
         <div style={S.formGroup}>
