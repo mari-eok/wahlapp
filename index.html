@@ -7,6 +7,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: "Segoe UI", system-ui, sans-serif; background: #f5f7fa; }</style>
 </head>
 <body>
@@ -222,7 +223,7 @@ function generateToken() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let t = "";
   for (let i = 0; i < 8; i++) t += chars[Math.floor(Math.random() * chars.length)];
-  return t;
+  return t.slice(0,4) + "-" + t.slice(4);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -266,7 +267,8 @@ function App() {
       const wahlen = (raw.wahlen || []).map(mapWahl);
       const optionen = (raw.optionen || []).map(mapOption);
       wahlen.forEach(w => { w.optionen = optionen.filter(o => o.wahlID === w.id); });
-      setAppData({ wahllokale, wahlen, optionen, tokens: [] });
+      const tokenCount = raw.tokenCount || 0;
+      setAppData({ wahllokale, wahlen, optionen, tokens: [], tokenCount });
       setLoadError(null);
     } catch (e) {
       // CORS im Artifact oder echter Verbindungsfehler
@@ -741,14 +743,44 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
   );
 }
 
+function QRCode({ url, size = 200 }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    // Simple QR placeholder using qrcode library loaded via CDN
+    if (window.QRCode) {
+      canvas.width = size;
+      canvas.height = size;
+      const qr = new window.QRCode(canvas, {
+        text: url,
+        width: size,
+        height: size,
+        colorDark: "#1a2744",
+        colorLight: "#ffffff",
+        correctLevel: window.QRCode.CorrectLevel.M
+      });
+    }
+  }, [url, size]);
+  return <canvas ref={canvasRef} width={size} height={size} />;
+}
+
 function LeitungDashboard({ appData, eventID }) {
   const wahlen = appData.wahlen.filter(w => w.eventID === eventID);
+  const tokenCount = appData.tokenCount || 0;
+  const [qrVollbild, setQrVollbild] = useState(false);
+  const wahllokalURL = window.location.origin + window.location.pathname + "?wahllokal=" + eventID;
+
   return (
     <div>
       <div style={S.statGrid}>
         <StatCard num={wahlen.filter(w => w.aktiv).length} label="Aktive Wahlen" color={C.accent} />
         <StatCard num={wahlen.length} label="Wahlen gesamt" color={C.primary} />
+        <StatCard num={tokenCount} label="Tokens ausgegeben" color={C.warning} />
       </div>
+
+      {/* Aktive Wahlen */}
       <div style={S.card}>
         <div style={S.sectionLabel}>Aktive Wahlen</div>
         {wahlen.filter(w => w.aktiv).length === 0
@@ -764,9 +796,48 @@ function LeitungDashboard({ appData, eventID }) {
           ))
         }
       </div>
+
+      {/* QR-Code */}
+      <div style={S.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={S.sectionLabel}>QR-Code Wahllokal</div>
+          <button style={{ ...S.btn, ...S.btnGhost, fontSize: 12 }} onClick={() => setQrVollbild(!qrVollbild)}>
+            {qrVollbild ? "✕ Schließen" : "⛶ Vollbild"}
+          </button>
+        </div>
+        <p style={{ color: C.textLight, fontSize: 13, marginBottom: 16 }}>
+          Zeigen Sie diesen QR-Code auf dem Beamer — Wähler scannen ihn mit ihrem Smartphone und gelangen direkt zum Wahlformular.
+        </p>
+        <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ background: "#fff", padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, display: "inline-block" }}>
+            <QRCode url={wahllokalURL} size={160} />
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 12, color: C.textLight, marginBottom: 8 }}>Wahllokal-URL:</div>
+            <code style={{ fontSize: 13, background: C.bg, padding: "8px 12px", borderRadius: 6, display: "block", wordBreak: "break-all" }}>{wahllokalURL}</code>
+            <button style={{ ...S.btn, ...S.btnGhost, fontSize: 12, marginTop: 12 }} onClick={() => navigator.clipboard?.writeText(wahllokalURL).then(() => alert("URL kopiert!"))}>
+              📋 URL kopieren
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* QR Vollbild */}
+      {qrVollbild && (
+        <div style={{ position: "fixed", inset: 0, background: "#fff", zIndex: 9999, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32 }}>
+          <button onClick={() => setQrVollbild(false)} style={{ position: "absolute", top: 24, right: 24, ...S.btn, ...S.btnGhost }}>✕ Schließen</button>
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: C.textLight }}>Evangelische Landeskirche in Baden</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: C.primary }}>Zur Abstimmung scannen</div>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 16, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+            <QRCode url={wahllokalURL} size={300} />
+          </div>
+          <code style={{ fontSize: 16, color: C.textLight }}>{wahllokalURL}</code>
+        </div>
+      )}
+
       {API.flows.saveWahl.startsWith("PLATZHALTER") && (
         <div style={{ ...S.alert, ...S.alertWarning }}>
-          ⚠️ Einige Flows sind noch nicht verbunden. Wahlen können noch nicht gespeichert werden.
+          ⚠️ Einige Flows sind noch nicht verbunden.
         </div>
       )}
     </div>
