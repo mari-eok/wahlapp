@@ -68,6 +68,7 @@ function mapWaehler(item) {
     tokenCode: item.TokenCode || "",
     status: item.Status || "angelegt",
     versendet: item.Versendet || false,
+    tokenAktiv: item.TokenAktiv !== false,
   };
 }
 
@@ -978,14 +979,28 @@ function LeitungWaehler({ appData, eventID }) {
   }
 
   async function ausgewaehltDeaktivieren() {
-    const zuDeaktivieren = waehler.filter(w => ausgewaehlt.includes(w.id) && w.tokenCode);
+    const zuDeaktivieren = waehler.filter(w => ausgewaehlt.includes(w.id) && w.tokenCode && w.tokenAktiv !== false);
     if (zuDeaktivieren.length === 0) return;
     if (!confirm(`Token für ${zuDeaktivieren.length} Wähler deaktivieren?`)) return;
     setSaving(true); setFehler(null);
     try {
-      await callFlow("deactivateToken", { eventID, tokenCodes: zuDeaktivieren.map(w => w.tokenCode) });
+      await callFlow("deactivateToken", { eventID, tokenCodes: zuDeaktivieren.map(w => w.tokenCode), aktiv: false });
       await loadWaehler();
-      setErfolg(`${zuDeaktivieren.length} Tokens deaktiviert.`);
+      setErfolg(`${zuDeaktivieren.length} Tokens gesperrt.`);
+      setTimeout(() => setErfolg(null), 3000);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
+  async function ausgewaehltAktivieren() {
+    const zuAktivieren = waehler.filter(w => ausgewaehlt.includes(w.id) && w.tokenCode && w.tokenAktiv === false);
+    if (zuAktivieren.length === 0) return;
+    if (!confirm(`Token für ${zuAktivieren.length} Wähler wieder aktivieren?`)) return;
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("deactivateToken", { eventID, tokenCodes: zuAktivieren.map(w => w.tokenCode), aktiv: true });
+      await loadWaehler();
+      setErfolg(`${zuAktivieren.length} Tokens reaktiviert.`);
       setTimeout(() => setErfolg(null), 3000);
     } catch (e) { setFehler(e.message); }
     setSaving(false);
@@ -1011,7 +1026,8 @@ function LeitungWaehler({ appData, eventID }) {
   const alleAusgewaehlt = gefilterteWaehler.length > 0 && gefilterteWaehler.every(w => ausgewaehlt.includes(w.id));
   const hatAuswahl = ausgewaehlt.length > 0;
   const kannLoeschen = ausgewaehlt.some(id => waehler.find(w => w.id === id)?.status !== "versendet");
-  const kannDeaktivieren = ausgewaehlt.some(id => waehler.find(w => w.id === id)?.tokenCode);
+  const kannDeaktivieren = ausgewaehlt.some(id => { const w = waehler.find(w => w.id === id); return w?.tokenCode && w?.tokenAktiv !== false; });
+  const kannAktivieren = ausgewaehlt.some(id => { const w = waehler.find(w => w.id === id); return w?.tokenCode && w?.tokenAktiv === false; });
 
   function toggleAuswahl(id) {
     setAusgewaehlt(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -1118,7 +1134,12 @@ function LeitungWaehler({ appData, eventID }) {
         )}
         {hatAuswahl && kannDeaktivieren && (
           <button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehltDeaktivieren} disabled={saving}>
-            🚫 Token sperren ({ausgewaehlt.filter(id => waehler.find(w => w.id === id)?.tokenCode).length})
+            🚫 Token sperren ({ausgewaehlt.filter(id => { const w = waehler.find(w => w.id === id); return w?.tokenCode && w?.tokenAktiv !== false; }).length})
+          </button>
+        )}
+        {hatAuswahl && kannAktivieren && (
+          <button style={{ ...S.btn, ...S.btnSuccess }} onClick={ausgewaehltAktivieren} disabled={saving}>
+            ✅ Token aktivieren ({ausgewaehlt.filter(id => { const w = waehler.find(w => w.id === id); return w?.tokenCode && w?.tokenAktiv === false; }).length})
           </button>
         )}
         <button style={{ ...S.btn, ...S.btnGhost }} onClick={loadWaehler} disabled={loading}>🔄</button>
@@ -1186,7 +1207,12 @@ function LeitungWaehler({ appData, eventID }) {
                     </td>
                     <td style={S.td}>{w.email}</td>
                     <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>
-                      {w.tokenCode || <span style={{ color: C.textLight }}>—</span>}
+                      {w.tokenCode
+                        ? <span style={{ textDecoration: w.tokenAktiv === false ? "line-through" : "none", color: w.tokenAktiv === false ? C.error : "inherit", opacity: w.tokenAktiv === false ? 0.6 : 1 }}>
+                            {w.tokenCode} {w.tokenAktiv === false && <span style={{ fontSize: 10, fontWeight: 400, fontFamily: "sans-serif" }}>gesperrt</span>}
+                          </span>
+                        : <span style={{ color: C.textLight }}>—</span>
+                      }
                     </td>
                     <td style={S.td}>
                       <span style={{ ...S.badge, ...(w.status === "versendet" ? S.badgeGreen : w.status === "zugewiesen" ? S.badgeOrange : S.badgeGray) }}>
