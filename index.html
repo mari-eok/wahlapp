@@ -1004,9 +1004,10 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
                   </td>
                   <td style={S.td}>
                     <div style={{ display: "flex", gap: 6 }}>
-                      {!w.geschlossen && <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => openForm(w)}>Bearbeiten</button>}
-                      {!w.geschlossen && <button style={{ ...S.btn, ...(w.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(w)}>{w.aktiv ? "Pausieren" : "Starten"}</button>}
-                      <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => deleteWahl(w)}>Löschen</button>
+                      {!w.geschlossen && <button style={{ ...S.btn, ...S.btnGhost, fontSize: 12, padding: "6px 12px" }} onClick={() => openForm(w)}>Bearbeiten</button>}
+                      {!w.geschlossen && w.aktiv && <button style={{ ...S.btn, ...S.btnGhost, fontSize: 12, padding: "6px 12px", color: C.warning, borderColor: C.warning }} onClick={() => toggleAktiv(w)}>Pausieren</button>}
+                      {!w.geschlossen && !w.aktiv && <button style={{ ...S.btn, ...S.btnSuccess, fontSize: 12, padding: "6px 12px" }} onClick={() => toggleAktiv(w)}>Starten</button>}
+                      <button style={{ ...S.btn, fontSize: 12, padding: "6px 12px", background: "transparent", color: C.error, border: `1px solid ${C.error}` }} onClick={() => deleteWahl(w)}>Löschen</button>
                     </div>
                   </td>
                 </tr>
@@ -1477,7 +1478,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   const wahl = wahlen.find(w => w.id === selectedWahlID);
   const total = ergebnisse?.length || 0;
   const maxAuswahl = wahl?.maxAuswahl || 1;
-  const mehrheitsregel = wahl?.mehrheitsregel || "relativ";
+  const mehrheitsregel = typeof wahl?.mehrheitsregel === "object" ? (wahl?.mehrheitsregel?.Value || "relativ") : (wahl?.mehrheitsregel || "relativ");
 
   function berechneOptErgebnisse(wahlObj, ergebnisseArr) {
     return (wahlObj?.optionen.map(opt => ({
