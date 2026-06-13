@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Digitales Wahllokal – EKIBA</title>
+  <title>Digitales Wahllokal - EKIBA</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -36,6 +36,7 @@ const API = {
     deleteWahl:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/39fc8412e8d74f2b804ac9dc11b99b0f/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yjHGJz8JSI28MJA21XCmIA3th2pFrNdrNfDD7HMUw_4",
     saveWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b7bfbab2747046819c38331a6a133832/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=f0mvJ21DhUCyWPSMQmhIAYCn1ZUq0UmLzeJKi8liPmk",
     sendTokenEmail: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e39aa42827e848779c9e43e1841c7ac9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=6GuETz2UvSpl7ARVaWVyy5W9UhJmYC65kd75WOuX_yw",
+    getWaehler:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/140675a2915542beb654587147996f24/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Q8uE7JhgKc5h2uh7WaxxtGDsRaLSG6pMBYI8xRSyzQQ",
   }
 };
 
@@ -51,6 +52,20 @@ async function callFlow(flowName, body) {
   });
   if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
   return res.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WÄHLER MAPPING
+// ═══════════════════════════════════════════════════════════════════════════════
+function mapWaehler(item) {
+  return {
+    id: String(item.ID),
+    email: item.Email || item.Title,
+    eventID: item.EventID,
+    tokenCode: item.TokenCode || "",
+    status: item.Status || "angelegt",
+    versendet: item.Versendet || false,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -846,17 +861,17 @@ function LeitungWahlen({ appData, eventID, onDataChange }) {
 
 
 // ─── LEITUNG WÄHLER ──────────────────────────────────────────────────────────
-function LeitungWaehler({ appData, eventID, onDataChange }) {
+function LeitungWaehler({ appData, eventID }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === eventID);
-  const [modus, setModus] = useState(null); // null | "offline" | "online"
-  const [waehlerListe, setWaehlerListe] = useState([]); // { email, token }
+  const [waehler, setWaehler] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [emailInput, setEmailInput] = useState("");
   const [csvInput, setCsvInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null);
-  const [offlineAnzahl, setOfflineAnzahl] = useState(10);
+  const [tab, setTab] = useState("liste");
 
   function generateToken() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -865,179 +880,163 @@ function LeitungWaehler({ appData, eventID, onDataChange }) {
     return t.slice(0,4) + "-" + t.slice(4);
   }
 
-  function addEmail() {
+  async function loadWaehler() {
+    setLoading(true);
+    try {
+      const result = await callFlow("getWaehler", { eventID });
+      setWaehler((result || []).map(mapWaehler));
+    } catch (e) { setFehler(e.message); }
+    setLoading(false);
+  }
+
+  useEffect(() => { loadWaehler(); }, []);
+
+  async function addEmail() {
     const email = emailInput.trim().toLowerCase();
     if (!email || !email.includes("@")) return;
-    if (waehlerListe.find(w => w.email === email)) return;
-    setWaehlerListe(prev => [...prev, { email, token: generateToken() }]);
-    setEmailInput("");
-  }
-
-  function importCSV() {
-    const lines = csvInput.split(/[\n\r,;]+/).map(l => l.trim().toLowerCase()).filter(l => l.includes("@"));
-
-    const neu = lines.filter(email => !waehlerListe.find(w => w.email === email)).map(email => ({ email, token: generateToken() }));
-    setWaehlerListe(prev => [...prev, ...neu]);
-    setCsvInput("");
-    setErfolg(`${neu.length} E-Mail-Adressen importiert.`);
-    setTimeout(() => setErfolg(null), 3000);
-  }
-
-  function removeWaehler(email) {
-    setWaehlerListe(prev => prev.filter(w => w.email !== email));
-  }
-
-  async function speichernUndSenden() {
-    if (waehlerListe.length === 0) return;
     setSaving(true); setFehler(null);
     try {
-      // 1. Wähler in SharePoint speichern
-      await callFlow("saveWaehler", {
-        eventID,
-        waehler: waehlerListe.map(w => ({ email: w.email, token: w.token })),
-      });
-      if (modus === "online") {
-        // 2. Alle IDs laden — vereinfacht: SendTokenEmail mit allen gespeicherten Wählern
-        setSending(true);
-        // Wir brauchen die IDs — daher GetWaehler Flow nötig
-        // Vorläufig: direkt nach dem Speichern senden
-        setErfolg(`${waehlerListe.length} Wähler gespeichert. E-Mail-Versand wird vorbereitet…`);
-      } else {
-        setErfolg(`${waehlerListe.length} Tokens gespeichert. Export bereit.`);
-      }
-      setWaehlerListe([]);
+      await callFlow("saveWaehler", { eventID, waehler: [{ email, token: "" }] });
+      setEmailInput("");
+      await loadWaehler();
+      setErfolg("Wähler hinzugefügt.");
+      setTimeout(() => setErfolg(null), 2000);
     } catch (e) { setFehler(e.message); }
-    setSaving(false); setSending(false);
+    setSaving(false);
   }
 
-  function exportOffline() {
-    const tokens = Array.from({ length: offlineAnzahl }, () => generateToken());
-    const text = tokens.join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    a.download = `tokens_${eventID}_${wahllokal?.name || eventID}.txt`;
-    a.click();
-  }
+  async function importCSV() {
+    const lines = csvInput.split(/[
 
-  async function speichernOffline() {
-    const tokens = Array.from({ length: offlineAnzahl }, () => generateToken());
+,;]+/).map(l => l.trim().toLowerCase()).filter(l => l.includes("@"));
+    if (lines.length === 0) return;
     setSaving(true); setFehler(null);
     try {
-      await callFlow("saveTokens", { eventID, tokens });
-      setErfolg(`${offlineAnzahl} Tokens generiert und gespeichert.`);
+      await callFlow("saveWaehler", { eventID, waehler: lines.map(email => ({ email, token: "" })) });
+      setCsvInput("");
+      await loadWaehler();
+      setErfolg(`${lines.length} importiert (Duplikate ignoriert).`);
       setTimeout(() => setErfolg(null), 3000);
     } catch (e) { setFehler(e.message); }
     setSaving(false);
   }
 
-  if (!modus) {
-    return (
-      <div>
-        <h3 style={{ margin: "0 0 24px", color: C.primary }}>Wähler & Tokens</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <div style={{ ...S.card, cursor: "pointer", border: `2px solid ${C.border}`, textAlign: "center", padding: 32 }} onClick={() => setModus("offline")}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
-            <h3 style={{ color: C.primary, margin: "0 0 8px" }}>Offline-Verteilung</h3>
-            <p style={{ color: C.textLight, fontSize: 14, lineHeight: 1.6 }}>Tokens generieren und als Liste ausdrucken oder per Zettel verteilen. Kein Personenbezug.</p>
-          </div>
-          <div style={{ ...S.card, cursor: "pointer", border: `2px solid ${C.border}`, textAlign: "center", padding: 32 }} onClick={() => setModus("online")}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
-            <h3 style={{ color: C.primary, margin: "0 0 8px" }}>Online-Versand</h3>
-            <p style={{ color: C.textLight, fontSize: 14, lineHeight: 1.6 }}>E-Mail-Adressen eingeben oder importieren. Tokens werden automatisch per E-Mail versendet.</p>
-          </div>
-        </div>
-      </div>
-    );
+  async function tokensZuweisen() {
+    const ohneToken = waehler.filter(w => w.status === "angelegt");
+    if (ohneToken.length === 0) { setErfolg("Alle Wähler haben bereits einen Token."); return; }
+    setSaving(true); setFehler(null);
+    try {
+      const tokenListe = ohneToken.map(w => ({ email: w.email, token: generateToken() }));
+      await callFlow("saveTokens", { eventID, tokens: tokenListe.map(t => t.token) });
+      setWaehler(prev => prev.map(w => {
+        const match = tokenListe.find(t => t.email === w.email);
+        if (match) return { ...w, tokenCode: match.token, status: "zugewiesen" };
+        return w;
+      }));
+      setErfolg(`${ohneToken.length} Tokens zugewiesen.`);
+      setTimeout(() => setErfolg(null), 3000);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
   }
+
+  async function emailsVersenden() {
+    const zuSenden = waehler.filter(w => w.status === "zugewiesen" && w.tokenCode);
+    if (zuSenden.length === 0) { setFehler("Keine Wähler mit zugewiesenem Token."); return; }
+    setSending(true); setFehler(null);
+    try {
+      await callFlow("sendTokenEmail", {
+        eventID,
+        wahllokalName: wahllokal?.name || eventID,
+        wahllokalURL: window.location.origin + window.location.pathname + "?wahllokal=" + eventID,
+        waehlerIDs: zuSenden.map(w => parseInt(w.id))
+      });
+      await loadWaehler();
+      setErfolg(`${zuSenden.length} E-Mails versendet.`);
+      setTimeout(() => setErfolg(null), 3000);
+    } catch (e) { setFehler(e.message); }
+    setSending(false);
+  }
+
+  const angelegt = waehler.filter(w => w.status === "angelegt").length;
+  const zugewiesen = waehler.filter(w => w.status === "zugewiesen").length;
+  const versendet = waehler.filter(w => w.status === "versendet").length;
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => { setModus(null); setWaehlerListe([]); setFehler(null); setErfolg(null); }}>← Zurück</button>
-        <h3 style={{ margin: 0, color: C.primary }}>{modus === "offline" ? "📋 Offline-Verteilung" : "📧 Online-Versand"}</h3>
+      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler} <button onClick={() => setFehler(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer" }}>x</button></div>}
+      {erfolg && <div style={{ ...S.alert, ...S.alertSuccess }}>OK {erfolg}</div>}
+
+      <div style={S.statGrid}>
+        <StatCard num={waehler.length} label="Wähler gesamt" color={C.primary} />
+        <StatCard num={angelegt} label="Ohne Token" color={C.textLight} />
+        <StatCard num={zugewiesen} label="Token zugewiesen" color={C.warning} />
+        <StatCard num={versendet} label="E-Mail versendet" color={C.accent} />
       </div>
 
-      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
-      {erfolg && <div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={tokensZuweisen} disabled={saving || angelegt === 0}>
+          Token zuweisen ({angelegt})
+        </button>
+        <button style={{ ...S.btn, ...S.btnSuccess }} onClick={emailsVersenden} disabled={sending || zugewiesen === 0}>
+          {sending ? "Wird versendet..." : "E-Mails versenden (" + zugewiesen + ")"}
+        </button>
+        <button style={{ ...S.btn, ...S.btnGhost }} onClick={loadWaehler} disabled={loading}>Aktualisieren</button>
+      </div>
 
-      {modus === "offline" && (
+      <div style={S.navTabs}>
+        <button style={{ ...S.navTab, ...(tab === "liste" ? S.navTabActive : {}) }} onClick={() => setTab("liste")}>Liste</button>
+        <button style={{ ...S.navTab, ...(tab === "hinzufuegen" ? S.navTabActive : {}) }} onClick={() => setTab("hinzufuegen")}>+ Hinzufuegen</button>
+      </div>
+
+      {tab === "hinzufuegen" && (
         <div style={S.card}>
-          <div style={S.sectionLabel}>Tokens generieren</div>
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 16 }}>
-            <div>
-              <label style={S.label}>Anzahl</label>
-              <input style={{ ...S.input, width: 80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e => setOfflineAnzahl(parseInt(e.target.value))} />
+          <div style={S.formGroup}>
+            <label style={S.label}>Einzeln hinzufuegen</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...S.input, flex: 1 }} type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addEmail()} placeholder="name@ekiba.de" />
+              <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmail} disabled={saving}>{saving ? "..." : "+ Hinzufuegen"}</button>
             </div>
-            <button style={{ ...S.btn, ...S.btnGhost }} onClick={exportOffline}>📥 Nur exportieren (.txt)</button>
-            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={speichernOffline} disabled={saving}>
-              {saving ? "…" : "💾 Generieren & in SharePoint speichern"}
-            </button>
           </div>
-          <p style={{ color: C.textLight, fontSize: 13 }}>
-            Format: <code>XXXX-YYYY</code> · Dateiname: <code>tokens_{eventID}_{wahllokal?.name}.txt</code>
-          </p>
+          <div style={S.formGroup}>
+            <label style={S.label}>CSV / Mehrere importieren</label>
+            <p style={{ color: C.textLight, fontSize: 12, marginBottom: 8 }}>E-Mail-Adressen durch Komma, Semikolon oder Zeilenumbruch getrennt:</p>
+            <textarea style={{ ...S.input, height: 100, resize: "vertical", marginBottom: 8 }} value={csvInput} onChange={e => setCsvInput(e.target.value)} placeholder="max@ekiba.de, anna@ekiba.de" />
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={importCSV} disabled={saving}>{saving ? "Importieren..." : "Importieren"}</button>
+          </div>
         </div>
       )}
 
-      {modus === "online" && (
-        <>
-          <div style={S.card}>
-            <div style={S.sectionLabel}>E-Mail-Adressen eingeben</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <input
-                style={{ ...S.input, flex: 1 }}
-                type="email"
-                value={emailInput}
-                onChange={e => setEmailInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && addEmail()}
-                placeholder="name@ekiba.de"
-              />
-              <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmail}>+ Hinzufügen</button>
-            </div>
-            <div style={S.sectionLabel}>Oder CSV importieren</div>
-            <p style={{ color: C.textLight, fontSize: 12, marginBottom: 8 }}>E-Mail-Adressen durch Komma, Semikolon oder Zeilenumbruch getrennt einfügen:</p>
-            <textarea
-              style={{ ...S.input, height: 80, resize: "vertical", marginBottom: 8 }}
-              value={csvInput}
-              onChange={e => setCsvInput(e.target.value)}
-              placeholder="max@ekiba.de, anna@ekiba.de&#10;peter@ekiba.de"
-            />
-            <button style={{ ...S.btn, ...S.btnGhost }} onClick={importCSV}>📋 Importieren</button>
-          </div>
-
-          {waehlerListe.length > 0 && (
-            <div style={S.card}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                <div style={S.sectionLabel}>{waehlerListe.length} Wähler bereit</div>
-              </div>
-              <table style={S.table}>
-                <thead>
-                  <tr>
-                    <th style={S.th}>E-Mail</th>
-                    <th style={S.th}>Token</th>
-                    <th style={S.th}></th>
+      {tab === "liste" && (
+        <div style={S.card}>
+          {loading ? (
+            <p style={{ color: C.textLight, fontSize: 14 }}>Wird geladen...</p>
+          ) : waehler.length === 0 ? (
+            <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Waehler angelegt.</p>
+          ) : (
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={S.th}>E-Mail</th>
+                  <th style={S.th}>Token</th>
+                  <th style={S.th}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {waehler.map(w => (
+                  <tr key={w.id}>
+                    <td style={S.td}>{w.email}</td>
+                    <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>{w.tokenCode || "-"}</td>
+                    <td style={S.td}>
+                      <span style={{ ...S.badge, ...(w.status === "versendet" ? S.badgeGreen : w.status === "zugewiesen" ? S.badgeOrange : S.badgeGray) }}>
+                        {w.status === "versendet" ? "versendet" : w.status === "zugewiesen" ? "zugewiesen" : "angelegt"}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {waehlerListe.map(w => (
-                    <tr key={w.email}>
-                      <td style={S.td}>{w.email}</td>
-                      <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>{w.token}</td>
-                      <td style={S.td}>
-                        <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => removeWaehler(w.email)}>✕</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
-                <button style={{ ...S.btn, ...S.btnPrimary, padding: "12px 24px" }} onClick={speichernUndSenden} disabled={saving || sending}>
-                  {saving ? "Speichern…" : sending ? "E-Mails werden versendet…" : `📧 Tokens speichern & E-Mails versenden (${waehlerListe.length})`}
-                </button>
-              </div>
-            </div>
+                ))}
+              </tbody>
+            </table>
           )}
-        </>
+        </div>
       )}
     </div>
   );
