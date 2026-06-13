@@ -1640,7 +1640,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
           {/* Balkendiagramm */}
           <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={wahlGeschlossen ? sichereGewinner : []} gleichstandListe={wahlGeschlossen && hatGleichstand ? [...gleichstandKandidaten, ...(gewinner.slice(-1))] : []} />
 
-          {stichwahNötig && !VB && (
+          {wahlGeschlossen && stichwahNötig && !VB && (
             <div style={{ marginTop: 24, padding: 16, borderRadius: 10, background: "#fff8e1", border: "1px solid #f59e0b" }}>
               {hatGleichstand && (
                 <p style={{ fontWeight: 700, color: "#92400e", marginBottom: 8 }}>
