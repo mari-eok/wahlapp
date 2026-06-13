@@ -68,7 +68,7 @@ function mapWaehler(item) {
     tokenCode: item.TokenCode || "",
     status: item.Status || "angelegt",
     versendet: item.Versendet || false,
-    tokenAktiv: item.TokenAktiv !== false,
+    tokenAktiv: item.TokenAktiv === null || item.TokenAktiv === undefined ? true : item.TokenAktiv,
   };
 }
 
@@ -984,7 +984,12 @@ function LeitungWaehler({ appData, eventID }) {
     if (!confirm(`Token für ${zuDeaktivieren.length} Wähler deaktivieren?`)) return;
     setSaving(true); setFehler(null);
     try {
-      await callFlow("deactivateToken", { eventID, tokenCodes: zuDeaktivieren.map(w => w.tokenCode), aktiv: false });
+      await callFlow("deactivateToken", {
+        eventID,
+        tokenCodes: zuDeaktivieren.map(w => w.tokenCode),
+        waehlerIDs: zuDeaktivieren.map(w => parseInt(w.id)),
+        aktiv: false
+      });
       await loadWaehler();
       setErfolg(`${zuDeaktivieren.length} Tokens gesperrt.`);
       setTimeout(() => setErfolg(null), 3000);
@@ -998,7 +1003,12 @@ function LeitungWaehler({ appData, eventID }) {
     if (!confirm(`Token für ${zuAktivieren.length} Wähler wieder aktivieren?`)) return;
     setSaving(true); setFehler(null);
     try {
-      await callFlow("deactivateToken", { eventID, tokenCodes: zuAktivieren.map(w => w.tokenCode), aktiv: true });
+      await callFlow("deactivateToken", {
+        eventID,
+        tokenCodes: zuAktivieren.map(w => w.tokenCode),
+        waehlerIDs: zuAktivieren.map(w => parseInt(w.id)),
+        aktiv: true
+      });
       await loadWaehler();
       setErfolg(`${zuAktivieren.length} Tokens reaktiviert.`);
       setTimeout(() => setErfolg(null), 3000);
