@@ -1708,6 +1708,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
 
   const wahl = wahlen.find(w => w.id === selectedWahlID);
   const total = ergebnisse?.length || 0;
+  const maxAuswahl = wahl?.maxAuswahl || 1;
 
   function berechneOptErgebnisse(wahlObj, ergebnisseArr) {
     return (wahlObj?.optionen.map(opt => ({
@@ -1724,17 +1725,16 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
   const optErgebnisse = berechneOptErgebnisse(wahl, ergebnisse);
   const maxS = Math.max(...optErgebnisse.map(e => e.stimmen), 1);
   const nichtenthaltung = optErgebnisse.filter(e => !e.istEnthaltung);
-  const maxAuswahl = wahl?.maxAuswahl || 1;
   const gewinner = nichtenthaltung.slice(0, maxAuswahl).filter(e => e.stimmen > 0);
   const fuehrend = nichtenthaltung[0];
 
   const VB = vollbild;
   const col = (normal, vb) => VB ? vb : normal;
 
-  const BalkenDiagramm = ({ opts, totalStimmen, maxStimmen, gross }) => (
+  const BalkenDiagramm = ({ opts, totalStimmen, maxStimmen, gross, gewinnerListe = [] }) => (
     <div style={{ display: "flex", flexDirection: "column", gap: gross ? 28 : 16 }}>
       {opts.map((e, idx) => {
-        const istFuehrend = !e.istEnthaltung && totalStimmen > 0 && gewinner.some(g => g.id === e.id);
+        const istFuehrend = !e.istEnthaltung && totalStimmen > 0 && gewinnerListe.some(g => g.id === e.id);
         const pct = totalStimmen > 0 ? Math.round(e.stimmen / totalStimmen * 100) : 0;
         return (
           <div key={e.id}>
@@ -1869,7 +1869,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
           </div>
 
           {/* Balkendiagramm */}
-          <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} />
+          <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={gewinner} />
         </>
       )}
 
