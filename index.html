@@ -994,7 +994,14 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
                   <td style={S.td}><strong>{w.titel}</strong></td>
                   <td style={S.td}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzel"}</td>
                   <td style={S.td}>{w.optionen.length}</td>
-                  <td style={S.td}><span style={{ ...S.badge, ...(w.aktiv ? S.badgeGreen : S.badgeGray) }}>{w.aktiv ? "aktiv" : "inaktiv"}</span></td>
+                  <td style={S.td}>
+                    {w.geschlossen
+                      ? <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" }}>🔒 Geschlossen</span>
+                      : w.aktiv
+                        ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
+                        : <span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>
+                    }
+                  </td>
                   <td style={S.td}>
                     <div style={{ display: "flex", gap: 6 }}>
                       {!w.geschlossen && <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => openForm(w)}>Bearbeiten</button>}
