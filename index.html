@@ -1270,7 +1270,7 @@ function LeitungErgebnisse({ appData, eventID, onDataChange }) {
         setErgebnisse([]);
       } else {
         const result = await callFlow("getErgebnisse", { wahlID: parseInt(selectedWahlID), eventID });
-        setErgebnisse(result.value || result.abstimmungen || []);
+        setErgebnisse(Array.isArray(result) ? result : (result.value || result.abstimmungen || []));
       }
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -1629,7 +1629,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
     setLoading(true);
     try {
       const result = await callFlow("getErgebnisse", { wahlID: parseInt(selectedWahlID), eventID: wahllokalID });
-      setErgebnisse(result.value || result.abstimmungen || []);
+      setErgebnisse(Array.isArray(result) ? result : (result.value || result.abstimmungen || []));
       setLetzteAktualisierung(new Date());
     } catch (e) { console.error(e); }
     setLoading(false);
