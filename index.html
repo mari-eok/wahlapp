@@ -1520,8 +1520,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   const mehrheitErreicht = gewinner.every(g => pruefeMehrheit(g.stimmen));
   const stichwahNötig = total > 0 && (!mehrheitErreicht || hatGleichstand);
   const stichwahSuchTitel = "Stichwahl: " + (wahl?.titel || "");
-  const stichwahExistiert = wahlen.some(w => w.titel === stichwahSuchTitel && w.id !== wahl?.id) ||
-    appData.wahlen.some(w => w.eventID === wahllokalID && w.titel === stichwahSuchTitel && w.id !== wahl?.id);
+  const stichwahExistiert = !!wahlenFrisch && wahlen.some(w => w.titel === stichwahSuchTitel && w.id !== wahl?.id);
 
   const VB = vollbild;
   const col = (normal, vb) => VB ? vb : normal;
