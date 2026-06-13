@@ -901,6 +901,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
         mehrfach: f.mehrfach,
         exakt: f.exakt,
         maxAuswahl: f.maxAuswahl,
+        mehrheitsregel: f.mehrheitsregel || "relativ",
         optionen: f.optionen,
       });
       await onDataChange();
@@ -1605,7 +1606,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
                   // Bei Gleichstand: nur die Gleichstand-Kandidaten kommen in Stichwahl
                   // Bei Mehrheit nicht erreicht: alle Gewinner kommen in Stichwahl
                   const stichwahKandidaten = hatGleichstand
-                    ? gleichstandKandidaten
+                    ? [...gleichstandKandidaten, ...gewinner.slice(-1)]
                     : sichereGewinner;
                   if (isLeitung && onDataChange) {
                     const stichwahl = {
