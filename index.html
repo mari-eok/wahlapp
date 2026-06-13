@@ -741,7 +741,7 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
         {tab === "wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} initialStichwahl={window._stichwahl} onStichwahl={() => { window._stichwahl = null; }} />}
         {tab === "tokens" && <LeitungTokens appData={appData} eventID={eventID} onDataChange={onDataChange} />}
         {tab === "waehler" && <LeitungWaehler appData={appData} eventID={eventID} onDataChange={onDataChange} />}
-        {tab === "ergebnisse" && <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} />}
+        {tab === "ergebnisse" && <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setTab} />}
       </div>
     </div>
   );
@@ -1339,7 +1339,11 @@ function LeitungWaehler({ appData, eventID }) {
   );
 }
 
-function LeitungErgebnisse({ appData, eventID, onDataChange }) {
+function LeitungErgebnisse({ appData, eventID, onDataChange, onSwitchTab }) {
+  useEffect(() => {
+    window._switchToWahlen = () => onSwitchTab && onSwitchTab("wahlen");
+    return () => { window._switchToWahlen = null; };
+  }, [onSwitchTab]);
   return (
     <ErgebnisDashboard
       appData={appData}
@@ -1430,10 +1434,11 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   const VB = vollbild;
   const col = (normal, vb) => VB ? vb : normal;
 
-  const BalkenDiagramm = ({ opts, totalStimmen, maxStimmen, gross, gewinnerListe = [] }) => (
+  const BalkenDiagramm = ({ opts, totalStimmen, maxStimmen, gross, gewinnerListe = [], gleichstandListe = [] }) => (
     <div style={{ display: "flex", flexDirection: "column", gap: gross ? 28 : 16 }}>
       {opts.map((e, idx) => {
         const istFuehrend = !e.istEnthaltung && totalStimmen > 0 && gewinnerListe.some(g => g.id === e.id);
+        const istGleichstand = !istFuehrend && !e.istEnthaltung && gleichstandListe && gleichstandListe.some(g => g.id === e.id);
         const pct = totalStimmen > 0 ? Math.round(e.stimmen / totalStimmen * 100) : 0;
         return (
           <div key={e.id}>
@@ -1460,7 +1465,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
               <div style={{
                 height: "100%",
                 width: `${totalStimmen > 0 ? (e.stimmen / maxStimmen) * 100 : 0}%`,
-                background: e.istEnthaltung ? col(C.textLight, "rgba(255,255,255,0.3)") : (istFuehrend ? col(C.accent, "#4ade80") : col(C.primaryLight, C.accent)),
+                background: e.istEnthaltung ? col(C.textLight, "rgba(255,255,255,0.3)") : (istFuehrend ? col(C.accent, "#4ade80") : (istGleichstand ? col("#f59e0b", "#fbbf24") : col(C.primaryLight, C.accent))),
                 borderRadius: 8,
                 transition: "width 1s ease",
                 minWidth: e.stimmen > 0 ? 8 : 0,
@@ -1577,7 +1582,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
           </div>
 
           {/* Balkendiagramm */}
-          <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={sichereGewinner} />
+          <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={sichereGewinner} gleichstandListe={hatGleichstand ? [...gleichstandKandidaten, ...(gewinner.slice(-1))] : []} />
 
           {stichwahNötig && !VB && (
             <div style={{ marginTop: 24, padding: 16, borderRadius: 10, background: "#fff8e1", border: "1px solid #f59e0b" }}>
@@ -1603,7 +1608,6 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
                     ? gleichstandKandidaten
                     : sichereGewinner;
                   if (isLeitung && onDataChange) {
-                    // Direkt Wahl-Formular öffnen mit vorausgefüllten Kandidaten
                     const stichwahl = {
                       id: null,
                       titel: "Stichwahl: " + (wahl?.titel || ""),
@@ -1614,9 +1618,10 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
                       mehrheitsregel: wahl?.mehrheitsregel || "relativ",
                       optionen: stichwahKandidaten.map((k, idx) => ({ id: String(Date.now() + idx), name: k.name, istEnthaltung: false })),
                       eventID: wahllokalID,
+                      hatStimmen: false,
                     };
                     window._stichwahl = stichwahl;
-                    alert("Stichwahl wird vorbereitet mit:\n" + stichwahKandidaten.map(k => "• " + k.name).join("\n") + "\n\nBitte wechsle zum Tab Wahlen um die Stichwahl zu bestätigen und zu speichern.");
+                    window._switchToWahlen && window._switchToWahlen();
                   } else {
                     alert("Stichwahl erforderlich zwischen:\n" + stichwahKandidaten.map(k => "• " + k.name).join("\n") + "\n\nBitte wende dich an die Wahlleitung.");
                   }
