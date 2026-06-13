@@ -33,6 +33,7 @@ const API = {
     getAlle:       "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/79c1ffeaa7f84fe29fee758ff0f3fe93/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=G_FnGLRFJCbppHDH_bmyfmKUasq4BecWm9HDm0Ijrns",
     saveWahllokal: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/95e56fdda66442fc85ee7246861bda0e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lDqIDur370XvJCkwPj-xm9J_i8XrtfcIatVs3jYaan8",
     deleteWahllokal: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/224d0149b1474e21a170cf87d89e290b/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-xA1XoBby58QJu0RFKFbEqhedoQF5CuXdUrl1r4beg4",
+    deleteWahl:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/39fc8412e8d74f2b804ac9dc11b99b0f/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yjHGJz8JSI28MJA21XCmIA3th2pFrNdrNfDD7HMUw_4",
     saveWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b7bfbab2747046819c38331a6a133832/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=f0mvJ21DhUCyWPSMQmhIAYCn1ZUq0UmLzeJKi8liPmk",
     sendTokenEmail: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e39aa42827e848779c9e43e1841c7ac9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=6GuETz2UvSpl7ARVaWVyy5W9UhJmYC65kd75WOuX_yw",
   }
@@ -203,7 +204,7 @@ function App() {
   const ansicht = urlParams.get("ansicht") || "";
 
   const [view, setView] = useState(ansicht === "ergebnisse" ? "ergebnisse" : ansicht === "leitung" ? "leitung" : ansicht === "superadmin" ? "superadmin" : "wahllokal");
-  const [leitungAuth, setLeitungAuth] = useState(ansicht === "leitung" ? null : null);
+  const [leitungAuth, setLeitungAuth] = useState(null);
   const [superadminAuth, setSuperadminAuth] = useState(false);
   const [appData, setAppData] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -290,9 +291,9 @@ function App() {
             corsWarning={corsWarning}
           />
           <DemoSwitcher
-            onLeitung={() => setView("leitung")}
             onSuperadmin={() => setView("superadmin")}
             onErgebnisse={() => setView("ergebnisse")}
+            wahllokalID={wahllokalID}
           />
         </>
       )}
@@ -311,7 +312,8 @@ function App() {
             />
           : <LeitungLoginScreen
               onAuth={(eventID) => setLeitungAuth(eventID)}
-              onBack={() => setView("wahllokal")}
+              onBack={() => { window.history.back(); }}
+              fixedEventID={ansicht === "leitung" ? wahllokalID : null}
             />
       )}
 
@@ -335,11 +337,14 @@ function App() {
 }
 
 // ─── DEMO SWITCHER ────────────────────────────────────────────────────────────
-function DemoSwitcher({ onLeitung, onSuperadmin, onErgebnisse }) {
+function DemoSwitcher({ onSuperadmin, onErgebnisse, wahllokalID }) {
+  function goLeitung() {
+    window.location.href = `?wahllokal=${wahllokalID}&ansicht=leitung`;
+  }
   return (
     <div style={{ position: "fixed", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 8, zIndex: 999 }}>
       <button onClick={onErgebnisse} style={{ ...S.btn, ...S.btnSuccess, fontSize: 12, opacity: 0.8 }}>📊 Ergebnisse</button>
-      <button onClick={onLeitung} style={{ ...S.btn, ...S.btnPrimary, fontSize: 12, opacity: 0.8 }}>📋 Wahlleitung</button>
+      <button onClick={goLeitung} style={{ ...S.btn, ...S.btnPrimary, fontSize: 12, opacity: 0.8 }}>📋 Wahlleitung</button>
       <button onClick={onSuperadmin} style={{ ...S.btn, ...S.btnPurple, fontSize: 12, opacity: 0.8 }}>⚙️ Superadmin</button>
     </div>
   );
@@ -375,11 +380,11 @@ function PinScreen({ title, subtitle, color, onAuth, onBack }) {
 }
 
 // ─── LEITUNG LOGIN ────────────────────────────────────────────────────────────
-function LeitungLoginScreen({ onAuth, onBack }) {
+function LeitungLoginScreen({ onAuth, onBack, fixedEventID }) {
   const [wahllokale, setWahllokale] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEventID, setSelectedEventID] = useState("");
-  const [step, setStep] = useState("waehlen");
+  const [selectedEventID, setSelectedEventID] = useState(fixedEventID || "");
+  const [step, setStep] = useState(fixedEventID ? "pin" : "waehlen");
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
   const selectedWahllokal = wahllokale.find(w => w.eventID === selectedEventID);
@@ -390,7 +395,7 @@ function LeitungLoginScreen({ onAuth, onBack }) {
         const result = await callFlow("getAlle", {});
         const alle = (result || []).map(mapWahllokal).filter(w => w.aktiv);
         setWahllokale(alle);
-        if (alle.length > 0) setSelectedEventID(alle[0].eventID);
+        if (!fixedEventID && alle.length > 0) setSelectedEventID(alle[0].eventID);
       } catch (e) { console.error(e); }
       setLoading(false);
     }
@@ -756,6 +761,14 @@ function LeitungWahlen({ appData, eventID, onDataChange }) {
     } catch (e) { setFehler(e.message); }
   }
 
+  async function deleteWahl(wahl) {
+    if (!confirm(`Wahl "${wahl.titel}" und alle Optionen wirklich löschen?`)) return;
+    try {
+      await callFlow("deleteWahl", { wahlID: parseInt(wahl.id) });
+      await onDataChange();
+    } catch (e) { setFehler(e.message); }
+  }
+
   async function saveWahl(f) {
     setSaving(true); setFehler(null);
     try {
@@ -807,6 +820,7 @@ function LeitungWahlen({ appData, eventID, onDataChange }) {
                     <div style={{ display: "flex", gap: 6 }}>
                       <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setForm({ ...w, optionen: [...w.optionen] })}>Bearbeiten</button>
                       <button style={{ ...S.btn, ...(w.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(w)}>{w.aktiv ? "Stoppen" : "Starten"}</button>
+                      <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => deleteWahl(w)}>Löschen</button>
                     </div>
                   </td>
                 </tr>
@@ -975,7 +989,7 @@ function LeitungWaehler({ appData, eventID, onDataChange }) {
               style={{ ...S.input, height: 80, resize: "vertical", marginBottom: 8 }}
               value={csvInput}
               onChange={e => setCsvInput(e.target.value)}
-              placeholder="max@ekiba.de, anna@ekiba.de, peter@ekiba.de"
+              placeholder="max@ekiba.de, anna@ekiba.de&#10;peter@ekiba.de"
             />
             <button style={{ ...S.btn, ...S.btnGhost }} onClick={importCSV}>📋 Importieren</button>
           </div>
