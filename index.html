@@ -1218,9 +1218,16 @@ function LeitungWaehler({ appData, eventID }) {
                     <td style={S.td}>{w.email}</td>
                     <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>
                       {w.tokenCode
-                        ? <span style={{ textDecoration: w.tokenAktiv === false ? "line-through" : "none", color: w.tokenAktiv === false ? C.error : "inherit", opacity: w.tokenAktiv === false ? 0.6 : 1 }}>
-                            {w.tokenCode} {w.tokenAktiv === false && <span style={{ fontSize: 10, fontWeight: 400, fontFamily: "sans-serif" }}>gesperrt</span>}
-                          </span>
+                        ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ textDecoration: w.tokenAktiv === false ? "line-through" : "none", opacity: w.tokenAktiv === false ? 0.5 : 1 }}>
+                              {w.tokenCode}
+                            </span>
+                            {w.tokenAktiv === false && (
+                              <span style={{ ...S.badge, background: C.errorBg, color: C.error, border: `1px solid ${C.error}`, fontSize: 11 }}>
+                                gesperrt
+                              </span>
+                            )}
+                          </div>
                         : <span style={{ color: C.textLight }}>—</span>
                       }
                     </td>
