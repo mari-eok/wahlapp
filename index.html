@@ -1615,6 +1615,10 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
   const [loading, setLoading] = useState(false);
   const [letzteAktualisierung, setLetzteAktualisierung] = useState(null);
   const [vollbild, setVollbild] = useState(false);
+  const [ansichtModus, setAnsichtModus] = useState("einzeln"); // einzeln | alle
+
+  // Gesamtzahl Tokens für Wahlbeteiligung
+  const [tokenCount, setTokenCount] = useState(null);
 
   useEffect(() => {
     if (wahlen.length > 0 && !selectedWahlID) setSelectedWahlID(wahlen[0].id);
@@ -1632,8 +1636,6 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
   }
 
   useEffect(() => { laden(); }, [selectedWahlID]);
-
-  // Auto-Refresh alle 30 Sekunden
   useEffect(() => {
     const t = setInterval(laden, 30000);
     return () => clearInterval(t);
@@ -1641,133 +1643,173 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
 
   const wahl = wahlen.find(w => w.id === selectedWahlID);
   const total = ergebnisse?.length || 0;
-  const optErgebnisse = wahl?.optionen.map(opt => ({
-    ...opt,
-    stimmen: ergebnisse?.filter(a => {
-      try {
-        const pos = JSON.parse(a.Positionen || a.positionen || "[]");
-        return pos.some(p => String(p.optionID) === opt.id);
-      } catch { return false; }
-    }).length || 0,
-  })).sort((a, b) => b.stimmen - a.stimmen) || [];
+
+  function berechneOptErgebnisse(wahlObj, ergebnisseArr) {
+    return (wahlObj?.optionen.map(opt => ({
+      ...opt,
+      stimmen: (ergebnisseArr || []).filter(a => {
+        try {
+          const pos = JSON.parse(a.Positionen || a.positionen || "[]");
+          return pos.some(p => String(p.optionID) === opt.id);
+        } catch { return false; }
+      }).length || 0,
+    })).sort((a, b) => b.stimmen - a.stimmen)) || [];
+  }
+
+  const optErgebnisse = berechneOptErgebnisse(wahl, ergebnisse);
   const maxS = Math.max(...optErgebnisse.map(e => e.stimmen), 1);
   const nichtenthaltung = optErgebnisse.filter(e => !e.istEnthaltung);
   const fuehrend = nichtenthaltung[0];
 
-  const containerStyle = vollbild ? {
+  const VB = vollbild;
+  const col = (normal, vb) => VB ? vb : normal;
+
+  const BalkenDiagramm = ({ opts, totalStimmen, maxStimmen, gross }) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: gross ? 28 : 16 }}>
+      {opts.map((e, idx) => {
+        const istFuehrend = !e.istEnthaltung && idx === 0 && totalStimmen > 0;
+        const pct = totalStimmen > 0 ? Math.round(e.stimmen / totalStimmen * 100) : 0;
+        return (
+          <div key={e.id}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: gross ? 10 : 6, alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {istFuehrend && <span style={{ fontSize: gross ? 28 : 18 }}>🏆</span>}
+                <span style={{ fontWeight: istFuehrend ? 800 : 600, fontSize: gross ? 24 : 15, color: col(C.text, "#fff") }}>
+                  {e.name}
+                </span>
+                {e.istEnthaltung && (
+                  <span style={{ ...S.badge, background: "rgba(255,255,255,0.15)", color: col(C.textLight, "rgba(255,255,255,0.6)"), fontSize: 11 }}>Enthaltung</span>
+                )}
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: gross ? 28 : 16, fontWeight: 800, color: col(C.primary, C.accent) }}>
+                  {e.stimmen}
+                </span>
+                <span style={{ fontSize: gross ? 16 : 12, color: col(C.textLight, "rgba(255,255,255,0.6)"), marginLeft: 6 }}>
+                  Stimme{e.stimmen !== 1 ? "n" : ""} · {pct}%
+                </span>
+              </div>
+            </div>
+            <div style={{ background: col(C.border, "rgba(255,255,255,0.15)"), borderRadius: 8, height: gross ? 40 : 16, overflow: "hidden", position: "relative" }}>
+              <div style={{
+                height: "100%",
+                width: `${totalStimmen > 0 ? (e.stimmen / maxStimmen) * 100 : 0}%`,
+                background: e.istEnthaltung ? col(C.textLight, "rgba(255,255,255,0.3)") : (istFuehrend ? col(C.accent, "#4ade80") : col(C.primaryLight, C.accent)),
+                borderRadius: 8,
+                transition: "width 1s ease",
+                minWidth: e.stimmen > 0 ? 8 : 0,
+              }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const containerStyle = VB ? {
     position: "fixed", inset: 0, background: C.primary, zIndex: 9999,
-    display: "flex", flexDirection: "column", padding: 48, overflow: "auto"
-  } : {
-    minHeight: "100vh", background: C.bg, padding: 24
-  };
+    display: "flex", flexDirection: "column", padding: "40px 56px", overflow: "auto"
+  } : { minHeight: "100vh", background: C.bg, padding: 24 };
 
   return (
     <div style={containerStyle}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: VB ? 40 : 24 }}>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: vollbild ? "rgba(255,255,255,0.6)" : C.textLight, marginBottom: 4 }}>
+          {!VB && (
+            <button onClick={onBack} style={{ ...S.btn, ...S.btnGhost, fontSize: 12, marginBottom: 12 }}>
+              ← Zurück zum Wahllokal
+            </button>
+          )}
+          <div style={{ fontSize: VB ? 14 : 12, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: col(C.textLight, "rgba(255,255,255,0.5)"), marginBottom: 6 }}>
             Evangelische Landeskirche in Baden
           </div>
-          <h1 style={{ fontSize: vollbild ? 32 : 24, fontWeight: 800, color: vollbild ? "#fff" : C.primary, margin: 0 }}>
-            {wahllokal?.name || wahllokalID} — Wahlergebnisse
+          <h1 style={{ fontSize: VB ? 36 : 24, fontWeight: 900, color: col(C.primary, "#fff"), margin: 0, letterSpacing: VB ? "-0.02em" : 0 }}>
+            {wahllokal?.name || wahllokalID}
           </h1>
+          <div style={{ fontSize: VB ? 18 : 14, color: col(C.textLight, "rgba(255,255,255,0.6)"), marginTop: 4 }}>
+            Wahlergebnisse
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            style={{ ...S.btn, ...S.btnGhost, fontSize: 12, ...(vollbild ? { background: "rgba(255,255,255,0.15)", color: "#fff", border: "none" } : {}) }}
-            onClick={laden}
-            disabled={loading}
-          >
-            {loading ? "…" : "🔄 Aktualisieren"}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+          <button style={{ ...S.btn, fontSize: 12, ...(VB ? { background: "rgba(255,255,255,0.15)", color: "#fff", border: "none" } : S.btnGhost) }} onClick={laden} disabled={loading}>
+            {loading ? "…" : "🔄"}
           </button>
-          <button
-            style={{ ...S.btn, fontSize: 12, ...(vollbild ? { background: "rgba(255,255,255,0.15)", color: "#fff", border: "none" } : { ...S.btnPrimary }) }}
-            onClick={() => setVollbild(!vollbild)}
-          >
-            {vollbild ? "✕ Vollbild beenden" : "⛶ Vollbild"}
+          <button style={{ ...S.btn, fontSize: 12, ...(VB ? { background: "rgba(255,255,255,0.15)", color: "#fff", border: "none" } : S.btnPrimary) }} onClick={() => setVollbild(!VB)}>
+            {VB ? "✕ Beenden" : "⛶ Vollbild"}
           </button>
         </div>
       </div>
 
       {/* Wahl auswählen */}
-      {wahlen.length > 1 && (
-        <div style={{ marginBottom: 24 }}>
-          <select
-            style={{ ...S.select, maxWidth: 400, ...(vollbild ? { background: "rgba(255,255,255,0.1)", color: "#fff", borderColor: "rgba(255,255,255,0.3)" } : {}) }}
-            value={selectedWahlID}
-            onChange={e => setSelectedWahlID(e.target.value)}
-          >
+      {wahlen.length > 1 && !VB && (
+        <div style={{ marginBottom: 20 }}>
+          <select style={{ ...S.select, maxWidth: 400 }} value={selectedWahlID} onChange={e => setSelectedWahlID(e.target.value)}>
             {wahlen.map(w => <option key={w.id} value={w.id}>{w.titel}</option>)}
           </select>
         </div>
       )}
 
-      {wahl && (
-        <>
-          {/* Wahl-Titel */}
-          <div style={{ fontSize: vollbild ? 24 : 18, fontWeight: 700, color: vollbild ? "#fff" : C.primary, marginBottom: 8 }}>
-            {wahl.titel}
-          </div>
+      {wahlen.length > 1 && VB && (
+        <div style={{ display: "flex", gap: 12, marginBottom: 32, flexWrap: "wrap" }}>
+          {wahlen.map(w => (
+            <button key={w.id} onClick={() => setSelectedWahlID(w.id)} style={{
+              padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600,
+              background: w.id === selectedWahlID ? C.accent : "rgba(255,255,255,0.15)",
+              color: "#fff"
+            }}>{w.titel}</button>
+          ))}
+        </div>
+      )}
 
-          {/* Statistik */}
-          <div style={{ display: "flex", gap: 24, marginBottom: 32, flexWrap: "wrap" }}>
-            <div style={{ fontSize: vollbild ? 48 : 36, fontWeight: 900, color: vollbild ? C.accent : C.primary, lineHeight: 1 }}>
-              {total}
-              <span style={{ fontSize: vollbild ? 16 : 13, fontWeight: 400, color: vollbild ? "rgba(255,255,255,0.6)" : C.textLight, marginLeft: 8 }}>
-                Stimme{total !== 1 ? "n" : ""} abgegeben
-              </span>
+      {wahl && ergebnisse !== null && (
+        <>
+          {/* Wahl-Titel + Statistik */}
+          <div style={{ marginBottom: VB ? 40 : 24 }}>
+            <div style={{ fontSize: VB ? 28 : 18, fontWeight: 800, color: col(C.primary, "#fff"), marginBottom: VB ? 20 : 12 }}>
+              {wahl.titel}
             </div>
-            {fuehrend && total > 0 && (
-              <div style={{ fontSize: vollbild ? 16 : 13, color: vollbild ? "rgba(255,255,255,0.7)" : C.textLight, alignSelf: "flex-end", paddingBottom: 8 }}>
-                Führend: <strong style={{ color: vollbild ? "#fff" : C.text }}>{fuehrend.name}</strong> mit {fuehrend.stimmen} Stimme{fuehrend.stimmen !== 1 ? "n" : ""} ({Math.round(fuehrend.stimmen / total * 100)}%)
+            <div style={{ display: "flex", gap: VB ? 48 : 24, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <div style={{ fontSize: VB ? 64 : 40, fontWeight: 900, color: col(C.primary, C.accent), lineHeight: 1 }}>{total}</div>
+                <div style={{ fontSize: VB ? 16 : 13, color: col(C.textLight, "rgba(255,255,255,0.6)"), marginTop: 4 }}>
+                  Stimme{total !== 1 ? "n" : ""} abgegeben
+                </div>
               </div>
-            )}
+              {fuehrend && total > 0 && (
+                <div style={{ paddingBottom: VB ? 12 : 6 }}>
+                  <div style={{ fontSize: VB ? 14 : 12, color: col(C.textLight, "rgba(255,255,255,0.5)"), marginBottom: 4 }}>Führend</div>
+                  <div style={{ fontSize: VB ? 24 : 16, fontWeight: 800, color: col(C.text, "#fff") }}>
+                    🏆 {fuehrend.name} · {Math.round(fuehrend.stimmen / total * 100)}%
+                  </div>
+                </div>
+              )}
+              {letzteAktualisierung && (
+                <div style={{ paddingBottom: VB ? 12 : 6, marginLeft: "auto" }}>
+                  <div style={{ fontSize: 12, color: col(C.textLight, "rgba(255,255,255,0.4)") }}>
+                    Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}
+                  </div>
+                  <div style={{ fontSize: 11, color: col(C.textLight, "rgba(255,255,255,0.3)") }}>
+                    Auto-Refresh alle 30 Sekunden
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Balkendiagramm */}
-          <div style={{ display: "flex", flexDirection: "column", gap: vollbild ? 24 : 16 }}>
-            {optErgebnisse.map((e, idx) => (
-              <div key={e.id}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: vollbild ? 10 : 6, alignItems: "baseline" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {!e.istEnthaltung && idx === 0 && total > 0 && (
-                      <span style={{ fontSize: 18 }}>🏆</span>
-                    )}
-                    <span style={{ fontWeight: 700, fontSize: vollbild ? 20 : 15, color: vollbild ? "#fff" : C.text }}>
-                      {e.name}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: vollbild ? 20 : 14, fontWeight: 700, color: vollbild ? C.accent : C.primary }}>
-                    {e.stimmen} {total > 0 ? `(${Math.round(e.stimmen / total * 100)}%)` : ""}
-                  </span>
-                </div>
-                <div style={{ background: vollbild ? "rgba(255,255,255,0.15)" : C.border, borderRadius: 8, height: vollbild ? 32 : 16, overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%",
-                    width: `${total > 0 ? (e.stimmen / maxS) * 100 : 0}%`,
-                    background: e.istEnthaltung ? (vollbild ? "rgba(255,255,255,0.3)" : C.textLight) : (vollbild ? C.accent : C.primary),
-                    borderRadius: 8,
-                    transition: "width 0.8s ease",
-                    minWidth: e.stimmen > 0 ? 8 : 0,
-                  }} />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Letzter Refresh */}
-          {letzteAktualisierung && (
-            <div style={{ marginTop: 32, fontSize: 12, color: vollbild ? "rgba(255,255,255,0.4)" : C.textLight, textAlign: "right" }}>
-              Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")} · Auto-Refresh alle 30 Sekunden
-            </div>
-          )}
+          <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} />
         </>
       )}
 
-      {!wahl && (
-        <div style={{ textAlign: "center", color: vollbild ? "rgba(255,255,255,0.5)" : C.textLight, padding: 48 }}>
-          Keine Wahl ausgewählt
+      {ergebnisse === null && (
+        <div style={{ textAlign: "center", padding: 48, color: col(C.textLight, "rgba(255,255,255,0.5)") }}>
+          Wird geladen…
+        </div>
+      )}
+      {ergebnisse !== null && total === 0 && (
+        <div style={{ textAlign: "center", padding: 48, color: col(C.textLight, "rgba(255,255,255,0.5)") }}>
+          Noch keine Stimmen abgegeben.
         </div>
       )}
     </div>
