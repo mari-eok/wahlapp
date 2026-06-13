@@ -7,7 +7,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: "Segoe UI", system-ui, sans-serif; background: #f5f7fa; }</style>
 </head>
 <body>
@@ -744,20 +743,16 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
 }
 
 function QRCode({ url, size = 200 }) {
-  const divRef = useRef(null);
-  useEffect(() => {
-    if (!divRef.current || !window.QRCode) return;
-    divRef.current.innerHTML = "";
-    new window.QRCode(divRef.current, {
-      text: url,
-      width: size,
-      height: size,
-      colorDark: "#1a2744",
-      colorLight: "#ffffff",
-      correctLevel: window.QRCode.CorrectLevel.M
-    });
-  }, [url, size]);
-  return <div ref={divRef} style={{ width: size, height: size }} />;
+  const encodedUrl = encodeURIComponent(url);
+  return (
+    <img
+      src={`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodedUrl}&color=1a2744&bgcolor=ffffff&margin=10`}
+      width={size}
+      height={size}
+      alt="QR-Code"
+      style={{ display: "block" }}
+    />
+  );
 }
 
 function LeitungDashboard({ appData, eventID }) {
