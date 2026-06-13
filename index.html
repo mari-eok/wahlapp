@@ -68,7 +68,7 @@ function mapWaehler(item) {
     tokenCode: item.TokenCode || "",
     status: item.Status || "angelegt",
     versendet: item.Versendet || false,
-    tokenAktiv: item.TokenAktiv === null || item.TokenAktiv === undefined ? true : item.TokenAktiv,
+    tokenAktiv: item.TokenAktiv === false ? false : true,
   };
 }
 
