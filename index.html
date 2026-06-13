@@ -1573,9 +1573,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: VB ? 40 : 24 }}>
         <div>
-          {!VB && (
-            {onBack && <button onClick={onBack} style={{ ...S.btn, ...S.btnGhost, fontSize: 12, marginBottom: 12 }}>← Zurück zum Wahllokal</button>}
-          )}
+          {!VB && onBack && <button onClick={onBack} style={{ ...S.btn, ...S.btnGhost, fontSize: 12, marginBottom: 12 }}>← Zurück zum Wahllokal</button>}
           <div style={{ fontSize: VB ? 14 : 12, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: col(C.textLight, "rgba(255,255,255,0.5)"), marginBottom: 6 }}>
             Evangelische Landeskirche in Baden
           </div>
