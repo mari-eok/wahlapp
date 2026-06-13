@@ -101,13 +101,13 @@ function mapWahl(item) {
     id: String(item.ID),
     eventID: item.EventID,
     titel: item.Title,
-    aktiv: item.Aktiv,
+    aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1),
     startzeit: item.Startzeit,
     mehrfach: item.Mehrfach,
     exakt: item.Exakt,
     maxAuswahl: item.MaxAuswahl || 1,
     mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"),
-    geschlossen: item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || item.Geschlossen?.Value === true,
+    geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)),
     optionen: [],
   };
 }
