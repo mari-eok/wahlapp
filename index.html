@@ -834,7 +834,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
                 {w.aktiv
                   ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
                   : w.geschlossen
-                    ? <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" }}>🔒 geschlossen</span>
+                    ? <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b" }}>🔒 geschlossen</span>
                     : <span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>
                 }
                 {!w.geschlossen && (
@@ -996,7 +996,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
                   <td style={S.td}>{w.optionen.length}</td>
                   <td style={S.td}>
                     {w.geschlossen
-                      ? <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b", border: "1px solid #fca5a5" }}>🔒 Geschlossen</span>
+                      ? <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b" }}>🔒 geschlossen</span>
                       : w.aktiv
                         ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
                         : <span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>
@@ -1503,7 +1503,8 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   }
   const mehrheitErreicht = gewinner.every(g => pruefeMehrheit(g.stimmen));
   const stichwahNötig = total > 0 && (!mehrheitErreicht || hatGleichstand);
-  const stichwahExistiert = (appData?.wahlen || wahlen).some(w => w.titel === "Stichwahl: " + (wahl?.titel || "") && w.id !== wahl?.id);
+  const stichwahSuchTitel = "Stichwahl: " + (wahl?.titel || "");
+  const stichwahExistiert = wahlen.some(w => w.titel === stichwahSuchTitel && w.id !== wahl?.id);
 
   const VB = vollbild;
   const col = (normal, vb) => VB ? vb : normal;
