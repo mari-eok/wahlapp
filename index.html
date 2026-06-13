@@ -1431,6 +1431,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   }
   const mehrheitErreicht = gewinner.every(g => pruefeMehrheit(g.stimmen));
   const stichwahNötig = total > 0 && (!mehrheitErreicht || hatGleichstand);
+  const stichwahExistiert = wahlen.some(w => w.titel === "Stichwahl: " + (wahl?.titel || "") && w.id !== wahl?.id);
 
   const VB = vollbild;
   const col = (normal, vb) => VB ? vb : normal;
