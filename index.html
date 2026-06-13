@@ -709,8 +709,7 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
   const tabs = [
     { id: "dashboard", label: "📊 Dashboard" },
     { id: "wahlen", label: "🗳️ Wahlen" },
-    { id: "waehler", label: "👥 Wähler" },
-    { id: "tokens", label: "🔑 Tokens" },
+    { id: "waehler", label: "👥 Wähler & Tokens" },
     { id: "ergebnisse", label: "📈 Ergebnisse" },
   ];
 
@@ -861,11 +860,12 @@ function LeitungWahlen({ appData, eventID, onDataChange }) {
 }
 
 
-// ─── LEITUNG WÄHLER ──────────────────────────────────────────────────────────
+// ─── LEITUNG WÄHLER & TOKENS ─────────────────────────────────────────────────
 function LeitungWaehler({ appData, eventID }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === eventID);
+  const [szenario, setSzenario] = useState(null); // null | "online" | "offline"
   const [waehler, setWaehler] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [csvInput, setCsvInput] = useState("");
   const [saving, setSaving] = useState(false);
@@ -873,6 +873,12 @@ function LeitungWaehler({ appData, eventID }) {
   const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null);
   const [tab, setTab] = useState("liste");
+  const [offlineAnzahl, setOfflineAnzahl] = useState(10);
+  const [gueltigBis, setGueltigBis] = useState(() => {
+    const d = new Date();
+    d.setHours(23, 59, 0, 0);
+    return d.toISOString().slice(0, 16);
+  });
 
   function generateToken() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -889,8 +895,6 @@ function LeitungWaehler({ appData, eventID }) {
     } catch (e) { setFehler(e.message); }
     setLoading(false);
   }
-
-  useEffect(() => { loadWaehler(); }, []);
 
   async function addEmail() {
     const email = emailInput.trim().toLowerCase();
@@ -927,16 +931,11 @@ function LeitungWaehler({ appData, eventID }) {
     setSaving(true); setFehler(null);
     try {
       const tokenListe = ohneToken.map(w => ({ id: parseInt(w.id), email: w.email, token: generateToken() }));
-      // 1. Tokens in WAHL_Tokens speichern
-      await callFlow("saveTokens", { eventID, tokens: tokenListe.map(t => t.token) });
-      // 2. Token und Status in WAHL_Waehler speichern
-      await callFlow("updateWaehler", {
-        updates: tokenListe.map(t => ({ id: t.id, tokenCode: t.token, status: "zugewiesen" }))
-      });
-      // 3. Liste neu laden
+      await callFlow("saveTokens", { eventID, tokens: tokenListe.map(t => t.token), gueltigBis: new Date(gueltigBis).toISOString() });
+      await callFlow("updateWaehler", { updates: tokenListe.map(t => ({ id: t.id, tokenCode: t.token, status: "zugewiesen" })) });
       await loadWaehler();
-      setErfolg(`${ohneToken.length} Tokens zugewiesen und gespeichert.`);
-      setTimeout(() => setErfolg(null), 3000);
+      setErfolg(`${ohneToken.length} Tokens zugewiesen (gültig bis ${new Date(gueltigBis).toLocaleString("de-DE")}).`);
+      setTimeout(() => setErfolg(null), 4000);
     } catch (e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -959,14 +958,100 @@ function LeitungWaehler({ appData, eventID }) {
     setSending(false);
   }
 
+  async function offlineGenerieren() {
+    setSaving(true); setFehler(null);
+    try {
+      const tokens = Array.from({ length: offlineAnzahl }, () => generateToken());
+      await callFlow("saveTokens", { eventID, tokens, gueltigBis: new Date(gueltigBis).toISOString() });
+      const text = tokens.join("\n");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+      a.download = "tokens_" + eventID + "_" + (wahllokal?.name || eventID) + ".txt";
+      a.click();
+      setErfolg(`${offlineAnzahl} Tokens generiert, gespeichert und exportiert.`);
+      setTimeout(() => setErfolg(null), 3000);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
+  // Szenario-Auswahl
+  if (!szenario) {
+    return (
+      <div>
+        <h3 style={{ margin: "0 0 24px", color: C.primary }}>Wähler & Tokens</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div style={{ ...S.card, cursor: "pointer", border: `2px solid ${C.border}`, textAlign: "center", padding: 32 }} onClick={() => { setSzenario("online"); loadWaehler(); }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+            <h3 style={{ color: C.primary, margin: "0 0 8px" }}>Online-Versand</h3>
+            <p style={{ color: C.textLight, fontSize: 14, lineHeight: 1.6 }}>Wähler per E-Mail einladen. Token wird automatisch generiert und per E-Mail versendet.</p>
+          </div>
+          <div style={{ ...S.card, cursor: "pointer", border: `2px solid ${C.border}`, textAlign: "center", padding: 32 }} onClick={() => setSzenario("offline")}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+            <h3 style={{ color: C.primary, margin: "0 0 8px" }}>Vor-Ort-Ausgabe</h3>
+            <p style={{ color: C.textLight, fontSize: 14, lineHeight: 1.6 }}>Anonyme Tokens generieren und ausdrucken. Verteilung erfolgt vor Ort.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Gültigkeitsdatum (gemeinsam für beide Szenarien)
+  const GueltigBisInput = () => (
+    <div style={{ ...S.card, marginBottom: 16 }}>
+      <div style={S.sectionLabel}>Token-Gültigkeit</div>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <div>
+          <label style={S.label}>Gültig bis</label>
+          <input style={{ ...S.input, width: 220 }} type="datetime-local" value={gueltigBis} onChange={e => setGueltigBis(e.target.value)} />
+        </div>
+        <p style={{ color: C.textLight, fontSize: 12, paddingBottom: 10 }}>Tokens können nach diesem Zeitpunkt nicht mehr verwendet werden.</p>
+      </div>
+    </div>
+  );
+
+  // OFFLINE SZENARIO
+  if (szenario === "offline") {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setSzenario(null)}>← Zurück</button>
+          <h3 style={{ margin: 0, color: C.primary }}>📋 Vor-Ort-Ausgabe</h3>
+        </div>
+        {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
+        {erfolg && <div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
+        <GueltigBisInput />
+        <div style={S.card}>
+          <div style={S.sectionLabel}>Tokens generieren</div>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 8 }}>
+            <div>
+              <label style={S.label}>Anzahl</label>
+              <input style={{ ...S.input, width: 80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e => setOfflineAnzahl(parseInt(e.target.value))} />
+            </div>
+            <button style={{ ...S.btn, ...S.btnPrimary, padding: "10px 20px" }} onClick={offlineGenerieren} disabled={saving}>
+              {saving ? "Wird generiert..." : "Generieren & Exportieren"}
+            </button>
+          </div>
+          <p style={{ color: C.textLight, fontSize: 12 }}>Tokens werden in SharePoint gespeichert und als .txt-Datei exportiert (Format: XXXX-YYYY).</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ONLINE SZENARIO
   const angelegt = waehler.filter(w => w.status === "angelegt").length;
   const zugewiesen = waehler.filter(w => w.status === "zugewiesen").length;
   const versendet = waehler.filter(w => w.status === "versendet").length;
 
   return (
     <div>
-      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler} <button onClick={() => setFehler(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer" }}>x</button></div>}
-      {erfolg && <div style={{ ...S.alert, ...S.alertSuccess }}>OK {erfolg}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setSzenario(null)}>← Zurück</button>
+        <h3 style={{ margin: 0, color: C.primary }}>📧 Online-Versand</h3>
+      </div>
+      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler} <button onClick={() => setFehler(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer" }}>✕</button></div>}
+      {erfolg && <div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
+
+      <GueltigBisInput />
 
       <div style={S.statGrid}>
         <StatCard num={waehler.length} label="Wähler gesamt" color={C.primary} />
@@ -977,33 +1062,33 @@ function LeitungWaehler({ appData, eventID }) {
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <button style={{ ...S.btn, ...S.btnPrimary }} onClick={tokensZuweisen} disabled={saving || angelegt === 0}>
-          Token zuweisen ({angelegt})
+          🔑 Tokens zuweisen ({angelegt})
         </button>
         <button style={{ ...S.btn, ...S.btnSuccess }} onClick={emailsVersenden} disabled={sending || zugewiesen === 0}>
-          {sending ? "Wird versendet..." : "E-Mails versenden (" + zugewiesen + ")"}
+          {sending ? "Wird versendet..." : `📧 E-Mails versenden (${zugewiesen})`}
         </button>
-        <button style={{ ...S.btn, ...S.btnGhost }} onClick={loadWaehler} disabled={loading}>Aktualisieren</button>
+        <button style={{ ...S.btn, ...S.btnGhost }} onClick={loadWaehler} disabled={loading}>🔄</button>
       </div>
 
       <div style={S.navTabs}>
-        <button style={{ ...S.navTab, ...(tab === "liste" ? S.navTabActive : {}) }} onClick={() => setTab("liste")}>Liste</button>
-        <button style={{ ...S.navTab, ...(tab === "hinzufuegen" ? S.navTabActive : {}) }} onClick={() => setTab("hinzufuegen")}>+ Hinzufuegen</button>
+        <button style={{ ...S.navTab, ...(tab === "liste" ? S.navTabActive : {}) }} onClick={() => setTab("liste")}>📋 Wähler-Liste</button>
+        <button style={{ ...S.navTab, ...(tab === "hinzufuegen" ? S.navTabActive : {}) }} onClick={() => setTab("hinzufuegen")}>+ Hinzufügen</button>
       </div>
 
       {tab === "hinzufuegen" && (
         <div style={S.card}>
           <div style={S.formGroup}>
-            <label style={S.label}>Einzeln hinzufuegen</label>
+            <label style={S.label}>Einzeln hinzufügen</label>
             <div style={{ display: "flex", gap: 8 }}>
               <input style={{ ...S.input, flex: 1 }} type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addEmail()} placeholder="name@ekiba.de" />
-              <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmail} disabled={saving}>{saving ? "..." : "+ Hinzufuegen"}</button>
+              <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmail} disabled={saving}>{saving ? "..." : "+ Hinzufügen"}</button>
             </div>
           </div>
           <div style={S.formGroup}>
             <label style={S.label}>CSV / Mehrere importieren</label>
             <p style={{ color: C.textLight, fontSize: 12, marginBottom: 8 }}>E-Mail-Adressen durch Komma, Semikolon oder Zeilenumbruch getrennt:</p>
             <textarea style={{ ...S.input, height: 100, resize: "vertical", marginBottom: 8 }} value={csvInput} onChange={e => setCsvInput(e.target.value)} placeholder="max@ekiba.de, anna@ekiba.de" />
-            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={importCSV} disabled={saving}>{saving ? "Importieren..." : "Importieren"}</button>
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={importCSV} disabled={saving}>{saving ? "Importieren..." : "📋 Importieren"}</button>
           </div>
         </div>
       )}
@@ -1013,7 +1098,7 @@ function LeitungWaehler({ appData, eventID }) {
           {loading ? (
             <p style={{ color: C.textLight, fontSize: 14 }}>Wird geladen...</p>
           ) : waehler.length === 0 ? (
-            <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Waehler angelegt.</p>
+            <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Wähler angelegt. Wechsle zu "+ Hinzufügen".</p>
           ) : (
             <table style={S.table}>
               <thead>
@@ -1027,10 +1112,10 @@ function LeitungWaehler({ appData, eventID }) {
                 {waehler.map(w => (
                   <tr key={w.id}>
                     <td style={S.td}>{w.email}</td>
-                    <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>{w.tokenCode || "-"}</td>
+                    <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>{w.tokenCode || <span style={{ color: C.textLight }}>—</span>}</td>
                     <td style={S.td}>
                       <span style={{ ...S.badge, ...(w.status === "versendet" ? S.badgeGreen : w.status === "zugewiesen" ? S.badgeOrange : S.badgeGray) }}>
-                        {w.status === "versendet" ? "versendet" : w.status === "zugewiesen" ? "zugewiesen" : "angelegt"}
+                        {w.status === "versendet" ? "✅ versendet" : w.status === "zugewiesen" ? "🔑 zugewiesen" : "📝 angelegt"}
                       </span>
                     </td>
                   </tr>
@@ -1040,95 +1125,6 @@ function LeitungWaehler({ appData, eventID }) {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function LeitungTokens({ appData, eventID, onDataChange }) {
-  const [anzahl, setAnzahl] = useState(10);
-  const [saving, setSaving] = useState(false);
-  const [fehler, setFehler] = useState(null);
-  const [lokalTokens, setLokalTokens] = useState([]);
-
-  async function generateTokens() {
-    setSaving(true); setFehler(null);
-    const neu = Array.from({ length: anzahl }, (_, i) => ({
-      id: "new_" + Date.now() + i,
-      code: generateToken(),
-      eventID,
-      verwendet: false,
-      usedForWahlID: null,
-      isNew: true,
-    }));
-
-    if (API.flows.saveTokens.startsWith("PLATZHALTER")) {
-      setLokalTokens(prev => [...prev, ...neu]);
-      setSaving(false);
-      return;
-    }
-
-    try {
-      await callFlow("saveTokens", {
-        eventID,
-        tokens: neu.map(t => t.code),
-      });
-      await onDataChange();
-    } catch (e) { setFehler(e.message); }
-    setSaving(false);
-  }
-
-  function exportTokens() {
-    const tokens = [...lokalTokens, ...(appData.tokens || []).filter(t => t.eventID === eventID)];
-    const unused = tokens.filter(t => !t.verwendet);
-    const text = unused.map(t => t.code.slice(0, 4) + "-" + t.code.slice(4)).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    a.download = `tokens_${eventID}.txt`;
-    a.click();
-  }
-
-  const alleTokens = [...lokalTokens, ...(appData.tokens || []).filter(t => t.eventID === eventID)];
-
-  return (
-    <div>
-      {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
-      {API.flows.saveTokens.startsWith("PLATZHALTER") && (
-        <div style={{ ...S.alert, ...S.alertWarning }}>⚠️ Flow noch nicht verbunden — Tokens werden nur lokal gespeichert und beim Reload gelöscht.</div>
-      )}
-      <div style={{ ...S.card, marginBottom: 16 }}>
-        <div style={S.sectionLabel}>Tokens generieren</div>
-        <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div>
-            <label style={S.label}>Anzahl</label>
-            <input style={{ ...S.input, width: 80 }} type="number" min={1} max={500} value={anzahl} onChange={e => setAnzahl(parseInt(e.target.value))} />
-          </div>
-          <div style={{ display: "flex", gap: 8, paddingBottom: 0 }}>
-            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={generateTokens} disabled={saving}>{saving ? "…" : "Generieren"}</button>
-            <button style={{ ...S.btn, ...S.btnGhost }} onClick={exportTokens}>📥 Exportieren</button>
-          </div>
-        </div>
-      </div>
-      <div style={S.card}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={S.sectionLabel}>Tokens ({alleTokens.length})</div>
-          <div style={{ fontSize: 13, color: C.textLight }}>{alleTokens.filter(t => !t.verwendet).length} verfügbar</div>
-        </div>
-        {alleTokens.length === 0
-          ? <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Tokens generiert.</p>
-          : <table style={S.table}>
-            <thead><tr><th style={S.th}>Token</th><th style={S.th}>Status</th></tr></thead>
-            <tbody>
-              {alleTokens.slice(0, 50).map(t => (
-                <tr key={t.id}>
-                  <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>{t.code.slice(0, 4)}–{t.code.slice(4)}{t.isNew ? " 🆕" : ""}</td>
-                  <td style={S.td}><span style={{ ...S.badge, ...(t.verwendet ? S.badgeGray : S.badgeGreen) }}>{t.verwendet ? "verwendet" : "verfügbar"}</span></td>
-                </tr>
-              ))}
-              {alleTokens.length > 50 && <tr><td colSpan={2} style={{ ...S.td, color: C.textLight, fontSize: 12 }}>+ {alleTokens.length - 50} weitere — exportieren um alle zu sehen</td></tr>}
-            </tbody>
-          </table>
-        }
-      </div>
     </div>
   );
 }
