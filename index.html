@@ -893,10 +893,10 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
         setSaving(false); return;
       }
       await callFlow("saveWahl", {
-        wahlID: f.isNew ? null : parseInt(f.id),
+        wahlID: (!f.id || f.isNew) ? null : parseInt(f.id),
         eventID,
         titel: f.titel,
-        aktiv: f.aktiv,
+        aktiv: f.aktiv || false,
         startzeit: f.startzeit,
         mehrfach: f.mehrfach,
         exakt: f.exakt,
@@ -1414,6 +1414,9 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   const gewinner = (nichtenthaltung || []).slice(0, maxAuswahl).filter(e => e.stimmen > 0);
   const fuehrend = (nichtenthaltung || [])[0];
 
+  // Nur Gewinner anzeigen wenn Wahl geschlossen
+  const wahlGeschlossen = wahl && !wahl.aktiv;
+
   // Gleichstand-Erkennung
   const gewinnerSchwelle = gewinner.length > 0 ? gewinner[gewinner.length - 1].stimmen : 0;
   const gleichstandKandidaten = nichtenthaltung.filter(e => e.stimmen === gewinnerSchwelle && !gewinner.find(g => g.id === e.id));
@@ -1551,7 +1554,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
               </div>
               {total > 0 && (
                 <div style={{ paddingBottom: VB ? 12 : 6 }}>
-                  {sichereGewinner.length > 0 && !hatGleichstand && (
+                  {wahlGeschlossen && sichereGewinner.length > 0 && !hatGleichstand && (
                     <>
                       <div style={{ fontSize: VB ? 14 : 12, color: col(C.textLight, "rgba(255,255,255,0.5)"), marginBottom: 4 }}>
                         {maxAuswahl > 1 ? `Gewählt (Top ${maxAuswahl})` : "Führend"}
@@ -1563,9 +1566,14 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
                       ))}
                     </>
                   )}
-                  {hatGleichstand && (
+                  {wahlGeschlossen && hatGleichstand && (
                     <div style={{ fontSize: VB ? 16 : 13, fontWeight: 700, color: col("#f59e0b", "#fbbf24") }}>
                       ⚠️ Gleichstand — Stichwahl erforderlich
+                    </div>
+                  )}
+                  {!wahlGeschlossen && (
+                    <div style={{ fontSize: VB ? 16 : 13, fontWeight: 600, color: col(C.accent, "#4ade80") }}>
+                      ● Abstimmung läuft
                     </div>
                   )}
                 </div>
@@ -1584,7 +1592,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
           </div>
 
           {/* Balkendiagramm */}
-          <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={sichereGewinner} gleichstandListe={hatGleichstand ? [...gleichstandKandidaten, ...(gewinner.slice(-1))] : []} />
+          <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={wahlGeschlossen ? sichereGewinner : []} gleichstandListe={wahlGeschlossen && hatGleichstand ? [...gleichstandKandidaten, ...(gewinner.slice(-1))] : []} />
 
           {stichwahNötig && !VB && (
             <div style={{ marginTop: 24, padding: 16, borderRadius: 10, background: "#fff8e1", border: "1px solid #f59e0b" }}>
