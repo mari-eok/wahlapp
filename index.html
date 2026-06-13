@@ -1725,8 +1725,8 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
   const optErgebnisse = berechneOptErgebnisse(wahl, ergebnisse);
   const maxS = Math.max(...optErgebnisse.map(e => e.stimmen), 1);
   const nichtenthaltung = optErgebnisse.filter(e => !e.istEnthaltung);
-  const gewinner = nichtenthaltung.slice(0, maxAuswahl).filter(e => e.stimmen > 0);
-  const fuehrend = nichtenthaltung[0];
+  const gewinner = (nichtenthaltung || []).slice(0, maxAuswahl).filter(e => e.stimmen > 0);
+  const fuehrend = (nichtenthaltung || [])[0];
 
   const VB = vollbild;
   const col = (normal, vb) => VB ? vb : normal;
@@ -1843,7 +1843,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
                   Stimme{total !== 1 ? "n" : ""} abgegeben
                 </div>
               </div>
-              {gewinner.length > 0 && total > 0 && (
+              {gewinner && gewinner.length > 0 && total > 0 && (
                 <div style={{ paddingBottom: VB ? 12 : 6 }}>
                   <div style={{ fontSize: VB ? 14 : 12, color: col(C.textLight, "rgba(255,255,255,0.5)"), marginBottom: 4 }}>
                     {maxAuswahl > 1 ? `Gewählt (Top ${maxAuswahl})` : "Führend"}
