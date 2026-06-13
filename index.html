@@ -106,8 +106,8 @@ function mapWahl(item) {
     mehrfach: item.Mehrfach,
     exakt: item.Exakt,
     maxAuswahl: item.MaxAuswahl || 1,
-    mehrheitsregel: item.Mehrheitsregel || "relativ",
-    geschlossen: item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1,
+    mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"),
+    geschlossen: item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || item.Geschlossen?.Value === true,
     optionen: [],
   };
 }
@@ -962,7 +962,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
         mehrfach: f.mehrfach,
         exakt: f.exakt,
         maxAuswahl: f.maxAuswahl,
-        mehrheitsregel: f.mehrheitsregel || "relativ",
+        mehrheitsregel: (typeof f.mehrheitsregel === "object" ? f.mehrheitsregel?.Value : f.mehrheitsregel) || "relativ",
         geschlossen: f.geschlossen || false,
         optionen: f.optionen,
       });
