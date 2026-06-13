@@ -107,7 +107,7 @@ function mapWahl(item) {
     exakt: item.Exakt,
     maxAuswahl: item.MaxAuswahl || 1,
     mehrheitsregel: item.Mehrheitsregel || "relativ",
-    geschlossen: item.Geschlossen || false,
+    geschlossen: item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1,
     optionen: [],
   };
 }
@@ -997,9 +997,9 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
                   <td style={S.td}><span style={{ ...S.badge, ...(w.aktiv ? S.badgeGreen : S.badgeGray) }}>{w.aktiv ? "aktiv" : "inaktiv"}</span></td>
                   <td style={S.td}>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => openForm(w)}>Bearbeiten</button>
+                      {!w.geschlossen && <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => openForm(w)}>Bearbeiten</button>}
                       {!w.geschlossen && <button style={{ ...S.btn, ...(w.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(w)}>{w.aktiv ? "Pausieren" : "Starten"}</button>}
-                      {w.geschlossen && <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b", fontSize: 11 }}>🔒 geschlossen</span>}
+                      {w.geschlossen && <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b", fontSize: 12, padding: "4px 10px" }}>🔒 Geschlossen</span>}
                       <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => deleteWahl(w)}>Löschen</button>
                     </div>
                   </td>
