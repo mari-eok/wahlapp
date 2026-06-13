@@ -744,26 +744,20 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
 }
 
 function QRCode({ url, size = 200 }) {
-  const canvasRef = useRef(null);
+  const divRef = useRef(null);
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    // Simple QR placeholder using qrcode library loaded via CDN
-    if (window.QRCode) {
-      canvas.width = size;
-      canvas.height = size;
-      const qr = new window.QRCode(canvas, {
-        text: url,
-        width: size,
-        height: size,
-        colorDark: "#1a2744",
-        colorLight: "#ffffff",
-        correctLevel: window.QRCode.CorrectLevel.M
-      });
-    }
+    if (!divRef.current || !window.QRCode) return;
+    divRef.current.innerHTML = "";
+    new window.QRCode(divRef.current, {
+      text: url,
+      width: size,
+      height: size,
+      colorDark: "#1a2744",
+      colorLight: "#ffffff",
+      correctLevel: window.QRCode.CorrectLevel.M
+    });
   }, [url, size]);
-  return <canvas ref={canvasRef} width={size} height={size} />;
+  return <div ref={divRef} style={{ width: size, height: size }} />;
 }
 
 function LeitungDashboard({ appData, eventID }) {
@@ -1730,6 +1724,8 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
   const optErgebnisse = berechneOptErgebnisse(wahl, ergebnisse);
   const maxS = Math.max(...optErgebnisse.map(e => e.stimmen), 1);
   const nichtenthaltung = optErgebnisse.filter(e => !e.istEnthaltung);
+  const maxAuswahl = wahl?.maxAuswahl || 1;
+  const gewinner = nichtenthaltung.slice(0, maxAuswahl).filter(e => e.stimmen > 0);
   const fuehrend = nichtenthaltung[0];
 
   const VB = vollbild;
@@ -1738,7 +1734,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
   const BalkenDiagramm = ({ opts, totalStimmen, maxStimmen, gross }) => (
     <div style={{ display: "flex", flexDirection: "column", gap: gross ? 28 : 16 }}>
       {opts.map((e, idx) => {
-        const istFuehrend = !e.istEnthaltung && idx === 0 && totalStimmen > 0;
+        const istFuehrend = !e.istEnthaltung && totalStimmen > 0 && gewinner.some(g => g.id === e.id);
         const pct = totalStimmen > 0 ? Math.round(e.stimmen / totalStimmen * 100) : 0;
         return (
           <div key={e.id}>
@@ -1847,12 +1843,16 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
                   Stimme{total !== 1 ? "n" : ""} abgegeben
                 </div>
               </div>
-              {fuehrend && total > 0 && (
+              {gewinner.length > 0 && total > 0 && (
                 <div style={{ paddingBottom: VB ? 12 : 6 }}>
-                  <div style={{ fontSize: VB ? 14 : 12, color: col(C.textLight, "rgba(255,255,255,0.5)"), marginBottom: 4 }}>Führend</div>
-                  <div style={{ fontSize: VB ? 24 : 16, fontWeight: 800, color: col(C.text, "#fff") }}>
-                    🏆 {fuehrend.name} · {Math.round(fuehrend.stimmen / total * 100)}%
+                  <div style={{ fontSize: VB ? 14 : 12, color: col(C.textLight, "rgba(255,255,255,0.5)"), marginBottom: 4 }}>
+                    {maxAuswahl > 1 ? `Gewählt (Top ${maxAuswahl})` : "Führend"}
                   </div>
+                  {gewinner.map(g => (
+                    <div key={g.id} style={{ fontSize: VB ? 20 : 14, fontWeight: 800, color: col(C.text, "#fff"), marginBottom: 2 }}>
+                      🏆 {g.name} · {Math.round(g.stimmen / total * 100)}%
+                    </div>
+                  ))}
                 </div>
               )}
               {letzteAktualisierung && (
