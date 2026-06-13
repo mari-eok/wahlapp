@@ -999,7 +999,6 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
                     <div style={{ display: "flex", gap: 6 }}>
                       {!w.geschlossen && <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => openForm(w)}>Bearbeiten</button>}
                       {!w.geschlossen && <button style={{ ...S.btn, ...(w.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(w)}>{w.aktiv ? "Pausieren" : "Starten"}</button>}
-                      {w.geschlossen && <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b", fontSize: 12, padding: "4px 10px" }}>🔒 Geschlossen</span>}
                       <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => deleteWahl(w)}>Löschen</button>
                     </div>
                   </td>
@@ -1497,7 +1496,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   }
   const mehrheitErreicht = gewinner.every(g => pruefeMehrheit(g.stimmen));
   const stichwahNötig = total > 0 && (!mehrheitErreicht || hatGleichstand);
-  const stichwahExistiert = wahlen.some(w => w.titel === "Stichwahl: " + (wahl?.titel || "") && w.id !== wahl?.id);
+  const stichwahExistiert = (appData?.wahlen || wahlen).some(w => w.titel === "Stichwahl: " + (wahl?.titel || "") && w.id !== wahl?.id);
 
   const VB = vollbild;
   const col = (normal, vb) => VB ? vb : normal;
