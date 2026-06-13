@@ -37,6 +37,7 @@ const API = {
     saveWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b7bfbab2747046819c38331a6a133832/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=f0mvJ21DhUCyWPSMQmhIAYCn1ZUq0UmLzeJKi8liPmk",
     sendTokenEmail: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e39aa42827e848779c9e43e1841c7ac9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=6GuETz2UvSpl7ARVaWVyy5W9UhJmYC65kd75WOuX_yw",
     getWaehler:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/140675a2915542beb654587147996f24/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Q8uE7JhgKc5h2uh7WaxxtGDsRaLSG6pMBYI8xRSyzQQ",
+    updateWaehler: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9bc3ceb7f0a74bb89c057bbb33bd68c8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=R984hgHmgR81MCSq7IrZiTodGenoVDoZAVr_OKYygwQ",
   }
 };
 
@@ -925,14 +926,16 @@ function LeitungWaehler({ appData, eventID }) {
     if (ohneToken.length === 0) { setErfolg("Alle Wähler haben bereits einen Token."); return; }
     setSaving(true); setFehler(null);
     try {
-      const tokenListe = ohneToken.map(w => ({ email: w.email, token: generateToken() }));
+      const tokenListe = ohneToken.map(w => ({ id: parseInt(w.id), email: w.email, token: generateToken() }));
+      // 1. Tokens in WAHL_Tokens speichern
       await callFlow("saveTokens", { eventID, tokens: tokenListe.map(t => t.token) });
-      setWaehler(prev => prev.map(w => {
-        const match = tokenListe.find(t => t.email === w.email);
-        if (match) return { ...w, tokenCode: match.token, status: "zugewiesen" };
-        return w;
-      }));
-      setErfolg(`${ohneToken.length} Tokens zugewiesen.`);
+      // 2. Token und Status in WAHL_Waehler speichern
+      await callFlow("updateWaehler", {
+        updates: tokenListe.map(t => ({ id: t.id, tokenCode: t.token, status: "zugewiesen" }))
+      });
+      // 3. Liste neu laden
+      await loadWaehler();
+      setErfolg(`${ohneToken.length} Tokens zugewiesen und gespeichert.`);
       setTimeout(() => setErfolg(null), 3000);
     } catch (e) { setFehler(e.message); }
     setSaving(false);
