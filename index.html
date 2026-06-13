@@ -1918,9 +1918,21 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Kandidaten</label>
-          {f.optionen.filter(o => !o.istEnthaltung).map(o => (
+          {f.optionen.filter(o => !o.istEnthaltung).map((o, idx, arr) => (
             <div key={o.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <input style={{ ...S.input, flex: 1 }} value={o.name} onChange={e => setOptName(o.id, e.target.value)} placeholder="Name" />
+              <input
+                style={{ ...S.input, flex: 1 }}
+                value={o.name}
+                onChange={e => setOptName(o.id, e.target.value)}
+                placeholder="Name"
+                autoFocus={idx === arr.length - 1 && o.name === ""}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addOption();
+                  }
+                }}
+              />
               <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => removeOpt(o.id)}>✕</button>
             </div>
           ))}
