@@ -54,6 +54,17 @@ async function callFlow(flowName, body) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// URL MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+function updateURL(wahllokalID, ansicht) {
+  const params = new URLSearchParams();
+  if (wahllokalID) params.set("wahllokal", wahllokalID);
+  if (ansicht && ansicht !== "wahllokal") params.set("ansicht", ansicht);
+  const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
+  window.history.pushState({}, "", newURL);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // DATEN-MAPPING (SharePoint → App)
 // ═══════════════════════════════════════════════════════════════════════════════
 function mapWahllokal(item) {
@@ -291,15 +302,15 @@ function App() {
             corsWarning={corsWarning}
           />
           <DemoSwitcher
-            onSuperadmin={() => setView("superadmin")}
-            onErgebnisse={() => setView("ergebnisse")}
+            onSuperadmin={() => { setView("superadmin"); updateURL(wahllokalID, "superadmin"); }}
+            onErgebnisse={() => { setView("ergebnisse"); updateURL(wahllokalID, "ergebnisse"); }}
             wahllokalID={wahllokalID}
           />
         </>
       )}
 
       {view === "ergebnisse" && appData && (
-        <ErgebnisDashboard appData={appData} wahllokalID={wahllokalID} onBack={() => setView("wahllokal")} />
+        <ErgebnisDashboard appData={appData} wahllokalID={wahllokalID} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} />
       )}
 
       {view === "leitung" && (
@@ -307,12 +318,12 @@ function App() {
           ? <LeitungView
               appData={appData}
               eventID={leitungAuth}
-              onExit={() => { setView("wahllokal"); setLeitungAuth(null); }}
+              onExit={() => { setView("wahllokal"); setLeitungAuth(null); updateURL(wahllokalID, null); }}
               onDataChange={loadAppData}
             />
           : <LeitungLoginScreen
               onAuth={(eventID) => setLeitungAuth(eventID)}
-              onBack={() => { window.history.back(); }}
+              onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }}
               fixedEventID={ansicht === "leitung" ? wahllokalID : null}
             />
       )}
@@ -321,7 +332,7 @@ function App() {
         superadminAuth
           ? <SuperadminView
               appData={appData}
-              onExit={() => { setView("wahllokal"); setSuperadminAuth(false); }}
+              onExit={() => { setView("wahllokal"); setSuperadminAuth(false); updateURL(wahllokalID, null); }}
               onDataChange={loadAppData}
             />
           : <PinScreen
@@ -329,7 +340,7 @@ function App() {
               subtitle="Systemzugang für EKIBA-Administratoren."
               color={C.superadmin}
               onAuth={(pin) => { if (pin === "1234") { setSuperadminAuth(true); return true; } return false; }}
-              onBack={() => setView("wahllokal")}
+              onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }}
             />
       )}
     </div>
