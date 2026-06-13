@@ -555,11 +555,15 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
           wahlID: parseInt(selectedWahlID),
           wahlTitel: selectedWahl.titel,
           positionen: selected.map(s => ({ optionID: parseInt(s.id), name: s.name })),
+          maxAuswahl: selectedWahl.maxAuswahl || 1,
         });
         if (result.status === "gueltig") {
           setStatus("gueltig");
           setStatusMsg(`Ihre Stimme wurde für die Wahl '${selectedWahl.titel}' gezählt.`);
           onDataChange();
+        } else if (result.status === "ungueltig" && result.grund === "Zu viele Stimmen") {
+          setStatus("ungueltig");
+          setStatusMsg("Ungültige Stimmabgabe: Zu viele Kandidaten ausgewählt.");
         } else if (result.status === "doppelt") {
           setStatus("doppelt");
           setStatusMsg("Dieser Token wurde für diese Wahl bereits verwendet.");
@@ -1850,7 +1854,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack }) {
               <div>
                 <div style={{ fontSize: VB ? 64 : 40, fontWeight: 900, color: col(C.primary, C.accent), lineHeight: 1 }}>{total}</div>
                 <div style={{ fontSize: VB ? 16 : 13, color: col(C.textLight, "rgba(255,255,255,0.6)"), marginTop: 4 }}>
-                  Stimme{total !== 1 ? "n" : ""} abgegeben
+                  {maxAuswahl > 1 ? `Wähler (je ${maxAuswahl} Stimmen)` : `Stimme${total !== 1 ? "n" : ""} abgegeben`}
                 </div>
               </div>
               {gewinner && gewinner.length > 0 && total > 0 && (
