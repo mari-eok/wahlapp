@@ -837,7 +837,22 @@ function LeitungWahlen({ appData, eventID, onDataChange }) {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [fehler, setFehler] = useState(null);
+  const [stimmenCount, setStimmenCount] = useState({});
   const wahlen = appData.wahlen.filter(w => w.eventID === eventID);
+
+  async function pruefeStimmen(wahlID) {
+    try {
+      const result = await callFlow("getErgebnisse", { wahlID: parseInt(wahlID), eventID });
+      const count = Array.isArray(result) ? result.length : (result.value?.length || 0);
+      setStimmenCount(prev => ({ ...prev, [wahlID]: count }));
+      return count;
+    } catch { return 0; }
+  }
+
+  async function openForm(wahl) {
+    const count = await pruefeStimmen(wahl.id);
+    setForm({ ...wahl, optionen: [...wahl.optionen], hatStimmen: count > 0 });
+  }
 
   async function toggleAktiv(wahl) {
     try {
@@ -907,7 +922,7 @@ function LeitungWahlen({ appData, eventID, onDataChange }) {
                   <td style={S.td}><span style={{ ...S.badge, ...(w.aktiv ? S.badgeGreen : S.badgeGray) }}>{w.aktiv ? "aktiv" : "inaktiv"}</span></td>
                   <td style={S.td}>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setForm({ ...w, optionen: [...w.optionen] })}>Bearbeiten</button>
+                      <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => openForm(w)}>Bearbeiten</button>
                       <button style={{ ...S.btn, ...(w.aktiv ? S.btnDanger : S.btnSuccess) }} onClick={() => toggleAktiv(w)}>{w.aktiv ? "Stoppen" : "Starten"}</button>
                       <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => deleteWahl(w)}>Löschen</button>
                     </div>
@@ -1918,25 +1933,31 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Kandidaten</label>
+          {f.hatStimmen && (
+            <div style={{ ...S.alert, ...S.alertWarning, marginBottom: 12 }}>
+              ⚠️ Für diese Wahl wurden bereits Stimmen abgegeben. Kandidaten und Wahltyp können nicht mehr geändert werden.
+            </div>
+          )}
           {f.optionen.filter(o => !o.istEnthaltung).map((o, idx, arr) => (
             <div key={o.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input
-                style={{ ...S.input, flex: 1 }}
+                style={{ ...S.input, flex: 1, ...(f.hatStimmen ? { background: "#f5f5f5", color: "#999" } : {}) }}
                 value={o.name}
-                onChange={e => setOptName(o.id, e.target.value)}
+                onChange={e => !f.hatStimmen && setOptName(o.id, e.target.value)}
                 placeholder="Name"
-                autoFocus={idx === arr.length - 1 && o.name === ""}
+                readOnly={f.hatStimmen}
+                autoFocus={!f.hatStimmen && idx === arr.length - 1 && o.name === ""}
                 onKeyDown={e => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !f.hatStimmen) {
                     e.preventDefault();
                     addOption();
                   }
                 }}
               />
-              <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => removeOpt(o.id)}>✕</button>
+              {!f.hatStimmen && <button style={{ ...S.btn, ...S.btnDanger }} onClick={() => removeOpt(o.id)}>✕</button>}
             </div>
           ))}
-          <button style={{ ...S.btn, ...S.btnGhost, marginTop: 4 }} onClick={addOption}>+ Kandidat hinzufügen</button>
+          {!f.hatStimmen && <button style={{ ...S.btn, ...S.btnGhost, marginTop: 4 }} onClick={addOption}>+ Kandidat hinzufügen</button>}
         </div>
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
