@@ -906,9 +906,8 @@ function LeitungWaehler({ appData, eventID }) {
   }
 
   async function importCSV() {
-    const lines = csvInput.split(/[
+    const lines = csvInput.split(/[\n\r,;]+/).map(l => l.trim().toLowerCase()).filter(l => l.includes("@"));
 
-,;]+/).map(l => l.trim().toLowerCase()).filter(l => l.includes("@"));
     if (lines.length === 0) return;
     setSaving(true); setFehler(null);
     try {
