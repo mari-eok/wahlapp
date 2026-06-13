@@ -37,7 +37,9 @@ const API = {
     saveWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b7bfbab2747046819c38331a6a133832/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=f0mvJ21DhUCyWPSMQmhIAYCn1ZUq0UmLzeJKi8liPmk",
     sendTokenEmail: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e39aa42827e848779c9e43e1841c7ac9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=6GuETz2UvSpl7ARVaWVyy5W9UhJmYC65kd75WOuX_yw",
     getWaehler:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/140675a2915542beb654587147996f24/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Q8uE7JhgKc5h2uh7WaxxtGDsRaLSG6pMBYI8xRSyzQQ",
-    updateWaehler: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9bc3ceb7f0a74bb89c057bbb33bd68c8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=R984hgHmgR81MCSq7IrZiTodGenoVDoZAVr_OKYygwQ",
+    updateWaehler:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9bc3ceb7f0a74bb89c057bbb33bd68c8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=R984hgHmgR81MCSq7IrZiTodGenoVDoZAVr_OKYygwQ",
+    deleteWaehler:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6fa995fcf2a548e48e9fe7d906f87a1d/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GlBdpPF9RmzPItJWIbhSBWfOTYHBJoZYOQDcVz1q4uE",
+    deactivateToken:  "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/4a7e769af8da4a1a91f4657135f65341/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3OiNu3WanSH4rIeQdpeozGFnxEtT9aloYoCOoXfdkHI",
   }
 };
 
@@ -863,7 +865,7 @@ function LeitungWahlen({ appData, eventID, onDataChange }) {
 // ─── LEITUNG WÄHLER & TOKENS ─────────────────────────────────────────────────
 function LeitungWaehler({ appData, eventID }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === eventID);
-  const [szenario, setSzenario] = useState(null); // null | "online" | "offline"
+  const [szenario, setSzenario] = useState(null);
   const [waehler, setWaehler] = useState([]);
   const [loading, setLoading] = useState(false);
   const [emailInput, setEmailInput] = useState("");
@@ -874,6 +876,8 @@ function LeitungWaehler({ appData, eventID }) {
   const [erfolg, setErfolg] = useState(null);
   const [tab, setTab] = useState("liste");
   const [offlineAnzahl, setOfflineAnzahl] = useState(10);
+  const [suche, setSuche] = useState("");
+  const [ausgewaehlt, setAusgewaehlt] = useState([]);
   const [gueltigBis, setGueltigBis] = useState(() => {
     const d = new Date();
     d.setHours(23, 59, 0, 0);
@@ -892,6 +896,7 @@ function LeitungWaehler({ appData, eventID }) {
     try {
       const result = await callFlow("getWaehler", { eventID });
       setWaehler((result || []).map(mapWaehler));
+      setAusgewaehlt([]);
     } catch (e) { setFehler(e.message); }
     setLoading(false);
   }
@@ -958,6 +963,34 @@ function LeitungWaehler({ appData, eventID }) {
     setSending(false);
   }
 
+  async function ausgewaehlteLoschen() {
+    const zuLoeschen = waehler.filter(w => ausgewaehlt.includes(w.id) && w.status !== "versendet");
+    if (zuLoeschen.length === 0) return;
+    if (!confirm(`${zuLoeschen.length} Wähler wirklich löschen?`)) return;
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("deleteWaehler", { waehlerIDs: zuLoeschen.map(w => parseInt(w.id)) });
+      await loadWaehler();
+      setErfolg(`${zuLoeschen.length} Wähler gelöscht.`);
+      setTimeout(() => setErfolg(null), 3000);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
+  async function ausgewaehltDeaktivieren() {
+    const zuDeaktivieren = waehler.filter(w => ausgewaehlt.includes(w.id) && w.tokenCode);
+    if (zuDeaktivieren.length === 0) return;
+    if (!confirm(`Token für ${zuDeaktivieren.length} Wähler deaktivieren?`)) return;
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("deactivateToken", { eventID, tokenCodes: zuDeaktivieren.map(w => w.tokenCode) });
+      await loadWaehler();
+      setErfolg(`${zuDeaktivieren.length} Tokens deaktiviert.`);
+      setTimeout(() => setErfolg(null), 3000);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
   async function offlineGenerieren() {
     setSaving(true); setFehler(null);
     try {
@@ -968,13 +1001,40 @@ function LeitungWaehler({ appData, eventID }) {
       a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
       a.download = "tokens_" + eventID + "_" + (wahllokal?.name || eventID) + ".txt";
       a.click();
-      setErfolg(`${offlineAnzahl} Tokens generiert, gespeichert und exportiert.`);
+      setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`);
       setTimeout(() => setErfolg(null), 3000);
     } catch (e) { setFehler(e.message); }
     setSaving(false);
   }
 
-  // Szenario-Auswahl
+  const gefilterteWaehler = waehler.filter(w => !suche || w.email.includes(suche.toLowerCase()));
+  const alleAusgewaehlt = gefilterteWaehler.length > 0 && gefilterteWaehler.every(w => ausgewaehlt.includes(w.id));
+  const hatAuswahl = ausgewaehlt.length > 0;
+  const kannLoeschen = ausgewaehlt.some(id => waehler.find(w => w.id === id)?.status !== "versendet");
+  const kannDeaktivieren = ausgewaehlt.some(id => waehler.find(w => w.id === id)?.tokenCode);
+
+  function toggleAuswahl(id) {
+    setAusgewaehlt(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  function toggleAlle() {
+    if (alleAusgewaehlt) setAusgewaehlt([]);
+    else setAusgewaehlt(gefilterteWaehler.map(w => w.id));
+  }
+
+  const GueltigBisInput = () => (
+    <div style={{ ...S.card, marginBottom: 16 }}>
+      <div style={S.sectionLabel}>Token-Gültigkeit</div>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <div>
+          <label style={S.label}>Gültig bis</label>
+          <input style={{ ...S.input, width: 220 }} type="datetime-local" value={gueltigBis} onChange={e => setGueltigBis(e.target.value)} />
+        </div>
+        <p style={{ color: C.textLight, fontSize: 12, paddingBottom: 10 }}>Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar.</p>
+      </div>
+    </div>
+  );
+
   if (!szenario) {
     return (
       <div>
@@ -983,7 +1043,7 @@ function LeitungWaehler({ appData, eventID }) {
           <div style={{ ...S.card, cursor: "pointer", border: `2px solid ${C.border}`, textAlign: "center", padding: 32 }} onClick={() => { setSzenario("online"); loadWaehler(); }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
             <h3 style={{ color: C.primary, margin: "0 0 8px" }}>Online-Versand</h3>
-            <p style={{ color: C.textLight, fontSize: 14, lineHeight: 1.6 }}>Wähler per E-Mail einladen. Token wird automatisch generiert und per E-Mail versendet.</p>
+            <p style={{ color: C.textLight, fontSize: 14, lineHeight: 1.6 }}>Wähler per E-Mail einladen. Token wird automatisch generiert und versendet.</p>
           </div>
           <div style={{ ...S.card, cursor: "pointer", border: `2px solid ${C.border}`, textAlign: "center", padding: 32 }} onClick={() => setSzenario("offline")}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
@@ -995,21 +1055,6 @@ function LeitungWaehler({ appData, eventID }) {
     );
   }
 
-  // Gültigkeitsdatum (gemeinsam für beide Szenarien)
-  const GueltigBisInput = () => (
-    <div style={{ ...S.card, marginBottom: 16 }}>
-      <div style={S.sectionLabel}>Token-Gültigkeit</div>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <div>
-          <label style={S.label}>Gültig bis</label>
-          <input style={{ ...S.input, width: 220 }} type="datetime-local" value={gueltigBis} onChange={e => setGueltigBis(e.target.value)} />
-        </div>
-        <p style={{ color: C.textLight, fontSize: 12, paddingBottom: 10 }}>Tokens können nach diesem Zeitpunkt nicht mehr verwendet werden.</p>
-      </div>
-    </div>
-  );
-
-  // OFFLINE SZENARIO
   if (szenario === "offline") {
     return (
       <div>
@@ -1037,7 +1082,6 @@ function LeitungWaehler({ appData, eventID }) {
     );
   }
 
-  // ONLINE SZENARIO
   const angelegt = waehler.filter(w => w.status === "angelegt").length;
   const zugewiesen = waehler.filter(w => w.status === "zugewiesen").length;
   const versendet = waehler.filter(w => w.status === "versendet").length;
@@ -1067,6 +1111,16 @@ function LeitungWaehler({ appData, eventID }) {
         <button style={{ ...S.btn, ...S.btnSuccess }} onClick={emailsVersenden} disabled={sending || zugewiesen === 0}>
           {sending ? "Wird versendet..." : `📧 E-Mails versenden (${zugewiesen})`}
         </button>
+        {hatAuswahl && kannLoeschen && (
+          <button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehlteLoschen} disabled={saving}>
+            🗑️ Löschen ({ausgewaehlt.filter(id => waehler.find(w => w.id === id)?.status !== "versendet").length})
+          </button>
+        )}
+        {hatAuswahl && kannDeaktivieren && (
+          <button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehltDeaktivieren} disabled={saving}>
+            🚫 Token sperren ({ausgewaehlt.filter(id => waehler.find(w => w.id === id)?.tokenCode).length})
+          </button>
+        )}
         <button style={{ ...S.btn, ...S.btnGhost }} onClick={loadWaehler} disabled={loading}>🔄</button>
       </div>
 
@@ -1095,24 +1149,45 @@ function LeitungWaehler({ appData, eventID }) {
 
       {tab === "liste" && (
         <div style={S.card}>
+          <div style={{ marginBottom: 12 }}>
+            <input
+              style={{ ...S.input }}
+              type="text"
+              value={suche}
+              onChange={e => setSuche(e.target.value)}
+              placeholder="🔍 E-Mail suchen..."
+            />
+          </div>
           {loading ? (
             <p style={{ color: C.textLight, fontSize: 14 }}>Wird geladen...</p>
-          ) : waehler.length === 0 ? (
-            <p style={{ color: C.textLight, fontSize: 14 }}>Noch keine Wähler angelegt. Wechsle zu "+ Hinzufügen".</p>
+          ) : gefilterteWaehler.length === 0 ? (
+            <p style={{ color: C.textLight, fontSize: 14 }}>{suche ? "Keine Ergebnisse." : "Noch keine Wähler angelegt."}</p>
           ) : (
             <table style={S.table}>
               <thead>
                 <tr>
+                  <th style={{ ...S.th, width: 40 }}>
+                    <input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle} />
+                  </th>
                   <th style={S.th}>E-Mail</th>
                   <th style={S.th}>Token</th>
                   <th style={S.th}>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {waehler.map(w => (
-                  <tr key={w.id}>
+                {gefilterteWaehler.map(w => (
+                  <tr key={w.id} style={{ background: ausgewaehlt.includes(w.id) ? "#f0f4ff" : "transparent" }}>
+                    <td style={S.td}>
+                      <input
+                        type="checkbox"
+                        checked={ausgewaehlt.includes(w.id)}
+                        onChange={() => toggleAuswahl(w.id)}
+                      />
+                    </td>
                     <td style={S.td}>{w.email}</td>
-                    <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>{w.tokenCode || <span style={{ color: C.textLight }}>—</span>}</td>
+                    <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em" }}>
+                      {w.tokenCode || <span style={{ color: C.textLight }}>—</span>}
+                    </td>
                     <td style={S.td}>
                       <span style={{ ...S.badge, ...(w.status === "versendet" ? S.badgeGreen : w.status === "zugewiesen" ? S.badgeOrange : S.badgeGray) }}>
                         {w.status === "versendet" ? "✅ versendet" : w.status === "zugewiesen" ? "🔑 zugewiesen" : "📝 angelegt"}
@@ -1122,6 +1197,11 @@ function LeitungWaehler({ appData, eventID }) {
                 ))}
               </tbody>
             </table>
+          )}
+          {hatAuswahl && (
+            <div style={{ marginTop: 12, fontSize: 13, color: C.textLight }}>
+              {ausgewaehlt.length} ausgewählt
+            </div>
           )}
         </div>
       )}
