@@ -809,7 +809,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
                 <div style={{ fontSize: 12, color: C.textLight, marginTop: 2 }}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzelwahl"} · {w.optionen.length} Kandidaten</div>
               </div>
               <button
-                style={{ ...S.btn, ...S.btnDanger, fontWeight: 700 }}
+                style={{ ...S.btn, fontSize: 13, padding: "7px 14px", background: C.error, color: "#fff", border: "none", fontWeight: 600 }}
                 onClick={() => schliesseWahl(w)}
                 disabled={toggling === w.id}
               >
@@ -837,13 +837,14 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
                     ? <span style={{ ...S.badge, background: "#fee2e2", color: "#991b1b" }}>🔒 geschlossen</span>
                     : <span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>
                 }
-                {!w.geschlossen && (
-                  <button
-                    style={{ ...S.btn, ...S.btnGhost, fontSize: 12 }}
-                    onClick={() => toggleWahl(w)}
-                    disabled={toggling === w.id}
-                  >
-                    {toggling === w.id ? "…" : w.aktiv ? "Pausieren" : "Starten"}
+                {!w.geschlossen && w.aktiv && (
+                  <button style={{ ...S.btn, fontSize: 12, padding: "5px 12px", background: "transparent", color: C.warning, border: `1px solid ${C.warning}` }} onClick={() => toggleWahl(w)} disabled={toggling === w.id}>
+                    {toggling === w.id ? "…" : "Pausieren"}
+                  </button>
+                )}
+                {!w.geschlossen && !w.aktiv && (
+                  <button style={{ ...S.btn, ...S.btnSuccess, fontSize: 12, padding: "5px 12px" }} onClick={() => toggleWahl(w)} disabled={toggling === w.id}>
+                    {toggling === w.id ? "…" : "Starten"}
                   </button>
                 )}
               </div>
@@ -1519,7 +1520,8 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, on
   const mehrheitErreicht = gewinner.every(g => pruefeMehrheit(g.stimmen));
   const stichwahNötig = total > 0 && (!mehrheitErreicht || hatGleichstand);
   const stichwahSuchTitel = "Stichwahl: " + (wahl?.titel || "");
-  const stichwahExistiert = wahlen.some(w => w.titel === stichwahSuchTitel && w.id !== wahl?.id);
+  const stichwahExistiert = wahlen.some(w => w.titel === stichwahSuchTitel && w.id !== wahl?.id) ||
+    appData.wahlen.some(w => w.eventID === wahllokalID && w.titel === stichwahSuchTitel && w.id !== wahl?.id);
 
   const VB = vollbild;
   const col = (normal, vb) => VB ? vb : normal;
