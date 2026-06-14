@@ -129,8 +129,10 @@ function mapToken(item) {
     eventID: item.EventID,
     verwendet: item.Verwendet,
     aktiv: item.Aktiv !== false,
-    verwendeteWahlen: (() => { try { return JSON.parse(item.VerwendeteWahlen || "[]"); } catch { return []; } })(),
-    gueltigBis: item.GueltigBis,
+    verwendeteWahlen: item.UsedForWahlID
+      ? [String(item.UsedForWahlID)]
+      : (() => { try { return JSON.parse(item.VerwendeteWahlen || "[]"); } catch { return []; } })(),
+    gueltigBis: item.GueltigBis || null,
   };
 }
 
