@@ -128,7 +128,9 @@ function mapToken(item) {
     code: item.Title,
     eventID: item.EventID,
     verwendet: item.Verwendet,
-    usedForWahlID: item.UsedForWahlID ? String(item.UsedForWahlID) : null,
+    aktiv: item.Aktiv !== false,
+    verwendeteWahlen: (() => { try { return JSON.parse(item.VerwendeteWahlen || "[]"); } catch { return []; } })(),
+    gueltigBis: item.GueltigBis,
   };
 }
 
@@ -771,13 +773,15 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   const aktiveWahlen = wahlen.filter(w => w.aktiv && !w.geschlossen);
 
   async function schliesseWahl(wahl) {
-    const msg = `Wahl "${wahl.titel}" endgültig schließen?
+    const msg = `Wahl "${wahl.titel}" jetzt endgültig schließen?
 
-⚠️ Bitte beachten Sie vor dem Schließen:
+Nach dem Schließen:
+✓ Das Ergebnis wird für alle sichtbar
+✓ Keine weiteren Stimmabgaben möglich
+✗ Kann nicht rückgängig gemacht werden
 
-• Diese Aktion kann nicht rückgängig gemacht werden
-• Falls eine Stichwahl erforderlich ist, bleiben die Tokens der Wähler automatisch gültig — deaktivieren Sie Tokens erst nach allen Wahlen inkl. Stichwahlen
-• Das Ergebnis wird nach dem Schließen sichtbar
+Wichtig bei Gleichstand oder nicht erreichter Mehrheit:
+Für eine Stichwahl bleiben alle bisherigen Zugangscodes (Tokens) automatisch gültig — sie müssen nicht neu vergeben werden. Deaktivieren Sie die Tokens erst, wenn der gesamte Wahltag abgeschlossen ist.
 
 Wahl jetzt schließen?`;
     if (!confirm(msg)) return;
@@ -1027,6 +1031,126 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
 
 
 // ─── LEITUNG WÄHLER & TOKENS ─────────────────────────────────────────────────
+
+function OfflineTokenListe({ eventID }) {
+  const [tokens, setTokens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [suche, setSuche] = useState("");
+  const [toggling, setToggling] = useState(null);
+  const [fehler, setFehler] = useState(null);
+
+  async function laden() {
+    setLoading(true);
+    try {
+      const result = await callFlow("getDaten", { eventID });
+      // getDaten may return tokenList (full list) or just tokenCount
+      const rawTokens = result.tokenList || result.tokens || [];
+      if (rawTokens.length === 0 && result.tokenCount > 0) {
+        setFehler("Token-Liste wird vom Flow nicht zurückgegeben. Bitte WAHL_GetDaten anpassen.");
+      }
+      setTokens(rawTokens.map(mapToken));
+    } catch (e) { setFehler(e.message); }
+    setLoading(false);
+  }
+
+  useEffect(() => { laden(); }, [eventID]);
+
+  async function toggleToken(token) {
+    const aktiv = !token.aktiv;
+    setToggling(token.id);
+    try {
+      await callFlow("deactivateToken", {
+        eventID,
+        tokenCodes: [token.code],
+        waehlerIDs: [],
+        aktiv,
+      });
+      await laden();
+    } catch (e) { setFehler(e.message); }
+    setToggling(null);
+  }
+
+  const gefiltert = tokens.filter(t =>
+    !suche || t.code.toLowerCase().includes(suche.toLowerCase())
+  );
+  const aktiv = tokens.filter(t => t.aktiv).length;
+  const verwendet = tokens.filter(t => t.verwendet).length;
+  const gesperrt = tokens.filter(t => !t.aktiv).length;
+
+  return (
+    <div style={{ ...S.card, marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={S.sectionLabel}>Ausgegebene Tokens</div>
+        <button style={{ ...S.btn, ...S.btnGhost, fontSize: 12 }} onClick={laden} disabled={loading}>🔄</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, color: C.textLight }}>Gesamt: <strong>{tokens.length}</strong></span>
+        <span style={{ fontSize: 13, color: C.success }}>Aktiv: <strong>{aktiv}</strong></span>
+        <span style={{ fontSize: 13, color: C.primary }}>Verwendet: <strong>{verwendet}</strong></span>
+        <span style={{ fontSize: 13, color: C.error }}>Gesperrt: <strong>{gesperrt}</strong></span>
+      </div>
+
+      <input
+        style={{ ...S.input, marginBottom: 12 }}
+        placeholder="🔍 Token-Code suchen..."
+        value={suche}
+        onChange={e => setSuche(e.target.value)}
+      />
+
+      {fehler && <p style={{ color: C.error, fontSize: 13, marginBottom: 8 }}>{fehler}</p>}
+
+      {loading ? (
+        <p style={{ color: C.textLight, fontSize: 14 }}>Wird geladen…</p>
+      ) : gefiltert.length === 0 ? (
+        <p style={{ color: C.textLight, fontSize: 14 }}>{suche ? "Kein Token gefunden." : "Noch keine Tokens generiert."}</p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ ...S.th, textAlign: "left" }}>Token</th>
+              <th style={{ ...S.th, textAlign: "left" }}>Verwendet</th>
+              <th style={{ ...S.th, textAlign: "left" }}>Status</th>
+              <th style={{ ...S.th, textAlign: "left" }}>Aktion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gefiltert.map(t => (
+              <tr key={t.id}>
+                <td style={{ ...S.td, fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.1em", textDecoration: !t.aktiv ? "line-through" : "none", opacity: !t.aktiv ? 0.5 : 1 }}>
+                  {t.code}
+                </td>
+                <td style={S.td}>
+                  {t.verwendet
+                    ? <span style={{ ...S.badge, ...S.badgeGreen, fontSize: 11 }}>✓ abgestimmt</span>
+                    : <span style={{ ...S.badge, ...S.badgeGray, fontSize: 11 }}>—</span>
+                  }
+                </td>
+                <td style={S.td}>
+                  {t.aktiv
+                    ? <span style={{ ...S.badge, ...S.badgeGreen, fontSize: 11 }}>● aktiv</span>
+                    : <span style={{ ...S.badge, ...S.badgeRed, fontSize: 11 }}>🔒 gesperrt</span>
+                  }
+                </td>
+                <td style={S.td}>
+                  <button
+                    style={{ ...S.btn, fontSize: 11, padding: "3px 9px", background: "transparent", color: t.aktiv ? C.error : C.success, border: `1px solid ${t.aktiv ? C.error : C.success}` }}
+                    onClick={() => toggleToken(t)}
+                    disabled={toggling === t.id || t.verwendet}
+                    title={t.verwendet ? "Bereits verwendet — kann nicht gesperrt werden" : ""}
+                  >
+                    {toggling === t.id ? "…" : t.aktiv ? "Sperren" : "Aktivieren"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function LeitungWaehler({ appData, eventID }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === eventID);
   const [szenario, setSzenario] = useState(null);
@@ -1270,7 +1394,9 @@ function LeitungWaehler({ appData, eventID }) {
         </div>
         {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
         {erfolg && <div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
+
         <GueltigBisInput />
+
         <div style={S.card}>
           <div style={S.sectionLabel}>Tokens generieren</div>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 8 }}>
@@ -1282,8 +1408,10 @@ function LeitungWaehler({ appData, eventID }) {
               {saving ? "Wird generiert..." : "Generieren & Exportieren"}
             </button>
           </div>
-          <p style={{ color: C.textLight, fontSize: 12 }}>Tokens werden in SharePoint gespeichert und als .txt-Datei exportiert (Format: XXXX-YYYY).</p>
+          <p style={{ color: C.textLight, fontSize: 12 }}>Tokens werden in SharePoint gespeichert und als .txt-Datei exportiert (Format: XXXX-YYYY). Führen Sie bei der Ausgabe eine eigene Namensliste.</p>
         </div>
+
+        <OfflineTokenListe eventID={eventID} />
       </div>
     );
   }
