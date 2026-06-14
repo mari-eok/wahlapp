@@ -71,6 +71,30 @@ function mapToken(item) {
   };
 }
 
+
+// Zeitzone-Fix: datetime-local liefert lokale Zeit ohne Offset
+function parseLocalDatetime(val) {
+  if (!val) return null;
+  if (!val.includes("Z") && !val.includes("+") && !val.match(/T\d{2}:\d{2}:\d{2}-/)) {
+    const [date, time] = val.split("T");
+    const [y,mo,d] = date.split("-").map(Number);
+    const [h,mi] = (time||"00:00").split(":").map(Number);
+    return new Date(y, mo-1, d, h||0, mi||0);
+  }
+  return new Date(val);
+}
+function parseSharePointDate(val) {
+  if (!val) return null;
+  if (val.includes("Z") || val.includes("+")) return new Date(val);
+  return new Date(val + "Z");
+}
+function toLocalInputValue(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const C = { primary:"#1a3a5c", primaryLight:"#2a5a8c", accent:"#4a9b6f", bg:"#f5f7fa", bgWhite:"#ffffff", border:"#dde3ea", text:"#1a2733", textLight:"#5a6a7a", error:"#c0392b", errorBg:"#fde8e8", success:"#27ae60", successBg:"#e8f8ee", warning:"#d4a017", warningBg:"#fef9e7", disabled:"#b0bec5", superadmin:"#2d1b4e" };
 
 const S = {
@@ -261,8 +285,9 @@ function LeitungLoginScreen({ onAuth, onBack, fixedEventID }) {
 function WahllokalView({ appData, wahllokalID, onDataChange }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === wahllokalID);
   const now = new Date();
-  const aktiveWahlen = appData.wahlen.filter(w => w.eventID===wahllokalID && w.aktiv && new Date(w.startzeit)<=now);
-  const naechsteWahl = appData.wahlen.filter(w => w.eventID===wahllokalID && w.aktiv && new Date(w.startzeit)>now).sort((a,b)=>new Date(a.startzeit)-new Date(b.startzeit))[0];
+  // FIX Zeitzone: SharePoint UTC korrekt parsen
+  const aktiveWahlen = appData.wahlen.filter(w => w.eventID===wahllokalID && w.aktiv && parseSharePointDate(w.startzeit)<=now);
+  const naechsteWahl = appData.wahlen.filter(w => w.eventID===wahllokalID && w.aktiv && parseSharePointDate(w.startzeit)>now).sort((a,b)=>parseSharePointDate(a.startzeit)-parseSharePointDate(b.startzeit))[0];
   const [selectedWahlID, setSelectedWahlID] = useState("");
   const [tokenRaw, setTokenRaw] = useState("");
   const [selected, setSelected] = useState([]);
@@ -324,7 +349,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   if (status==="doppelt") return <div style={{ ...S.statusScreen, background:C.warningBg }}><div style={{ fontSize:64 }}>⚠️</div><h2 style={{ ...S.statusTitle, color:C.warning }}>TOKEN BEREITS VERWENDET</h2><p style={{ ...S.statusMsg, color:"#7d5a0a" }}>{statusMsg}</p><p style={{ fontSize:14, color:"rgba(0,0,0,0.4)" }}>Zurück in {countdown} Sekunden…</p></div>;
   if (!wahllokal||!wahllokal.aktiv) return <div style={S.wlContainer}><WlHeader/><div style={S.closedScreen}><div style={{ fontSize:48 }}>🔒</div><h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>Das Wahllokal ist geschlossen.</h2></div></div>;
   if (aktiveWahlen.length===0) {
-    const diff = naechsteWahl ? Math.max(0,Math.floor((new Date(naechsteWahl.startzeit)-nowTime)/1000)) : null;
+    const diff = naechsteWahl ? Math.max(0,Math.floor((parseSharePointDate(naechsteWahl.startzeit)-nowTime)/1000)) : null;
     const fmt = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return h>0?`${h}h ${String(m).padStart(2,"0")}m ${String(sec).padStart(2,"0")}s`:`${m}m ${String(sec).padStart(2,"0")}s`; };
     return (<div style={S.wlContainer}><WlHeader name={wahllokal?.name}/><div style={S.closedScreen}><div style={{ fontSize:48 }}>{naechsteWahl?"⏰":"🔒"}</div><h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>{naechsteWahl?"Abstimmung beginnt in Kürze":"Keine aktive Abstimmung."}</h2>{naechsteWahl&&diff!==null&&<div style={{ fontSize:28, fontWeight:700, color:C.accent }}>{fmt(diff)}</div>}</div></div>);
   }
@@ -491,11 +516,17 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   const wahlen = appData.wahlen.filter(w=>w.eventID===eventID);
   useEffect(()=>{ if(initialStichwahl){ setForm(initialStichwahl); if(onStichwahl) onStichwahl(); } },[]);
   async function toggleAktiv(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:!wahl.aktiv, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
+  async function pauseWahl(wahl) { if(!confirm(`Wahl "${wahl.titel}" pausieren?`)) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
+  async function starteWahl(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:true, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function deleteWahl(wahl) { if(!confirm(`Wahl "${wahl.titel}" wirklich löschen?`)) return; try{ await callFlow("deleteWahl",{ wahlID:parseInt(wahl.id) }); await onDataChange(); }catch(e){ setFehler(e.message); } }
   async function saveWahl(f) {
     setSaving(true); setFehler(null);
     try {
-      await callFlow("saveWahl",{ wahlID:(!f.id||f.isNew)?null:parseInt(f.id), eventID, titel:f.titel, aktiv:f.aktiv||false, startzeit:f.startzeit, mehrfach:f.mehrfach, exakt:f.exakt, maxAuswahl:f.maxAuswahl, mehrheitsregel:(typeof f.mehrheitsregel==="object"?f.mehrheitsregel?.Value:f.mehrheitsregel)||"relativ", geschlossen:f.geschlossen||false, optionen:f.optionen });
+      let startzeitISO = f.startzeit;
+      if (startzeitISO && !startzeitISO.includes("Z") && !startzeitISO.includes("+")) {
+        startzeitISO = parseLocalDatetime(startzeitISO).toISOString();
+      }
+      await callFlow("saveWahl",{ wahlID:(!f.id||f.isNew)?null:parseInt(f.id), eventID, titel:f.titel, aktiv:f.aktiv||false, startzeit:startzeitISO, mehrfach:f.mehrfach, exakt:f.exakt, maxAuswahl:f.maxAuswahl, mehrheitsregel:(typeof f.mehrheitsregel==="object"?f.mehrheitsregel?.Value:f.mehrheitsregel)||"relativ", geschlossen:f.geschlossen||false, optionen:f.optionen });
       await onDataChange(); setForm(null);
     }catch(e){ setFehler(e.message); }
     setSaving(false);
@@ -516,16 +547,41 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
               <td style={S.td}><strong>{w.titel}</strong></td>
               <td style={S.td}>{w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"}</td>
               <td style={S.td}>{w.optionen.length}</td>
-              <td style={S.td}>{w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>}</td>
+              <td style={S.td}>{w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}</td>
               <td style={S.td}><div style={{ display:"flex", gap:6 }}>
                 {!w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>setForm({ ...w, optionen:[...w.optionen] })}>Bearbeiten</button>}
-                {!w.geschlossen&&!w.aktiv&&<button style={{ ...S.btn, ...S.btnSuccess, fontSize:12, padding:"5px 11px" }} onClick={()=>toggleAktiv(w)}>Starten</button>}
+                {!w.geschlossen&&w.aktiv&&<button style={{ ...S.btn, ...S.btnWarning, fontSize:12, padding:"5px 11px" }} onClick={()=>pauseWahl&&pauseWahl(w)}>⏸ Pause</button>}
+                {!w.geschlossen&&!w.aktiv&&<button style={{ ...S.btn, ...S.btnSuccess, fontSize:12, padding:"5px 11px" }} onClick={()=>starteWahl&&starteWahl(w)}>▶ Starten</button>}
                 <button style={{ ...S.btn, fontSize:12, padding:"5px 11px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={()=>deleteWahl(w)}>Löschen</button>
               </div></td>
             </tr>
           ))}</tbody></table>
         }
       </div>
+      {appData.wahlen.filter(w=>w.eventID===eventID&&w.geschlossen).length>0&&(
+        <ArchivWahlen wahlen={appData.wahlen.filter(w=>w.eventID===eventID&&w.geschlossen)} onDelete={deleteWahl}/>
+      )}
+    </div>
+  );
+}
+
+function ArchivWahlen({ wahlen, onDelete }) {
+  const [zeig,setZeig]=useState(false);
+  return (
+    <div style={S.card}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:zeig?12:0 }}>
+        <div style={S.sectionLabel}>🗄️ Archiv ({wahlen.length} geschlossene {wahlen.length===1?"Wahl":"Wahlen"})</div>
+        <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>setZeig(!zeig)}>{zeig?"Ausblenden":"Anzeigen"}</button>
+      </div>
+      {zeig&&(<table style={S.table}><thead><tr><th style={S.th}>Titel</th><th style={S.th}>Typ</th><th style={S.th}>Opt.</th><th style={S.th}>Status</th><th style={S.th}>Aktionen</th></tr></thead>
+        <tbody>{wahlen.map(w=>(<tr key={w.id} style={{ opacity:0.7 }}>
+          <td style={S.td}><strong>{w.titel}</strong></td>
+          <td style={S.td}>{w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"}</td>
+          <td style={S.td}>{w.optionen.length}</td>
+          <td style={S.td}><span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span></td>
+          <td style={S.td}><button style={{ ...S.btn, fontSize:12, padding:"5px 11px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={()=>onDelete(w)}>Löschen</button></td>
+        </tr>))}</tbody>
+      </table>)}
     </div>
   );
 }
@@ -552,6 +608,10 @@ function OfflineTokenListe({ eventID }) {
     setToggling(null);
   }
   const gefiltert = tokens.filter(t=>!suche||t.code.toLowerCase().includes(suche.toLowerCase()));
+  const alleAusgewaehlt=gefiltert.length>0&&gefiltert.every(t=>ausgewaehlt.includes(t.id));
+  function toggleAuswahl(id){ setAusgewaehlt(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]); }
+  function toggleAlle(){ if(alleAusgewaehlt) setAusgewaehlt([]); else setAusgewaehlt(gefiltert.map(t=>t.id)); }
+
   return (
     <div style={{ ...S.card, marginTop:16 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
@@ -564,14 +624,21 @@ function OfflineTokenListe({ eventID }) {
         <span style={{ fontSize:13, color:C.primary }}>Verwendet: <strong>{tokens.filter(t=>t.verwendet).length}</strong></span>
         <span style={{ fontSize:13, color:C.error }}>Gesperrt: <strong>{tokens.filter(t=>!t.aktiv).length}</strong></span>
       </div>
+      {!deleteVerfuegbar&&<div style={{ ...S.alertInfo, ...S.alert, marginBottom:8, fontSize:12 }}>ℹ️ Token-Löschen: Flow <code>deleteToken</code> muss noch in Power Automate angelegt werden. <button style={{ ...S.btn, fontSize:11, marginLeft:4, padding:"2px 8px", background:"#1e40af", color:"#fff" }} onClick={()=>alert("Flow-Anleitung für deleteToken:\n\n1. Power Automate → Neuer Sofort-Flow\n2. Trigger: Manuell (JSON: apiKey, eventID, tokenIDs[], tokenCodes[])\n3. Bedingung: apiKey prüfen\n4. Schleife: Für jede tokenID → SharePoint Element löschen aus WAHL_Tokens\n5. Antwort: {status:'ok'}\n6. URL in index.html bei deleteToken eintragen")}>📋 Anleitung</button></div>}
+      <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+        {ausgewaehlt.length>0&&deleteVerfuegbar&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12 }} onClick={loescheAusgewaehlt} disabled={loesching}>🗑️ Auswahl löschen ({ausgewaehlt.length})</button>}
+        {tokens.length>0&&deleteVerfuegbar&&<button style={{ ...S.btn, fontSize:12, background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={loescheAlle} disabled={loesching}>🗑️ Alle löschen ({tokens.length})</button>}
+      </div>
+      {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess, marginBottom:8 }}>✅ {erfolg}</div>}
       <input style={{ ...S.input, marginBottom:12 }} placeholder="🔍 Token-Code suchen..." value={suche} onChange={e=>setSuche(e.target.value)}/>
       {fehler&&<p style={{ color:C.error, fontSize:13, marginBottom:8 }}>{fehler}</p>}
       {loading?<p style={{ color:C.textLight, fontSize:14 }}>Wird geladen…</p>:gefiltert.length===0?<p style={{ color:C.textLight, fontSize:14 }}>{suche?"Kein Token gefunden.":"Noch keine Tokens generiert."}</p>:(
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr><th style={{ ...S.th, textAlign:"left" }}>Token</th><th style={{ ...S.th, textAlign:"left" }}>Verwendet</th><th style={{ ...S.th, textAlign:"left" }}>Status</th><th style={{ ...S.th, textAlign:"left" }}>Aktion</th></tr></thead>
           <tbody>{gefiltert.map(t=>(
-            <tr key={t.id}>
-              <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.1em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{t.code.slice(0,4)}-{t.code.slice(4)}</td>
+            <tr key={t.id} style={{ background:ausgewaehlt.includes(t.id)?"#f0f4ff":"transparent" }}>
+              <td style={S.td}><input type="checkbox" checked={ausgewaehlt.includes(t.id)} onChange={()=>toggleAuswahl(t.id)}/></td>
+              <td style={{ ...S.td, fontFamily:"monospace" , fontWeight:700, letterSpacing:"0.1em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{t.code.slice(0,4)}-{t.code.slice(4)}</td>
               <td style={S.td}>{t.verwendet?<span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}>✓ abgestimmt</span>:<span style={{ ...S.badge, ...S.badgeGray, fontSize:11 }}>—</span>}</td>
               <td style={S.td}>{t.aktiv?<span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeRed, fontSize:11 }}>🔒 gesperrt</span>}</td>
               <td style={S.td}><button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:t.aktiv?C.error:C.success, border:`1px solid ${t.aktiv?C.error:C.success}` }} onClick={()=>toggleToken(t)} disabled={toggling===t.id||t.verwendet} title={t.verwendet?"Bereits verwendet":""}>
@@ -784,7 +851,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
                     {wahlenDieses.length===0?<p style={{ fontSize:13, color:C.textLight, padding:"8px 0" }}>Keine Wahlen angelegt.</p>:wahlenDieses.map(w=>(
                       <div key={w.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:`1px solid ${C.border}` }}>
                         <div><div style={{ fontWeight:600, fontSize:13 }}>{w.titel}</div><div style={{ fontSize:11, color:C.textLight }}>{w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"} · {w.optionen.length} Kandidaten</div></div>
-                        {w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>}
+                        {w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}
                       </div>
                     ))}
                   </div>
@@ -801,7 +868,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
             <thead><tr><th style={{ ...S.th, textAlign:"left" }}>Titel</th><th style={{ ...S.th, textAlign:"left" }}>Wahllokal</th><th style={{ ...S.th, textAlign:"left" }}>Typ</th><th style={{ ...S.th, textAlign:"left" }}>Status</th></tr></thead>
             <tbody>{alleWahlen.length===0?<tr><td colSpan={4} style={{ ...S.td, color:C.textLight }}>Keine Wahlen.</td></tr>:alleWahlen.map(w=>{
               const wl=appData.wahllokale.find(l=>l.eventID===w.eventID);
-              return (<tr key={w.id}><td style={{ ...S.td, fontWeight:600 }}>{w.titel}</td><td style={{ ...S.td, color:C.textLight }}>{wl?.name||w.eventID}</td><td style={{ ...S.td, fontSize:12 }}>{w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"}</td><td style={S.td}>{w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>}</td></tr>);
+              return (<tr key={w.id}><td style={{ ...S.td, fontWeight:600 }}>{w.titel}</td><td style={{ ...S.td, color:C.textLight }}>{wl?.name||w.eventID}</td><td style={{ ...S.td, fontSize:12 }}>{w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"}</td><td style={S.td}>{w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}</td></tr>);
             })}</tbody>
           </table>
         </div>
@@ -905,12 +972,22 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
           <button style={{ ...S.btn, fontSize:12, ...(VB?{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none" }:S.btnPrimary) }} onClick={()=>setVollbild(!VB)}>{VB?"✕ Beenden":"⛶ Vollbild"}</button>
         </div>
       </div>
-      {wahlen.length>1&&!VB&&<div style={{ marginBottom:20 }}><select style={{ ...S.select, maxWidth:400 }} value={selectedWahlID} onChange={e=>setSelectedWahlID(e.target.value)}>{wahlen.map(w=><option key={w.id} value={w.id}>{w.titel}</option>)}</select></div>}
+      {wahlen.length>0&&!VB&&<div style={{ marginBottom:20 }}>
+        <select style={{ ...S.select, maxWidth:400 }} value={selectedWahlID} onChange={e=>setSelectedWahlID(e.target.value)}>
+          {wahlen.filter(w=>!w.geschlossen).length>0&&<optgroup label="Aktive & pausierte Wahlen">{wahlen.filter(w=>!w.geschlossen).map(w=><option key={w.id} value={w.id}>{w.aktiv?"● ":"⏸ "}{w.titel}</option>)}</optgroup>}
+          {wahlen.filter(w=>w.geschlossen).length>0&&<optgroup label="🗄️ Archiv (geschlossen)">{wahlen.filter(w=>w.geschlossen).map(w=><option key={w.id} value={w.id}>🔒 {w.titel}</option>)}</optgroup>}
+        </select>
+      </div>}
       {wahlen.length>1&&VB&&<div style={{ display:"flex", gap:12, marginBottom:32, flexWrap:"wrap" }}>{wahlen.map(w=><button key={w.id} onClick={()=>setSelectedWahlID(w.id)} style={{ padding:"8px 20px", borderRadius:8, border:"none", cursor:"pointer", fontSize:14, fontWeight:600, background:w.id===selectedWahlID?C.accent:"rgba(255,255,255,0.15)", color:"#fff" }}>{w.titel}</button>)}</div>}
       {wahl&&ergebnisse!==null&&(
         <>
           <div style={{ marginBottom:VB?40:24 }}>
-            <div style={{ fontSize:VB?28:18, fontWeight:800, color:col(C.primary,"#fff"), marginBottom:VB?20:12 }}>{wahl.titel}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:VB?20:12, flexWrap:"wrap" }}>
+            <div style={{ fontSize:VB?28:18, fontWeight:800, color:col(C.primary,"#fff") }}>{wahl.titel}</div>
+            {wahl.geschlossen&&<span style={{ ...S.badge, ...S.badgeRed, fontSize:VB?15:12 }}>🔒 Wahl geschlossen</span>}
+            {!wahl.geschlossen&&wahl.aktiv&&<span style={{ ...S.badge, ...S.badgeGreen, fontSize:VB?15:12 }}>● läuft</span>}
+            {!wahl.geschlossen&&!wahl.aktiv&&<span style={{ ...S.badge, ...S.badgeOrange, fontSize:VB?15:12 }}>⏸ pausiert</span>}
+          </div>
             <div style={{ display:"flex", gap:VB?48:24, flexWrap:"wrap", alignItems:"flex-end" }}>
               <div><div style={{ fontSize:VB?64:40, fontWeight:900, color:col(C.primary,C.accent), lineHeight:1 }}>{total}</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>{maxAuswahl>1?`Wähler (je ${maxAuswahl} Stimmen)`:`Stimme${total!==1?"n":""} abgegeben`}</div></div>
               {total>0&&<div style={{ paddingBottom:VB?12:6 }}>
@@ -960,7 +1037,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={S.card}>
         <div style={S.formGroup}><label style={S.label}>Titel</label><input style={S.input} value={f.titel} onChange={e=>setField("titel",e.target.value)} placeholder="z.B. Diakoniepfarrer*in"/></div>
-        <div style={S.formGroup}><label style={S.label}>Startzeit</label><input style={S.input} type="datetime-local" value={f.startzeit?.slice(0,16)} onChange={e=>setField("startzeit",e.target.value)}/></div>
+        <div style={S.formGroup}><label style={S.label}>Startzeit (lokale Zeit)</label><input style={S.input} type="datetime-local" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):"" } onChange={e=>setField("startzeit",e.target.value)}/><p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Angabe in Ihrer lokalen Zeit (MEZ/MESZ).</p></div>
         <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap", opacity:f.hatStimmen?0.5:1, pointerEvents:f.hatStimmen?"none":"auto" }}>
           <label style={{ display:"flex", alignItems:"center", gap:8, cursor:f.hatStimmen?"not-allowed":"pointer", fontSize:14 }}><input type="checkbox" checked={f.mehrfach} disabled={!!f.hatStimmen} onChange={e=>setField("mehrfach",e.target.checked)}/>Mehrfachauswahl</label>
           {f.mehrfach&&<><label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}><input type="checkbox" checked={f.exakt} disabled={!!f.hatStimmen} onChange={e=>setField("exakt",e.target.checked)}/>Exakte Anzahl</label><label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>Max: <input style={{ ...S.input, width:60 }} type="number" min={1} value={f.maxAuswahl} disabled={!!f.hatStimmen} onChange={e=>setField("maxAuswahl",parseInt(e.target.value))}/></label></>}
