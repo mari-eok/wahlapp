@@ -431,7 +431,7 @@ function QRCode({ url, size=200 }) {
 }
 
 function LeitungDashboard({ appData, eventID, onDataChange }) {
-  const wahlen = appData.wahlen.filter(w=>w.eventID===eventID);
+  const wahlen = appData.wahlen.filter(w=>w.eventID===eventID&&!w.geschlossen);
   const tokenCount = appData.tokenCount||0;
   const [qrVollbild, setQrVollbild] = useState(false);
   const [toggling, setToggling] = useState(null);
@@ -513,7 +513,8 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
 
 function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl }) {
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
-  const wahlen = appData.wahlen.filter(w=>w.eventID===eventID);
+  // Nur nicht-geschlossene Wahlen in der Hauptliste, geschlossene nur im Archiv
+  const wahlen = appData.wahlen.filter(w=>w.eventID===eventID && !w.geschlossen);
   useEffect(()=>{ if(initialStichwahl){ setForm(initialStichwahl); if(onStichwahl) onStichwahl(); } },[]);
   async function openForm(wahl) {
     let hatStimmen = false;
@@ -749,9 +750,10 @@ function LeitungWaehler({ appData, eventID }) {
     setSending(true); setFehler(null);
     try {
       await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:zuSenden.map(w=>parseInt(w.id)) });
-      // Status auf "versendet" setzen
-      await callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet" })) });
-      await loadWaehler();
+      // Lokal sofort aktualisieren — kein await um 502-Timeout zu vermeiden
+      setWaehler(prev=>prev.map(w=>zuSenden.find(s=>s.id===w.id)?{...w,status:"versendet"}:w));
+      // Im Hintergrund SharePoint aktualisieren (fire & forget)
+      callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet" })) }).catch(()=>{});
       setErfolg(`${zuSenden.length} E-Mails versendet.`); setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setSending(false);
@@ -760,9 +762,9 @@ function LeitungWaehler({ appData, eventID }) {
     setSaving(true); setFehler(null);
     try {
       await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:[parseInt(w.id)] });
-      await callFlow("updateWaehler",{ updates:[{ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet" }] });
-      await loadWaehler();
-      setErfolg(`E-Mail an ${w.email} erneut versendet.`); setTimeout(()=>setErfolg(null),3000);
+      setWaehler(prev=>prev.map(x=>x.id===w.id?{...x,status:"versendet"}:x));
+      callFlow("updateWaehler",{ updates:[{ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet" }] }).catch(()=>{});
+      setErfolg(`E-Mail an ${w.email} versendet.`); setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setSaving(false);
   }
