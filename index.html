@@ -515,6 +515,11 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
   const wahlen = appData.wahlen.filter(w=>w.eventID===eventID);
   useEffect(()=>{ if(initialStichwahl){ setForm(initialStichwahl); if(onStichwahl) onStichwahl(); } },[]);
+  async function openForm(wahl) {
+    let hatStimmen = false;
+    try { const r=await callFlow("getErgebnisse",{ wahlID:parseInt(wahl.id), eventID }); hatStimmen=(Array.isArray(r)?r.length:(r.value?.length||0))>0; } catch(e) {}
+    setForm({ ...wahl, optionen:[...wahl.optionen], hatStimmen });
+  }
   async function toggleAktiv(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:!wahl.aktiv, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function pauseWahl(wahl) { if(!confirm(`Wahl "${wahl.titel}" pausieren?`)) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function starteWahl(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:true, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
@@ -549,7 +554,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
               <td style={S.td}>{w.optionen.length}</td>
               <td style={S.td}>{w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}</td>
               <td style={S.td}><div style={{ display:"flex", gap:6 }}>
-                {!w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>setForm({ ...w, optionen:[...w.optionen] })}>Bearbeiten</button>}
+                {!w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>openForm(w)}>Bearbeiten</button>}
                 {!w.geschlossen&&w.aktiv&&<button style={{ ...S.btn, ...S.btnWarning, fontSize:12, padding:"5px 11px" }} onClick={()=>pauseWahl&&pauseWahl(w)}>⏸ Pause</button>}
                 {!w.geschlossen&&!w.aktiv&&<button style={{ ...S.btn, ...S.btnSuccess, fontSize:12, padding:"5px 11px" }} onClick={()=>starteWahl&&starteWahl(w)}>▶ Starten</button>}
                 <button style={{ ...S.btn, fontSize:12, padding:"5px 11px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={()=>deleteWahl(w)}>Löschen</button>
@@ -589,6 +594,8 @@ function ArchivWahlen({ wahlen, onDelete }) {
 // FIX: OfflineTokenListe liest tokenList aus getDaten und mappt korrekt via mapToken
 function OfflineTokenListe({ eventID }) {
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
+  const [erfolg, setErfolg] = useState(null); const [ausgewaehlt, setAusgewaehlt] = useState([]); const [loesching, setLoesching] = useState(false);
+  const deleteVerfuegbar = !API.flows.deleteToken.startsWith("PLATZHALTER");
   async function laden() {
     setLoading(true);
     try {
@@ -606,6 +613,21 @@ function OfflineTokenListe({ eventID }) {
     setToggling(token.id);
     try { await callFlow("deactivateToken",{ eventID, tokenCodes:[token.code], waehlerIDs:[], aktiv }); await laden(); }catch(e){ setFehler(e.message); }
     setToggling(null);
+  }
+  async function loescheAusgewaehlt() {
+    const zu = tokens.filter(t=>ausgewaehlt.includes(t.id));
+    if(zu.length===0) return;
+    if(!confirm(`${zu.length} Token(s) wirklich löschen?`)) return;
+    setLoesching(true); setFehler(null);
+    try { await callFlow("deleteToken",{ eventID, tokenIDs:zu.map(t=>parseInt(t.id)), tokenCodes:zu.map(t=>t.code) }); setAusgewaehlt([]); await laden(); setErfolg(`${zu.length} Token(s) gelöscht.`); setTimeout(()=>setErfolg(null),3000); } catch(e){ setFehler(e.message); }
+    setLoesching(false);
+  }
+  async function loescheAlle() {
+    if(tokens.length===0) return;
+    if(!confirm(`ALLE ${tokens.length} Tokens löschen? Nur nach vollständigem Abschluss empfohlen.`)) return;
+    setLoesching(true); setFehler(null);
+    try { await callFlow("deleteToken",{ eventID, tokenIDs:tokens.map(t=>parseInt(t.id)), tokenCodes:tokens.map(t=>t.code) }); setAusgewaehlt([]); await laden(); setErfolg("Alle Tokens gelöscht."); setTimeout(()=>setErfolg(null),3000); } catch(e){ setFehler(e.message); }
+    setLoesching(false);
   }
   const gefiltert = tokens.filter(t=>!suche||t.code.toLowerCase().includes(suche.toLowerCase()));
   const alleAusgewaehlt=gefiltert.length>0&&gefiltert.every(t=>ausgewaehlt.includes(t.id));
