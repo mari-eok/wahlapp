@@ -743,7 +743,29 @@ function LeitungWaehler({ appData, eventID }) {
     setSaving(false);
   }
   async function tokensZuweisen() { const ohneToken=waehler.filter(w=>w.status==="angelegt"); if(ohneToken.length===0){ setErfolg("Alle Wähler haben bereits einen Token."); return; } setSaving(true); setFehler(null); try{ const tokenListe=ohneToken.map(w=>({ id:parseInt(w.id), email:w.email, token:generateToken() })); await callFlow("saveTokens",{ eventID, tokens:tokenListe.map(t=>t.token), typ:"online", gueltigBis:new Date(gueltigBis).toISOString() }); await callFlow("updateWaehler",{ updates:tokenListe.map(t=>({ id:t.id, tokenCode:t.token, status:"zugewiesen" })) }); await loadWaehler(); setErfolg(`${ohneToken.length} Tokens zugewiesen (gültig bis ${new Date(gueltigBis).toLocaleString("de-DE")}).`); setTimeout(()=>setErfolg(null),4000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function emailsVersenden() { const zuSenden=waehler.filter(w=>w.status==="zugewiesen"&&w.tokenCode); if(zuSenden.length===0){ setFehler("Keine Wähler mit zugewiesenem Token."); return; } setSending(true); setFehler(null); try{ await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:zuSenden.map(w=>parseInt(w.id)) }); await loadWaehler(); setErfolg(`${zuSenden.length} E-Mails versendet.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSending(false); }
+  async function emailsVersenden() {
+    const zuSenden = waehler.filter(w=>w.status==="zugewiesen"&&w.tokenCode);
+    if(zuSenden.length===0){ setFehler("Keine Wähler mit zugewiesenem Token."); return; }
+    setSending(true); setFehler(null);
+    try {
+      await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:zuSenden.map(w=>parseInt(w.id)) });
+      // Status auf "versendet" setzen
+      await callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet" })) });
+      await loadWaehler();
+      setErfolg(`${zuSenden.length} E-Mails versendet.`); setTimeout(()=>setErfolg(null),3000);
+    } catch(e){ setFehler(e.message); }
+    setSending(false);
+  }
+  async function einzelVersenden(w) {
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:[parseInt(w.id)] });
+      await callFlow("updateWaehler",{ updates:[{ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet" }] });
+      await loadWaehler();
+      setErfolg(`E-Mail an ${w.email} erneut versendet.`); setTimeout(()=>setErfolg(null),3000);
+    } catch(e){ setFehler(e.message); }
+    setSaving(false);
+  }
   async function einzelTokenToggle(w) { const aktiv=w.tokenAktiv===false; if(!confirm(`Token ${w.tokenCode} für ${w.email} wirklich ${aktiv?"reaktivieren":"sperren"}?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:[w.tokenCode], waehlerIDs:[parseInt(w.id)], aktiv }); await loadWaehler(); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehlteLoschen() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.status!=="versendet"); if(zu.length===0) return; if(!confirm(`${zu.length} Wähler wirklich löschen?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deleteWaehler",{ waehlerIDs:zu.map(w=>parseInt(w.id)) }); await loadWaehler(); setErfolg(`${zu.length} Wähler gelöscht.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler deaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Tokens gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
@@ -847,7 +869,12 @@ function LeitungWaehler({ appData, eventID }) {
                   </td>
                   <td style={S.td}>{w.verwendet?<span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}>✓ abgestimmt</span>:<span style={{ ...S.badge, ...S.badgeGray, fontSize:11 }}>—</span>}</td>
                   <td style={S.td}><span style={{ ...S.badge, ...(w.status==="versendet"?S.badgeGreen:w.status==="zugewiesen"?S.badgeOrange:S.badgeGray) }}>{w.status==="versendet"?"✅ versendet":w.status==="zugewiesen"?"🔑 zugewiesen":"📝 angelegt"}</span></td>
-                  <td style={S.td}>{w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:w.tokenAktiv===false?C.success:C.error, border:`1px solid ${w.tokenAktiv===false?C.success:C.error}` }} onClick={()=>einzelTokenToggle(w)} disabled={saving}>{w.tokenAktiv===false?"Aktivieren":"Sperren"}</button>}</td>
+                  <td style={S.td}>
+                    <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                      {w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:w.tokenAktiv===false?C.success:C.error, border:`1px solid ${w.tokenAktiv===false?C.success:C.error}` }} onClick={()=>einzelTokenToggle(w)} disabled={saving}>{w.tokenAktiv===false?"Aktivieren":"Sperren"}</button>}
+                      {w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:C.primary, border:`1px solid ${C.primary}` }} onClick={()=>einzelVersenden(w)} disabled={saving} title={w.status==="versendet"?"Erneut senden":"E-Mail senden"}>📧 {w.status==="versendet"?"Erneut":""}</button>}
+                    </div>
+                  </td>
                 </tr>
               ))}</tbody>
             </table>
