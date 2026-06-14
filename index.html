@@ -1516,7 +1516,10 @@ function SuperadminView({ appData, onExit, onDataChange }) {
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Wahlleitung-PIN</label>
-          <input style={S.input} value={form.leitungPIN || ""} onChange={e => setForm(x => ({ ...x, leitungPIN: e.target.value }))} placeholder="4-stellige PIN" maxLength={8} type="password" />
+          <div style={{ position: "relative" }}>
+            <input style={{ ...S.input, paddingRight: 40 }} value={form.leitungPIN || ""} onChange={e => setForm(x => ({ ...x, leitungPIN: e.target.value }))} placeholder="4-stellige PIN" maxLength={8} type={showPin["form"] ? "text" : "password"} />
+            <button onClick={() => togglePin("form")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: C.textLight }}>{showPin["form"] ? "🙈" : "👁"}</button>
+          </div>
         </div>
         <div style={S.formGroup}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
