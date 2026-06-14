@@ -1434,6 +1434,22 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   const [expanded, setExpanded] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [showPin, setShowPin] = useState({});
+  const pinTimers = useRef({});
+
+  function togglePin(id) {
+    setShowPin(p => {
+      const next = { ...p, [id]: !p[id] };
+      if (next[id]) {
+        if (pinTimers.current[id]) clearTimeout(pinTimers.current[id]);
+        pinTimers.current[id] = setTimeout(() => {
+          setShowPin(pp => ({ ...pp, [id]: false }));
+        }, 5000);
+      } else {
+        if (pinTimers.current[id]) clearTimeout(pinTimers.current[id]);
+      }
+      return next;
+    });
+  }
 
   async function laden() {
     setLoading(true);
@@ -1564,7 +1580,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
                     <div style={{ fontSize: 12, color: C.textLight, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
                       EventID: {wl.eventID} · {wahlenDieses.length} Wahlen · PIN:{" "}
                       <span style={{ fontFamily: "monospace", letterSpacing: 2 }}>{showPin[wl.id] ? wl.leitungPIN : "•".repeat((wl.leitungPIN || "").length)}</span>
-                      <button onClick={e => { e.stopPropagation(); setShowPin(p => ({ ...p, [wl.id]: !p[wl.id] })); }} style={{ background: "none", border: "none", cursor: "pointer", color: C.textLight, fontSize: 13, padding: "0 2px" }}>{showPin[wl.id] ? "🙈" : "👁"}</button>
+                      <button onClick={e => { e.stopPropagation(); togglePin(wl.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: C.textLight, fontSize: 13, padding: "0 2px" }}>{showPin[wl.id] ? "🙈" : "👁"}</button>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1576,6 +1592,12 @@ function SuperadminView({ appData, onExit, onDataChange }) {
                 </div>
                 {isOpen && (
                   <div style={{ paddingLeft: 12, borderLeft: `3px solid ${C.border}`, marginBottom: 12 }}>
+                    <div style={{ padding: "8px 0 12px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                      <span style={{ color: C.textLight }}>Wahlleitung-PIN:</span>
+                      <span style={{ fontFamily: "monospace", fontWeight: 700, letterSpacing: 2 }}>{showPin[wl.id] ? wl.leitungPIN : "•".repeat((wl.leitungPIN || "").length)}</span>
+                      <button onClick={() => togglePin(wl.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.textLight, fontSize: 13 }}>{showPin[wl.id] ? "🙈" : "👁"}</button>
+                      {showPin[wl.id] && <span style={{ fontSize: 11, color: C.warning }}>wird in 5 Sek. versteckt</span>}
+                    </div>
                     {wahlenDieses.length === 0
                       ? <p style={{ fontSize: 13, color: C.textLight, padding: "8px 0" }}>Keine Wahlen angelegt.</p>
                       : wahlenDieses.map(w => (
