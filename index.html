@@ -1425,51 +1425,214 @@ function LeitungErgebnisse({ appData, eventID, onDataChange, onSwitchTab }) {
 
 
 function SuperadminView({ appData, onExit, onDataChange }) {
-  const [alleWahllokale, setAlleWahllokale] = useState(null);
+  const [tab, setTab] = useState("wahllokale");
+  const [wahllokale, setWahllokale] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [fehler, setFehler] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
-  useEffect(() => {
-    async function laden() {
-      setLoading(true);
-      try {
-        if (API.flows.getAlle.startsWith("PLATZHALTER")) {
-          setAlleWahllokale(appData.wahllokale);
-        } else {
-          const result = await callFlow("getAlle", {});
-          setAlleWahllokale(Array.isArray(result) ? result.map(mapWahllokal) : appData.wahllokale);
-        }
-      } catch (e) { setFehler(e.message); }
-      setLoading(false);
-    }
-    laden();
-  }, []);
+  async function laden() {
+    setLoading(true);
+    try {
+      const result = await callFlow("getAlle", {});
+      setWahllokale(Array.isArray(result) ? result.map(mapWahllokal) : appData.wahllokale);
+    } catch (e) { setFehler(e.message); }
+    setLoading(false);
+  }
+
+  useEffect(() => { laden(); }, []);
+
+  async function saveWahllokal(f) {
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("saveWahllokal", {
+        wahllokalID: f.id ? parseInt(f.id) : null,
+        eventID: f.eventID,
+        name: f.name,
+        aktiv: f.aktiv !== false,
+        leitungPIN: f.leitungPIN || "0000",
+      });
+      await laden();
+      await onDataChange();
+      setForm(null);
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
+  async function deleteWahllokal(wl) {
+    if (!confirm(`Wahllokal "${wl.name}" wirklich löschen? Alle zugehörigen Daten bleiben in SharePoint erhalten.`)) return;
+    setDeleting(wl.id);
+    try {
+      await callFlow("deleteWahllokal", { wahllokalID: parseInt(wl.id) });
+      await laden();
+      await onDataChange();
+    } catch (e) { setFehler(e.message); }
+    setDeleting(null);
+  }
 
   const alleWahlen = appData.wahlen;
-  const alleTokens = appData.tokenCount || 0;
+  const tabs = [
+    { id: "wahllokale", label: "🏛️ Wahllokale" },
+    { id: "wahlen", label: "📊 Alle Wahlen" },
+    { id: "flows", label: "⚙️ Flows" },
+  ];
+
+  if (form !== null) return (
+    <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <button onClick={() => setForm(null)} style={{ ...S.btn, ...S.btnGhost }}>← Zurück</button>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: C.primary }}>{form.id ? "Wahllokal bearbeiten" : "Neues Wahllokal"}</h2>
+      </div>
+      {fehler && <div style={{ ...S.errorBox, marginBottom: 16 }}>{fehler}</div>}
+      <div style={S.card}>
+        <div style={S.formGroup}>
+          <label style={S.label}>Name</label>
+          <input style={S.input} value={form.name || ""} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="z.B. Synode Ortenau" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>EventID</label>
+          <input style={S.input} value={form.eventID || ""} onChange={e => setForm(x => ({ ...x, eventID: e.target.value.toUpperCase() }))} placeholder="z.B. SOR" maxLength={10} />
+          <p style={{ fontSize: 12, color: C.textLight, marginTop: 4 }}>Kurzkürzel für dieses Wahllokal — wird in der URL verwendet.</p>
+        </div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Wahlleitung-PIN</label>
+          <input style={S.input} value={form.leitungPIN || ""} onChange={e => setForm(x => ({ ...x, leitungPIN: e.target.value }))} placeholder="4-stellige PIN" maxLength={8} type="password" />
+        </div>
+        <div style={S.formGroup}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
+            <input type="checkbox" checked={form.aktiv !== false} onChange={e => setForm(x => ({ ...x, aktiv: e.target.checked }))} />
+            Wahllokal aktiv
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button style={{ ...S.btn, ...S.btnGhost }} onClick={() => setForm(null)}>Abbrechen</button>
+          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={() => saveWahllokal(form)} disabled={saving}>{saving ? "Speichern…" : "Speichern"}</button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.15em", color: C.superadmin, textTransform: "uppercase", marginBottom: 4 }}>Systemzugang</div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", color: C.superadmin, textTransform: "uppercase", marginBottom: 2 }}>Systemzugang</div>
           <h1 style={{ fontSize: 22, fontWeight: 900, color: C.primary, margin: 0 }}>Superadmin</h1>
         </div>
         <button onClick={onExit} style={{ ...S.btn, ...S.btnGhost }}>← Abmelden</button>
       </div>
 
       <div style={S.statGrid}>
-        <StatCard num={alleWahllokale?.length || "—"} label="Wahllokale gesamt" color={C.superadmin} />
+        <StatCard num={wahllokale?.length ?? "—"} label="Wahllokale" color={C.superadmin} />
         <StatCard num={alleWahlen.length} label="Wahlen gesamt" color={C.primary} />
         <StatCard num={alleWahlen.filter(w => w.aktiv).length} label="Aktive Wahlen" color={C.success} />
-        <StatCard num={alleWahlen.filter(w => w.geschlossen).length} label="Geschlossene Wahlen" color={C.error} />
+        <StatCard num={alleWahlen.filter(w => w.geschlossen).length} label="Geschlossen" color={C.error} />
       </div>
 
-      <div style={S.card}>
-        <div style={S.sectionLabel}>Flow-Konfiguration</div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, borderBottom: `2px solid ${C.border}`, paddingBottom: 0 }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            background: "none", border: "none", cursor: "pointer", padding: "10px 16px", fontSize: 14, fontWeight: 600,
+            color: tab === t.id ? C.primary : C.textLight,
+            borderBottom: tab === t.id ? `2px solid ${C.primary}` : "2px solid transparent",
+            marginBottom: -2,
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {fehler && <div style={{ ...S.errorBox, marginBottom: 16 }}>{fehler}</div>}
+
+      {tab === "wahllokale" && (
+        <div style={S.card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={S.sectionLabel}>Wahllokale</div>
+            <button style={{ ...S.btn, ...S.btnPrimary, fontSize: 13 }} onClick={() => setForm({ name: "", eventID: "", leitungPIN: "", aktiv: true })}>+ Neues Wahllokal</button>
+          </div>
+          {loading && <p style={{ color: C.textLight, fontSize: 14 }}>Wird geladen…</p>}
+          {!loading && wahllokale?.map(wl => {
+            const wahlenDieses = alleWahlen.filter(w => w.eventID === wl.eventID);
+            const isOpen = expanded === wl.id;
+            return (
+              <div key={wl.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
+                  <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setExpanded(isOpen ? null : wl.id)}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{wl.name}</div>
+                    <div style={{ fontSize: 12, color: C.textLight, marginTop: 2 }}>EventID: {wl.eventID} · {wahlenDieses.length} Wahlen · PIN: {"•".repeat((wl.leitungPIN || "").length)}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {wl.aktiv ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span> : <span style={{ ...S.badge, ...S.badgeGray }}>inaktiv</span>}
+                    <button style={{ ...S.btn, ...S.btnGhost, fontSize: 12, padding: "5px 11px" }} onClick={() => setForm({ ...wl })}>Bearbeiten</button>
+                    <button style={{ ...S.btn, fontSize: 12, padding: "5px 11px", background: "transparent", color: C.error, border: `1px solid ${C.error}` }} onClick={() => deleteWahllokal(wl)} disabled={deleting === wl.id}>{deleting === wl.id ? "…" : "Löschen"}</button>
+                    <span style={{ color: C.textLight, cursor: "pointer", fontSize: 16 }} onClick={() => setExpanded(isOpen ? null : wl.id)}>{isOpen ? "▲" : "▼"}</span>
+                  </div>
+                </div>
+                {isOpen && (
+                  <div style={{ paddingLeft: 12, borderLeft: `3px solid ${C.border}`, marginBottom: 12 }}>
+                    {wahlenDieses.length === 0
+                      ? <p style={{ fontSize: 13, color: C.textLight, padding: "8px 0" }}>Keine Wahlen angelegt.</p>
+                      : wahlenDieses.map(w => (
+                        <div key={w.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{w.titel}</div>
+                            <div style={{ fontSize: 11, color: C.textLight }}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzelwahl"} · {w.optionen.length} Kandidaten</div>
+                          </div>
+                          {w.geschlossen ? <span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>
+                            : w.aktiv ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
+                            : <span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>}
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === "wahlen" && (
+        <div style={S.card}>
+          <div style={S.sectionLabel}>Alle Wahlen</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={{ ...S.th, textAlign: "left" }}>Titel</th>
+                <th style={{ ...S.th, textAlign: "left" }}>Wahllokal</th>
+                <th style={{ ...S.th, textAlign: "left" }}>Typ</th>
+                <th style={{ ...S.th, textAlign: "left" }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alleWahlen.length === 0
+                ? <tr><td colSpan={4} style={{ ...S.td, color: C.textLight }}>Keine Wahlen vorhanden.</td></tr>
+                : alleWahlen.map(w => {
+                  const wl = appData.wahllokale.find(l => l.eventID === w.eventID);
+                  return (
+                    <tr key={w.id}>
+                      <td style={{ ...S.td, fontWeight: 600 }}>{w.titel}</td>
+                      <td style={{ ...S.td, color: C.textLight }}>{wl?.name || w.eventID}</td>
+                      <td style={{ ...S.td, fontSize: 12 }}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzelwahl"}</td>
+                      <td style={S.td}>
+                        {w.geschlossen ? <span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>
+                          : w.aktiv ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
+                          : <span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>}
+                      </td>
+                    </tr>
+                  );
+                })
+              }
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "flows" && (
+        <div style={S.card}>
+          <div style={S.sectionLabel}>Flow-Konfiguration</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th style={{ ...S.th, textAlign: "left" }}>Flow</th>
@@ -1479,73 +1642,22 @@ function SuperadminView({ appData, onExit, onDataChange }) {
             <tbody>
               {Object.entries(API.flows).map(([key, url]) => (
                 <tr key={key}>
-                  <td style={{ ...S.td, fontWeight: 600, fontFamily: "monospace" }}>{key}</td>
+                  <td style={{ ...S.td, fontFamily: "monospace", fontSize: 13, fontWeight: 600 }}>{key}</td>
                   <td style={S.td}>
                     {url.startsWith("PLATZHALTER")
                       ? <span style={{ ...S.badge, ...S.badgeRed }}>⚠ nicht verbunden</span>
-                      : <span style={{ ...S.badge, ...S.badgeGreen }}>✓ verbunden</span>
-                    }
+                      : <span style={{ ...S.badge, ...S.badgeGreen }}>✓ verbunden</span>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
-
-      <div style={S.card}>
-        <div style={S.sectionLabel}>Alle Wahllokale</div>
-        {loading && <p style={{ color: C.textLight, fontSize: 14 }}>Wird geladen…</p>}
-        {fehler && <p style={{ color: C.error, fontSize: 14 }}>{fehler}</p>}
-        {!loading && alleWahllokale && alleWahllokale.map(wl => {
-          const wahlenDieses = alleWahlen.filter(w => w.eventID === wl.eventID);
-          const isOpen = expanded === wl.id;
-          return (
-            <div key={wl.id} style={{ borderBottom: `1px solid ${C.border}`, padding: "12px 0" }}>
-              <div
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
-                onClick={() => setExpanded(isOpen ? null : wl.id)}
-              >
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{wl.name}</div>
-                  <div style={{ fontSize: 12, color: C.textLight }}>EventID: {wl.eventID} · {wahlenDieses.length} Wahlen</div>
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {wl.aktiv
-                    ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
-                    : <span style={{ ...S.badge, ...S.badgeGray }}>inaktiv</span>
-                  }
-                  <span style={{ color: C.textLight, fontSize: 18 }}>{isOpen ? "▲" : "▼"}</span>
-                </div>
-              </div>
-              {isOpen && (
-                <div style={{ marginTop: 12, paddingLeft: 12, borderLeft: `3px solid ${C.border}` }}>
-                  {wahlenDieses.length === 0
-                    ? <p style={{ fontSize: 13, color: C.textLight }}>Keine Wahlen für dieses Wahllokal.</p>
-                    : wahlenDieses.map(w => (
-                      <div key={w.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{w.titel}</div>
-                          <div style={{ fontSize: 11, color: C.textLight }}>{w.mehrfach ? `Mehrfach (max. ${w.maxAuswahl})` : "Einzelwahl"} · {w.optionen.length} Kandidaten</div>
-                        </div>
-                        {w.geschlossen
-                          ? <span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>
-                          : w.aktiv
-                            ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>
-                            : <span style={{ ...S.badge, ...S.badgeGray }}>pausiert</span>
-                        }
-                      </div>
-                    ))
-                  }
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      )}
     </div>
   );
 }
+
 
 function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung = false, onDataChange }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === wahllokalID);
