@@ -771,7 +771,16 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   const aktiveWahlen = wahlen.filter(w => w.aktiv && !w.geschlossen);
 
   async function schliesseWahl(wahl) {
-    if (!confirm(`Wahl "${wahl.titel}" endgültig schließen? Dies kann nicht rückgängig gemacht werden.`)) return;
+    const msg = `Wahl "${wahl.titel}" endgültig schließen?
+
+⚠️ Bitte beachten Sie vor dem Schließen:
+
+• Diese Aktion kann nicht rückgängig gemacht werden
+• Falls eine Stichwahl erforderlich ist, bleiben die Tokens der Wähler automatisch gültig — deaktivieren Sie Tokens erst nach allen Wahlen inkl. Stichwahlen
+• Das Ergebnis wird nach dem Schließen sichtbar
+
+Wahl jetzt schließen?`;
+    if (!confirm(msg)) return;
     setToggling(wahl.id);
     try {
       await callFlow("toggleWahl", { wahlID: parseInt(wahl.id), aktiv: false, geschlossen: true });
@@ -1118,6 +1127,23 @@ function LeitungWaehler({ appData, eventID }) {
     setSending(false);
   }
 
+  async function einzelTokenToggle(w) {
+    const aktiv = w.tokenAktiv === false;
+    const aktion = aktiv ? "reaktivieren" : "sperren";
+    if (!confirm(`Token ${w.tokenCode} für ${w.email} wirklich ${aktion}?`)) return;
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("deactivateToken", {
+        eventID,
+        tokenCodes: [w.tokenCode],
+        waehlerIDs: [parseInt(w.id)],
+        aktiv,
+      });
+      await loadWaehler();
+    } catch (e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
   async function ausgewaehlteLoschen() {
     const zuLoeschen = waehler.filter(w => ausgewaehlt.includes(w.id) && w.status !== "versendet");
     if (zuLoeschen.length === 0) return;
@@ -1356,7 +1382,9 @@ function LeitungWaehler({ appData, eventID }) {
                   </th>
                   <th style={S.th}>E-Mail</th>
                   <th style={S.th}>Token</th>
+                  <th style={S.th}>Verwendet</th>
                   <th style={S.th}>Status</th>
+                  <th style={S.th}>Aktion</th>
                 </tr>
               </thead>
               <tbody>
@@ -1386,9 +1414,26 @@ function LeitungWaehler({ appData, eventID }) {
                       }
                     </td>
                     <td style={S.td}>
+                      {w.verwendet
+                        ? <span style={{ ...S.badge, ...S.badgeGreen, fontSize: 11 }}>✓ abgestimmt</span>
+                        : <span style={{ ...S.badge, ...S.badgeGray, fontSize: 11 }}>—</span>
+                      }
+                    </td>
+                    <td style={S.td}>
                       <span style={{ ...S.badge, ...(w.status === "versendet" ? S.badgeGreen : w.status === "zugewiesen" ? S.badgeOrange : S.badgeGray) }}>
                         {w.status === "versendet" ? "✅ versendet" : w.status === "zugewiesen" ? "🔑 zugewiesen" : "📝 angelegt"}
                       </span>
+                    </td>
+                    <td style={S.td}>
+                      {w.tokenCode && (
+                        <button
+                          style={{ ...S.btn, fontSize: 11, padding: "3px 9px", background: "transparent", color: w.tokenAktiv === false ? C.success : C.error, border: `1px solid ${w.tokenAktiv === false ? C.success : C.error}` }}
+                          onClick={() => einzelTokenToggle(w)}
+                          disabled={saving}
+                        >
+                          {w.tokenAktiv === false ? "Aktivieren" : "Sperren"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
