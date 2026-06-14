@@ -699,8 +699,49 @@ function LeitungWaehler({ appData, eventID }) {
   const [gueltigBis, setGueltigBis] = useState(()=>{ const d=new Date(); d.setHours(23,59,0,0); return d.toISOString().slice(0,16); });
 
   async function loadWaehler() { setLoading(true); try{ const r=await callFlow("getWaehler",{ eventID }); setWaehler((r||[]).map(mapWaehler)); setAusgewaehlt([]); }catch(e){ setFehler(e.message); } setLoading(false); }
-  async function addEmail() { const email=emailInput.trim().toLowerCase(); if(!email||!email.includes("@")) return; setSaving(true); setFehler(null); try{ await callFlow("saveWaehler",{ eventID, waehler:[{ email, token:"" }] }); setEmailInput(""); await loadWaehler(); setErfolg("Wähler hinzugefügt."); setTimeout(()=>setErfolg(null),2000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function importCSV() { const lines=csvInput.split(/[\n\r,;]+/).map(l=>l.trim().toLowerCase()).filter(l=>l.includes("@")); if(lines.length===0) return; setSaving(true); setFehler(null); try{ await callFlow("saveWaehler",{ eventID, waehler:lines.map(email=>({ email, token:"" })) }); setCsvInput(""); await loadWaehler(); setErfolg(`${lines.length} importiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function addEmail() {
+    const email = emailInput.trim().toLowerCase();
+    if (!email || !email.includes("@")) return;
+    setSaving(true); setFehler(null);
+    try {
+      // 1. Wähler anlegen
+      const result = await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
+      // 2. Token generieren und speichern
+      const token = generateToken();
+      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
+      // 3. Token dem Wähler zuweisen — ID aus dem saveWaehler-Ergebnis
+      const waehlerID = result?.id || result?.ID || result?.[0]?.ID;
+      if (waehlerID) {
+        await callFlow("updateWaehler", { updates:[{ id:parseInt(waehlerID), tokenCode:token, status:"zugewiesen" }] });
+      }
+      setEmailInput(""); await loadWaehler();
+      setErfolg(`Wähler angelegt und Token ${token} zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+    } catch(e) { setFehler(e.message); }
+    setSaving(false);
+  }
+  async function importCSV() {
+    const lines = csvInput.split(/[\n\r,;]+/).map(l=>l.trim().toLowerCase()).filter(l=>l.includes("@"));
+    if (lines.length===0) return;
+    setSaving(true); setFehler(null);
+    try {
+      // 1. Alle Wähler anlegen
+      await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
+      // 2. Tokens generieren und speichern
+      const tokens = lines.map(()=>generateToken());
+      await callFlow("saveTokens", { eventID, tokens, typ:"online", gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
+      // 3. Wähler neu laden um IDs zu bekommen, dann Token zuweisen
+      const freshResult = await callFlow("getWaehler", { eventID });
+      const alleWaehler = (freshResult||[]).map(mapWaehler);
+      const ohneToken = alleWaehler.filter(w=>w.status==="angelegt"||!w.tokenCode);
+      if (ohneToken.length > 0) {
+        const updates = ohneToken.slice(0, tokens.length).map((w,i)=>({ id:parseInt(w.id), tokenCode:tokens[i], status:"zugewiesen" }));
+        await callFlow("updateWaehler", { updates });
+      }
+      setCsvInput(""); await loadWaehler();
+      setErfolg(`${lines.length} Wähler importiert und Tokens zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+    } catch(e) { setFehler(e.message); }
+    setSaving(false);
+  }
   async function tokensZuweisen() { const ohneToken=waehler.filter(w=>w.status==="angelegt"); if(ohneToken.length===0){ setErfolg("Alle Wähler haben bereits einen Token."); return; } setSaving(true); setFehler(null); try{ const tokenListe=ohneToken.map(w=>({ id:parseInt(w.id), email:w.email, token:generateToken() })); await callFlow("saveTokens",{ eventID, tokens:tokenListe.map(t=>t.token), typ:"online", gueltigBis:new Date(gueltigBis).toISOString() }); await callFlow("updateWaehler",{ updates:tokenListe.map(t=>({ id:t.id, tokenCode:t.token, status:"zugewiesen" })) }); await loadWaehler(); setErfolg(`${ohneToken.length} Tokens zugewiesen (gültig bis ${new Date(gueltigBis).toLocaleString("de-DE")}).`); setTimeout(()=>setErfolg(null),4000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function emailsVersenden() { const zuSenden=waehler.filter(w=>w.status==="zugewiesen"&&w.tokenCode); if(zuSenden.length===0){ setFehler("Keine Wähler mit zugewiesenem Token."); return; } setSending(true); setFehler(null); try{ await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:zuSenden.map(w=>parseInt(w.id)) }); await loadWaehler(); setErfolg(`${zuSenden.length} E-Mails versendet.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSending(false); }
   async function einzelTokenToggle(w) { const aktiv=w.tokenAktiv===false; if(!confirm(`Token ${w.tokenCode} für ${w.email} wirklich ${aktiv?"reaktivieren":"sperren"}?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:[w.tokenCode], waehlerIDs:[parseInt(w.id)], aktiv }); await loadWaehler(); }catch(e){ setFehler(e.message); } setSaving(false); }
@@ -774,7 +815,7 @@ function LeitungWaehler({ appData, eventID }) {
       <GueltigBisInput/>
       <div style={S.statGrid}><StatCard num={waehler.length} label="Wähler gesamt" color={C.primary}/><StatCard num={angelegt} label="Ohne Token" color={C.textLight}/><StatCard num={zugewiesen} label="Token zugewiesen" color={C.warning}/><StatCard num={versendet} label="E-Mail versendet" color={C.accent}/></div>
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={tokensZuweisen} disabled={saving||angelegt===0}>🔑 Tokens zuweisen ({angelegt})</button>
+        {angelegt>0&&<div style={{ ...S.alert, ...S.alertWarning }}>⚠️ {angelegt} Wähler ohne Token — bitte neu anlegen oder manuell in SharePoint korrigieren.</div>}
         <button style={{ ...S.btn, ...S.btnSuccess }} onClick={emailsVersenden} disabled={sending||zugewiesen===0}>{sending?"Wird versendet...":`📧 E-Mails versenden (${zugewiesen})`}</button>
         {hatAuswahl&&kannLoeschen&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehlteLoschen} disabled={saving}>🗑️ Löschen ({ausgewaehlt.filter(id=>waehler.find(w=>w.id===id)?.status!=="versendet").length})</button>}
         {hatAuswahl&&kannDeaktivieren&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehltDeaktivieren} disabled={saving}>🚫 Token sperren</button>}
