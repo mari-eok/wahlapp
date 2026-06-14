@@ -1433,6 +1433,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   const [fehler, setFehler] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [showPin, setShowPin] = useState({});
 
   async function laden() {
     setLoading(true);
@@ -1560,7 +1561,11 @@ function SuperadminView({ appData, onExit, onDataChange }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
                   <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setExpanded(isOpen ? null : wl.id)}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{wl.name}</div>
-                    <div style={{ fontSize: 12, color: C.textLight, marginTop: 2 }}>EventID: {wl.eventID} · {wahlenDieses.length} Wahlen · PIN: {"•".repeat((wl.leitungPIN || "").length)}</div>
+                    <div style={{ fontSize: 12, color: C.textLight, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                      EventID: {wl.eventID} · {wahlenDieses.length} Wahlen · PIN:{" "}
+                      <span style={{ fontFamily: "monospace", letterSpacing: 2 }}>{showPin[wl.id] ? wl.leitungPIN : "•".repeat((wl.leitungPIN || "").length)}</span>
+                      <button onClick={e => { e.stopPropagation(); setShowPin(p => ({ ...p, [wl.id]: !p[wl.id] })); }} style={{ background: "none", border: "none", cursor: "pointer", color: C.textLight, fontSize: 13, padding: "0 2px" }}>{showPin[wl.id] ? "🙈" : "👁"}</button>
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     {wl.aktiv ? <span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span> : <span style={{ ...S.badge, ...S.badgeGray }}>inaktiv</span>}
