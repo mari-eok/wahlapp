@@ -43,8 +43,8 @@ async function callFlow(flowName, body) {
   const url = API.flows[flowName];
   if (url.startsWith("PLATZHALTER")) throw new Error(`Flow '${flowName}' noch nicht konfiguriert.`);
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: API.key, ...body }) });
-  // 502 bei deleteToken/saveTokens = Flow-Timeout, SharePoint hat aber trotzdem ausgeführt
-  if (res.status === 502 && (flowName === "deleteToken" || flowName === "saveTokens")) return { status:"ok", timeout:true };
+  // 502 bei deleteToken/saveTokens/deleteWahllokal = Flow-Timeout, SharePoint hat aber trotzdem ausgeführt
+  if (res.status === 502 && ["deleteToken","saveTokens","deleteWahllokal"].includes(flowName)) return { status:"ok", timeout:true };
   if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
   return res.json();
 }
@@ -58,7 +58,7 @@ function updateURL(wahllokalID, ansicht) {
   if (ansicht && ansicht !== "wahllokal") params.set("ansicht", ansicht);
   window.history.pushState({}, "", params.toString() ? `?${params.toString()}` : window.location.pathname);
 }
-function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, leitungPIN: item.LeitungPIN }; }
+function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, leitungPIN: item.LeitungPIN, modus: item.Modus || "beides" }; }
 function mapWahl(item) {
   return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), optionen: [] };
 }
@@ -1069,21 +1069,29 @@ function LeitungWaehler({ appData, eventID }) {
     </div>
   );
 
-  if (!szenario) return (
-    <div>
-      <h3 style={{ margin:"0 0 24px", color:C.primary }}>Wähler & Tokens</h3>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-        <div style={{ ...S.card, cursor:"pointer", border:`2px solid ${C.border}`, textAlign:"center", padding:32 }} onClick={()=>{ setSzenario("online"); loadWaehler(); }}>
-          <div style={{ fontSize:48, marginBottom:16 }}>📧</div><h3 style={{ color:C.primary, margin:"0 0 8px" }}>Online-Versand</h3>
-          <p style={{ color:C.textLight, fontSize:14, lineHeight:1.6 }}>Wähler per E-Mail einladen. Token wird automatisch generiert und versendet.</p>
-        </div>
-        <div style={{ ...S.card, cursor:"pointer", border:`2px solid ${C.border}`, textAlign:"center", padding:32 }} onClick={()=>setSzenario("offline")}>
-          <div style={{ fontSize:48, marginBottom:16 }}>📋</div><h3 style={{ color:C.primary, margin:"0 0 8px" }}>Vor-Ort-Ausgabe</h3>
-          <p style={{ color:C.textLight, fontSize:14, lineHeight:1.6 }}>Anonyme Tokens generieren und ausdrucken. Verteilung erfolgt vor Ort.</p>
+  if (!szenario) {
+    const modus = wahllokal?.modus || "beides";
+    const zeigeOnline = modus === "beides" || modus === "online";
+    const zeigeOffline = modus === "beides" || modus === "offline";
+    return (
+      <div>
+        <h3 style={{ margin:"0 0 24px", color:C.primary }}>Wähler & Tokens</h3>
+        {!zeigeOnline&&!zeigeOffline&&<div style={{ ...S.alert, ...S.alertWarning }}>Keine Methode für dieses Wahllokal aktiviert. Bitte im Superadmin konfigurieren.</div>}
+        <div style={{ display:"grid", gridTemplateColumns:zeigeOnline&&zeigeOffline?"1fr 1fr":"1fr", gap:16 }}>
+          {zeigeOnline&&<div style={{ ...S.card, cursor:"pointer", border:`2px solid ${C.border}`, textAlign:"center", padding:32 }} onClick={()=>{ setSzenario("online"); loadWaehler(); }}>
+            <div style={{ fontSize:48, marginBottom:16 }}>📧</div>
+            <h3 style={{ color:C.primary, margin:"0 0 8px" }}>Online-Versand</h3>
+            <p style={{ color:C.textLight, fontSize:14, lineHeight:1.6 }}>Wähler per E-Mail einladen. Token wird automatisch generiert und versendet.</p>
+          </div>}
+          {zeigeOffline&&<div style={{ ...S.card, cursor:"pointer", border:`2px solid ${C.border}`, textAlign:"center", padding:32 }} onClick={()=>setSzenario("offline")}>
+            <div style={{ fontSize:48, marginBottom:16 }}>📋</div>
+            <h3 style={{ color:C.primary, margin:"0 0 8px" }}>Vor-Ort-Ausgabe</h3>
+            <p style={{ color:C.textLight, fontSize:14, lineHeight:1.6 }}>Anonyme Tokens generieren und ausdrucken. Verteilung erfolgt vor Ort.</p>
+          </div>}
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   if (szenario==="offline") return (
     <div>
@@ -1277,7 +1285,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
     setLoading(false);
   }
   useEffect(()=>{ laden(); },[]);
-  async function saveWahllokal(f) { setSaving(true); setFehler(null); try{ await callFlow("saveWahllokal",{ wahllokalID:f.id?parseInt(f.id):null, eventID:f.eventID, name:f.name, aktiv:f.aktiv!==false, leitungPIN:f.leitungPIN||"0000" }); await laden(); await onDataChange(); setForm(null); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function saveWahllokal(f) { setSaving(true); setFehler(null); try{ await callFlow("saveWahllokal",{ wahllokalID:f.id?parseInt(f.id):null, eventID:f.eventID, name:f.name, aktiv:f.aktiv!==false, leitungPIN:f.leitungPIN||"0000", modus:f.modus||"beides" }); await laden(); await onDataChange(); setForm(null); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function deleteWahllokal(wl) { if(!confirm(`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen werden ebenfalls gelöscht.`)) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
   const tabs = [{ id:"wahllokale", label:"🏛️ Wahllokale" },{ id:"wahlen", label:"📊 Alle Wahlen" },{ id:"flows", label:"⚙️ Flows" }];
 
@@ -1288,6 +1296,24 @@ function SuperadminView({ appData, onExit, onDataChange }) {
         <div style={S.formGroup}><label style={S.label}>Name</label><input style={S.input} value={form.name||""} onChange={e=>setForm(x=>({...x,name:e.target.value}))} placeholder="z.B. Synode Ortenau"/></div>
         <div style={S.formGroup}><label style={S.label}>EventID</label><input style={S.input} value={form.eventID||""} onChange={e=>setForm(x=>({...x,eventID:e.target.value.toUpperCase()}))} placeholder="z.B. SOR" maxLength={10}/><p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Kurzkürzel — wird in der URL verwendet.</p></div>
         <div style={S.formGroup}><label style={S.label}>Wahlleitung-PIN</label><div style={{ position:"relative" }}><input style={{ ...S.input, paddingRight:40 }} value={form.leitungPIN||""} onChange={e=>setForm(x=>({...x,leitungPIN:e.target.value}))} placeholder="PIN" maxLength={8} type={showPin["form"]?"text":"password"}/><button onClick={()=>togglePin("form")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:16, color:C.textLight }}>{showPin["form"]?"🙈":"👁"}</button></div></div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Verfügbare Funktionen</label>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {[
+              { val:"beides", label:"📧 Online-Versand & 📋 Vor-Ort-Ausgabe", hint:"Beide Methoden stehen der Wahlleitung zur Verfügung" },
+              { val:"online", label:"📧 Nur Online-Versand", hint:"Tokens werden per E-Mail verschickt" },
+              { val:"offline", label:"📋 Nur Vor-Ort-Ausgabe", hint:"Tokens werden vor Ort ausgedruckt und verteilt" },
+            ].map(opt=>(
+              <label key={opt.val} style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer", padding:"10px 12px", borderRadius:8, border:`1.5px solid ${(form.modus||"beides")===opt.val?C.primary:C.border}`, background:(form.modus||"beides")===opt.val?"#eef4fb":"transparent" }}>
+                <input type="radio" name="modus" value={opt.val} checked={(form.modus||"beides")===opt.val} onChange={()=>setForm(x=>({...x,modus:opt.val}))} style={{ marginTop:2 }}/>
+                <div>
+                  <div style={{ fontWeight:600, fontSize:14 }}>{opt.label}</div>
+                  <div style={{ fontSize:12, color:C.textLight }}>{opt.hint}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
         <div style={S.formGroup}><label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:14 }}><input type="checkbox" checked={form.aktiv!==false} onChange={e=>setForm(x=>({...x,aktiv:e.target.checked}))}/>Wahllokal aktiv</label></div>
         <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}><button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setForm(null)}>Abbrechen</button><button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>saveWahllokal(form)} disabled={saving}>{saving?"Speichern…":"Speichern"}</button></div>
       </div>
@@ -1307,7 +1333,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       {tab==="wahllokale"&&(
         <div style={S.card}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}><div style={S.sectionLabel}>Wahllokale</div><button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>setForm({ name:"", eventID:"", leitungPIN:"", aktiv:true })}>+ Neues Wahllokal</button></div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}><div style={S.sectionLabel}>Wahllokale</div><button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>setForm({ name:"", eventID:"", leitungPIN:"", aktiv:true, modus:"beides" })}>+ Neues Wahllokal</button></div>
           {loading&&<p style={{ color:C.textLight, fontSize:14 }}>Wird geladen…</p>}
           {!loading&&wahllokale?.map(wl=>{
             const wahlenDieses=alleWahlen.filter(w=>w.eventID===wl.eventID); const isOpen=expanded===wl.id;
@@ -1316,7 +1342,11 @@ function SuperadminView({ appData, onExit, onDataChange }) {
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 0" }}>
                   <div style={{ cursor:"pointer", flex:1 }} onClick={()=>setExpanded(isOpen?null:wl.id)}>
                     <div style={{ fontWeight:700, fontSize:15 }}>{wl.name}</div>
-                    <div style={{ fontSize:12, color:C.textLight, marginTop:2, display:"flex", alignItems:"center", gap:6 }}>EventID: {wl.eventID} · {wahlenDieses.length} Wahlen · PIN: <span style={{ fontFamily:"monospace", letterSpacing:2 }}>{showPin[wl.id]?wl.leitungPIN:"•".repeat((wl.leitungPIN||"").length)}</span><button onClick={e=>{ e.stopPropagation(); togglePin(wl.id); }} style={{ background:"none", border:"none", cursor:"pointer", color:C.textLight, fontSize:13, padding:"0 2px" }}>{showPin[wl.id]?"🙈":"👁"}</button></div>
+                    <div style={{ fontSize:12, color:C.textLight, marginTop:2, display:"flex", alignItems:"center", gap:6 }}>
+                    EventID: {wl.eventID} · {wahlenDieses.length} Wahlen · PIN: <span style={{ fontFamily:"monospace", letterSpacing:2 }}>{showPin[wl.id]?wl.leitungPIN:"•".repeat((wl.leitungPIN||"").length)}</span>
+                    <button onClick={e=>{ e.stopPropagation(); togglePin(wl.id); }} style={{ background:"none", border:"none", cursor:"pointer", color:C.textLight, fontSize:13, padding:"0 2px" }}>{showPin[wl.id]?"🙈":"👁"}</button>
+                    · {wl.modus==="online"?"📧 Online":wl.modus==="offline"?"📋 Vor-Ort":"📧+📋 Beides"}
+                  </div>
                   </div>
                   <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                     {wl.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeGray }}>inaktiv</span>}
