@@ -714,7 +714,14 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
     setLoesching(false);
   }
   const [filter, setFilter] = useState("alle");
+  const [sort, setSort] = useState({ col:"erstellt", dir:"desc" });
   const now = new Date();
+
+  function toggleSortToken(col) { setSort(s=>s.col===col?{ col, dir:s.dir==="asc"?"desc":"asc" }:{ col, dir:"asc" }); }
+  function SortThT({ col, label }) {
+    const aktiv = sort.col===col;
+    return (<th style={{ ...S.th, cursor:"pointer", userSelect:"none", whiteSpace:"nowrap" }} onClick={()=>toggleSortToken(col)}>{label} <span style={{ color:aktiv?C.primary:C.border, fontSize:10 }}>{aktiv?(sort.dir==="asc"?"▲":"▼"):"▲"}</span></th>);
+  }
   function formatCode(code) { return code.includes("-") ? code : code.slice(0,4)+"-"+code.slice(4); }
   function gueltigkeitStatus(t) {
     if (!t.aktiv) return { label:"🔒 gesperrt", color:C.error, bg:C.errorBg };
@@ -734,6 +741,22 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
     if(filter==="abgelaufen") return t.aktiv && !t.verwendet && t.gueltigBis && parseGueltigBis(t.gueltigBis) < now;
     if(filter==="gesperrt") return !t.aktiv;
     return true;
+  }).sort((a,b)=>{
+    const dir = sort.dir==="asc" ? 1 : -1;
+    if(sort.col==="code") return (a.code||"").localeCompare(b.code||"") * dir;
+    if(sort.col==="status"){
+      const sv = t=>t.verwendet?"abgestimmt":!t.aktiv?"gesperrt":t.gueltigBis&&parseGueltigBis(t.gueltigBis)<now?"abgelaufen":"gueltig";
+      return sv(a).localeCompare(sv(b)) * dir;
+    }
+    if(sort.col==="gueltigBis"){
+      const da = a.gueltigBis ? parseGueltigBis(a.gueltigBis) : new Date(0);
+      const db = b.gueltigBis ? parseGueltigBis(b.gueltigBis) : new Date(0);
+      return (da-db) * dir;
+    }
+    // default: erstellt
+    const da = a.erstellt ? new Date(a.erstellt) : new Date(0);
+    const db = b.erstellt ? new Date(b.erstellt) : new Date(0);
+    return (da-db) * dir;
   });
   const alleAusgewaehlt=gefiltert.length>0&&gefiltert.every(t=>ausgewaehlt.includes(t.id));
   function toggleAuswahl(id){ setAusgewaehlt(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]); }
@@ -804,11 +827,11 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr>
             <th style={{ ...S.th, width:36 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th>
-            <th style={{ ...S.th }}>Token</th>
-            <th style={{ ...S.th }}>Status</th>
-            <th style={{ ...S.th }}>Erstellt</th>
-            <th style={{ ...S.th }}>Gültig bis</th>
-            <th style={{ ...S.th }}>Aktion</th>
+            <SortThT col="code" label="Token"/>
+            <SortThT col="status" label="Status"/>
+            <SortThT col="erstellt" label="Erstellt"/>
+            <SortThT col="gueltigBis" label="Gültig bis"/>
+            <th style={S.th}>Aktion</th>
           </tr></thead>
           <tbody>{gefiltert.map(t=>{
             const gs = gueltigkeitStatus(t);
@@ -955,7 +978,42 @@ function LeitungWaehler({ appData, eventID }) {
   async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler reaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setTokenReloadTrigger(t=>t+1); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
 
-  const gefilterteWaehler = waehler.filter(w=>!suche||w.email.includes(suche.toLowerCase()));
+  // Sortierung & Filter State
+  const [sortWaehler, setSortWaehler] = useState({ col:"email", dir:"asc" });
+  const [filterStatus, setFilterStatus] = useState("alle");
+
+  function toggleSort(col) {
+    setSortWaehler(s => s.col===col ? { col, dir:s.dir==="asc"?"desc":"asc" } : { col, dir:"asc" });
+  }
+  function SortTh({ col, label }) {
+    const aktiv = sortWaehler.col===col;
+    return (
+      <th style={{ ...S.th, cursor:"pointer", userSelect:"none", whiteSpace:"nowrap" }} onClick={()=>toggleSort(col)}>
+        {label} <span style={{ color:aktiv?C.primary:C.border, fontSize:10 }}>{aktiv?(sortWaehler.dir==="asc"?"▲":"▼"):"▲"}</span>
+      </th>
+    );
+  }
+
+  const statusFilterBtns = [
+    { id:"alle", label:`Alle (${waehler.length})` },
+    { id:"zugewiesen", label:`Bereit (${waehler.filter(w=>w.status==="zugewiesen").length})` },
+    { id:"versendet", label:`Versendet (${waehler.filter(w=>w.status==="versendet").length})` },
+    { id:"angelegt", label:`Ohne Token (${waehler.filter(w=>w.status==="angelegt").length})` },
+  ];
+
+  const gefilterteWaehler = waehler
+    .filter(w => {
+      if (suche && !w.email.includes(suche.toLowerCase())) return false;
+      if (filterStatus !== "alle" && w.status !== filterStatus) return false;
+      return true;
+    })
+    .sort((a,b) => {
+      const dir = sortWaehler.dir==="asc" ? 1 : -1;
+      if (sortWaehler.col==="email") return a.email.localeCompare(b.email) * dir;
+      if (sortWaehler.col==="status") return a.status.localeCompare(b.status) * dir;
+      if (sortWaehler.col==="token") return (a.tokenCode||"").localeCompare(b.tokenCode||"") * dir;
+      return 0;
+    });
   const alleAusgewaehlt = gefilterteWaehler.length>0&&gefilterteWaehler.every(w=>ausgewaehlt.includes(w.id));
   const hatAuswahl = ausgewaehlt.length>0;
   const kannLoeschen = ausgewaehlt.some(id=>waehler.find(w=>w.id===id)?.status!=="versendet");
@@ -1022,57 +1080,104 @@ function LeitungWaehler({ appData, eventID }) {
 
   return (
     <div>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}><button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSzenario(null)}>← Zurück</button><h3 style={{ margin:0, color:C.primary }}>📧 Online-Versand</h3></div>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+        <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSzenario(null)}>← Zurück</button>
+        <h3 style={{ margin:0, color:C.primary }}>📧 Online-Versand</h3>
+      </div>
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}<button onClick={()=>setFehler(null)} style={{ float:"right", background:"none", border:"none", cursor:"pointer" }}>✕</button></div>}
       {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
-      <GueltigBisInput/>
-      <div style={S.statGrid}><StatCard num={waehler.length} label="Wähler gesamt" color={C.primary}/><StatCard num={angelegt} label="Ohne Token" color={C.textLight}/><StatCard num={zugewiesen} label="Token zugewiesen" color={C.warning}/><StatCard num={versendet} label="E-Mail versendet" color={C.accent}/></div>
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        {angelegt>0&&<div style={{ ...S.alert, ...S.alertWarning }}>⚠️ {angelegt} Wähler ohne Token — bitte neu anlegen oder manuell in SharePoint korrigieren.</div>}
-        <button style={{ ...S.btn, ...S.btnSuccess }} onClick={emailsVersenden} disabled={sending||zugewiesen===0}>{sending?"Wird versendet...":`📧 E-Mails versenden (${zugewiesen})`}</button>
-        {hatAuswahl&&kannLoeschen&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehlteLoschen} disabled={saving}>🗑️ Löschen ({ausgewaehlt.filter(id=>waehler.find(w=>w.id===id)?.status!=="versendet").length})</button>}
-        {hatAuswahl&&kannDeaktivieren&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehltDeaktivieren} disabled={saving}>🚫 Token sperren</button>}
-        {hatAuswahl&&kannAktivieren&&<button style={{ ...S.btn, ...S.btnSuccess }} onClick={ausgewaehltAktivieren} disabled={saving}>✅ Token aktivieren</button>}
-        <button style={{ ...S.btn, ...S.btnGhost }} onClick={loadWaehler} disabled={loading}>🔄</button>
-      </div>
-      <div style={S.navTabs}>
-        <button style={{ ...S.navTab, ...(tab==="liste"?S.navTabActive:{}) }} onClick={()=>setTab("liste")}>📋 Wähler-Liste</button>
-        <button style={{ ...S.navTab, ...(tab==="hinzufuegen"?S.navTabActive:{}) }} onClick={()=>setTab("hinzufuegen")}>+ Hinzufügen</button>
-      </div>
-      {tab==="hinzufuegen"&&(
-        <div style={S.card}>
-          <div style={S.formGroup}><label style={S.label}>Einzeln hinzufügen</label><div style={{ display:"flex", gap:8 }}><input style={{ ...S.input, flex:1 }} type="email" value={emailInput} onChange={e=>setEmailInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addEmail()} placeholder="name@ekiba.de"/><button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmail} disabled={saving}>{saving?"...":"+ Hinzufügen"}</button></div></div>
-          <div style={S.formGroup}><label style={S.label}>CSV / Mehrere importieren</label><p style={{ color:C.textLight, fontSize:12, marginBottom:8 }}>E-Mail-Adressen durch Komma, Semikolon oder Zeilenumbruch getrennt:</p><textarea style={{ ...S.input, height:100, resize:"vertical", marginBottom:8 }} value={csvInput} onChange={e=>setCsvInput(e.target.value)} placeholder="max@ekiba.de, anna@ekiba.de"/><button style={{ ...S.btn, ...S.btnPrimary }} onClick={importCSV} disabled={saving}>{saving?"Importieren...":"📋 Importieren"}</button></div>
+
+      {/* SCHRITT 1: Wähler hinzufügen */}
+      <div style={S.card}>
+        <div style={S.sectionLabel}>1 · Wähler hinzufügen</div>
+        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Tragen Sie E-Mail-Adressen ein. Token und Gültigkeit werden automatisch beim Anlegen vergeben.</p>
+        <div style={S.formGroup}>
+          <label style={S.label}>Einzeln</label>
+          <div style={{ display:"flex", gap:8 }}>
+            <input style={{ ...S.input, flex:1 }} type="email" value={emailInput} onChange={e=>setEmailInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addEmail()} placeholder="name@ekiba.de"/>
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmail} disabled={saving}>{saving?"…":"+ Hinzufügen"}</button>
+          </div>
         </div>
-      )}
-      {tab==="liste"&&(
-        <div style={S.card}>
-          <div style={{ marginBottom:12 }}><input style={S.input} type="text" value={suche} onChange={e=>setSuche(e.target.value)} placeholder="🔍 E-Mail suchen..."/></div>
-          {loading?<p style={{ color:C.textLight, fontSize:14 }}>Wird geladen...</p>:gefilterteWaehler.length===0?<p style={{ color:C.textLight, fontSize:14 }}>{suche?"Keine Ergebnisse.":"Noch keine Wähler angelegt."}</p>:(
-            <table style={S.table}>
-              <thead><tr><th style={{ ...S.th, width:40 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th><th style={S.th}>E-Mail</th><th style={S.th}>Token</th><th style={S.th}>Verwendet</th><th style={S.th}>Status</th><th style={S.th}>Aktion</th></tr></thead>
-              <tbody>{gefilterteWaehler.map(w=>(
-                <tr key={w.id} style={{ background:ausgewaehlt.includes(w.id)?"#f0f4ff":"transparent" }}>
-                  <td style={S.td}><input type="checkbox" checked={ausgewaehlt.includes(w.id)} onChange={()=>toggleAuswahl(w.id)}/></td>
-                  <td style={S.td}>{w.email}</td>
-                  <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.1em" }}>
-                    {w.tokenCode?<div style={{ display:"flex", alignItems:"center", gap:8 }}><span style={{ textDecoration:w.tokenAktiv===false?"line-through":"none", opacity:w.tokenAktiv===false?0.5:1 }}>{w.tokenCode}</span>{w.tokenAktiv===false&&<span style={{ ...S.badge, background:C.errorBg, color:C.error, border:`1px solid ${C.error}`, fontSize:11 }}>gesperrt</span>}</div>:<span style={{ color:C.textLight }}>—</span>}
-                  </td>
-                  <td style={S.td}>{w.verwendet?<span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}>✓ abgestimmt</span>:<span style={{ ...S.badge, ...S.badgeGray, fontSize:11 }}>—</span>}</td>
-                  <td style={S.td}><span style={{ ...S.badge, ...(w.status==="versendet"?S.badgeGreen:w.status==="zugewiesen"?S.badgeOrange:S.badgeGray) }}>{w.status==="versendet"?"✅ versendet":w.status==="zugewiesen"?"🔑 zugewiesen":"📝 angelegt"}</span></td>
-                  <td style={S.td}>
-                    <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                      {w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:w.tokenAktiv===false?C.success:C.error, border:`1px solid ${w.tokenAktiv===false?C.success:C.error}` }} onClick={()=>einzelTokenToggle(w)} disabled={saving}>{w.tokenAktiv===false?"Aktivieren":"Sperren"}</button>}
-                      {w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:C.primary, border:`1px solid ${C.primary}` }} onClick={()=>einzelVersenden(w)} disabled={saving} title={w.status==="versendet"?"Erneut senden":"E-Mail senden"}>📧 {w.status==="versendet"?"Erneut":""}</button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
-          )}
-          {hatAuswahl&&<div style={{ marginTop:12, fontSize:13, color:C.textLight }}>{ausgewaehlt.length} ausgewählt</div>}
+        <div style={S.formGroup}>
+          <label style={S.label}>Mehrere (CSV)</label>
+          <p style={{ color:C.textLight, fontSize:12, marginBottom:6 }}>E-Mail-Adressen durch Komma, Semikolon oder Zeilenumbruch getrennt</p>
+          <textarea style={{ ...S.input, height:80, resize:"vertical", marginBottom:8 }} value={csvInput} onChange={e=>setCsvInput(e.target.value)} placeholder="max@ekiba.de, anna@ekiba.de"/>
+          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={importCSV} disabled={saving}>{saving?"Importieren…":"📋 Importieren"}</button>
         </div>
-      )}
+        <DateTimePicker label="Token gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Gilt für neu angelegte Wähler."/>
+      </div>
+
+      {/* SCHRITT 2: Versand */}
+      <div style={S.card}>
+        <div style={S.sectionLabel}>2 · E-Mails versenden</div>
+        <div style={S.statGrid}>
+          <StatCard num={waehler.length} label="Wähler gesamt" color={C.primary}/>
+          <StatCard num={zugewiesen} label="Bereit zum Versand" color={C.warning}/>
+          <StatCard num={versendet} label="Versendet" color={C.accent}/>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <button style={{ ...S.btn, ...S.btnSuccess, opacity:zugewiesen===0?0.5:1 }} onClick={emailsVersenden} disabled={sending||zugewiesen===0}>
+            {sending?"Wird versendet…":`📧 E-Mails versenden (${zugewiesen})`}
+          </button>
+          {hatAuswahl&&kannLoeschen&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehlteLoschen} disabled={saving}>🗑️ Löschen ({ausgewaehlt.filter(id=>waehler.find(w=>w.id===id)?.status!=="versendet").length})</button>}
+          {hatAuswahl&&kannDeaktivieren&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehltDeaktivieren} disabled={saving}>🚫 Token sperren</button>}
+          {hatAuswahl&&kannAktivieren&&<button style={{ ...S.btn, ...S.btnSuccess }} onClick={ausgewaehltAktivieren} disabled={saving}>✅ Token aktivieren</button>}
+          <button style={{ ...S.btn, ...S.btnGhost }} onClick={loadWaehler} disabled={loading}>🔄</button>
+        </div>
+      </div>
+
+      {/* SCHRITT 3: Wähler-Liste */}
+      <div style={S.card}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <div style={S.sectionLabel}>3 · Wähler-Liste</div>
+          {hatAuswahl&&<div style={{ fontSize:13, color:C.textLight }}>{ausgewaehlt.length} ausgewählt</div>}
+        </div>
+        <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+          {statusFilterBtns.map(b=><button key={b.id} style={{ ...S.btn, fontSize:12, padding:"4px 10px", ...(filterStatus===b.id?S.btnPrimary:S.btnGhost) }} onClick={()=>setFilterStatus(b.id)}>{b.label}</button>)}
+        </div>
+        <div style={{ marginBottom:12 }}>
+          <input style={S.input} type="text" value={suche} onChange={e=>setSuche(e.target.value)} placeholder="🔍 E-Mail suchen..."/>
+        </div>
+        {loading?<p style={{ color:C.textLight, fontSize:14 }}>Wird geladen...</p>
+          :gefilterteWaehler.length===0?<p style={{ color:C.textLight, fontSize:14 }}>{suche||filterStatus!=="alle"?"Keine Ergebnisse.":"Noch keine Wähler angelegt."}</p>
+          :(
+          <table style={S.table}>
+            <thead><tr>
+              <th style={{ ...S.th, width:40 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th>
+              <SortTh col="email" label="E-Mail"/>
+              <SortTh col="token" label="Token"/>
+              <SortTh col="status" label="Status"/>
+              <th style={S.th}>Aktion</th>
+            </tr></thead>
+            <tbody>{gefilterteWaehler.map(w=>(
+              <tr key={w.id} style={{ background:ausgewaehlt.includes(w.id)?"#f0f4ff":"transparent" }}>
+                <td style={S.td}><input type="checkbox" checked={ausgewaehlt.includes(w.id)} onChange={()=>toggleAuswahl(w.id)}/></td>
+                <td style={S.td}>{w.email}</td>
+                <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.08em" }}>
+                  {w.tokenCode
+                    ? <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <span style={{ textDecoration:w.tokenAktiv===false?"line-through":"none", opacity:w.tokenAktiv===false?0.5:1 }}>{w.tokenCode}</span>
+                        {w.tokenAktiv===false&&<span style={{ ...S.badge, background:C.errorBg, color:C.error, fontSize:10 }}>gesperrt</span>}
+                      </div>
+                    : <span style={{ color:C.textLight }}>—</span>}
+                </td>
+                <td style={S.td}>
+                  <span style={{ ...S.badge, ...(w.status==="versendet"?S.badgeGreen:w.status==="zugewiesen"?S.badgeOrange:S.badgeGray) }}>
+                    {w.status==="versendet"?"✅ versendet":w.status==="zugewiesen"?"🔑 zugewiesen":"📝 angelegt"}
+                  </span>
+                  {w.verwendet&&<span style={{ ...S.badge, ...S.badgeGreen, fontSize:10, marginLeft:4 }}>✓ abgestimmt</span>}
+                </td>
+                <td style={S.td}>
+                  <div style={{ display:"flex", gap:4 }}>
+                    {w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:w.tokenAktiv===false?C.success:C.error, border:`1px solid ${w.tokenAktiv===false?C.success:C.error}` }} onClick={()=>einzelTokenToggle(w)} disabled={saving}>{w.tokenAktiv===false?"Aktivieren":"Sperren"}</button>}
+                    {w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:C.primary, border:`1px solid ${C.primary}` }} onClick={()=>einzelVersenden(w)} disabled={saving}>📧{w.status==="versendet"?" Erneut":""}</button>}
+                  </div>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
