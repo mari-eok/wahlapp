@@ -673,14 +673,20 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
     if(zu.length===0) return;
     if(!confirm(`${zu.length} Token(s) wirklich löschen?`)) return;
     setLoesching(true); setFehler(null);
-    try { await callFlow("deleteToken",{ eventID, tokenIDs:zu.map(t=>parseInt(t.id)), tokenCodes:zu.map(t=>t.code) }); setAusgewaehlt([]); await laden(); setErfolg(`${zu.length} Token(s) gelöscht.`); setTimeout(()=>setErfolg(null),3000); } catch(e){ setFehler(e.message); }
+    try { await callFlow("deleteToken",{ eventID, tokenIDs:zu.map(t=>parseInt(t.id)), tokenCodes:zu.map(t=>t.code) }); }
+    catch(e){ if(!e.message.includes("502")){ setFehler(e.message); setLoesching(false); return; } }
+    setAusgewaehlt([]); setFilter("alle"); await laden();
+    setErfolg(`${zu.length} Token(s) gelöscht.`); setTimeout(()=>setErfolg(null),3000);
     setLoesching(false);
   }
   async function loescheAlle() {
     if(tokens.length===0) return;
     if(!confirm(`ALLE ${tokens.length} Tokens löschen? Nur nach vollständigem Abschluss empfohlen.`)) return;
     setLoesching(true); setFehler(null);
-    try { await callFlow("deleteToken",{ eventID, tokenIDs:tokens.map(t=>parseInt(t.id)), tokenCodes:tokens.map(t=>t.code) }); setAusgewaehlt([]); await laden(); setErfolg("Alle Tokens gelöscht."); setTimeout(()=>setErfolg(null),3000); } catch(e){ setFehler(e.message); }
+    try { await callFlow("deleteToken",{ eventID, tokenIDs:tokens.map(t=>parseInt(t.id)), tokenCodes:tokens.map(t=>t.code) }); }
+    catch(e){ if(!e.message.includes("502")){ setFehler(e.message); setLoesching(false); return; } }
+    setAusgewaehlt([]); setFilter("alle"); await laden();
+    setErfolg("Alle Tokens gelöscht."); setTimeout(()=>setErfolg(null),3000);
     setLoesching(false);
   }
   const [filter, setFilter] = useState("alle");
@@ -789,7 +795,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
               setLoesching(true);
               callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
                 .then(async ()=>{ setFilter("alle"); await laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); })
-                .catch(e=>setFehler(e.message))
+                .catch(e=>{ if(!e.message.includes("502")){ setFehler(e.message); } else { setFilter("alle"); laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); } })
                 .finally(()=>setLoesching(false));
             }
             return (
