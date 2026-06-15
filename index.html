@@ -58,7 +58,7 @@ function updateURL(wahllokalID, ansicht) {
   if (ansicht && ansicht !== "wahllokal") params.set("ansicht", ansicht);
   window.history.pushState({}, "", params.toString() ? `?${params.toString()}` : window.location.pathname);
 }
-function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, leitungPIN: item.LeitungPIN, modus: item.Modus || "beides" }; }
+function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, leitungPIN: item.LeitungPIN, modus: item.Modus?.Value || item.Modus || "beides" }; }
 function mapWahl(item) {
   return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), optionen: [] };
 }
