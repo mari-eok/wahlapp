@@ -198,11 +198,11 @@ function naechsteHalbeStunde() {
   return toLocalInputValue(now);
 }
 function naechsteViertelStunde() {
-  const now = new Date();
-  const m = now.getMinutes();
-  const rest = 15 - (m % 15);
-  now.setMinutes(m + (rest === 15 ? 15 : rest), 0, 0);
-  return toLocalInputValue(now);
+  const d = new Date();
+  const minuten = d.getMinutes();
+  const naechste = Math.ceil((minuten + 1) / 15) * 15;
+  d.setMinutes(naechste, 0, 0);
+  return toLocalInputValue(d);
 }
 // Deutsches Datumsformat "DD.MM.YYYY HH:MM" → Date
 function parseGueltigBis(val) {
@@ -997,17 +997,26 @@ function LeitungWaehler({ appData, eventID }) {
 
   if (szenario==="offline") return (
     <div>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}><button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSzenario(null)}>← Zurück</button><h3 style={{ margin:0, color:C.primary }}>📋 Vor-Ort-Ausgabe</h3></div>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+        <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSzenario(null)}>← Zurück</button>
+        <h3 style={{ margin:0, color:C.primary }}>📋 Vor-Ort-Ausgabe</h3>
+      </div>
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
-      <GueltigBisInput/>
       <div style={S.card}>
         <div style={S.sectionLabel}>Tokens generieren</div>
-        <div style={{ display:"flex", gap:12, alignItems:"flex-end", marginBottom:8 }}>
-          <div><label style={S.label}>Anzahl</label><input style={{ ...S.input, width:80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/></div>
-          <button style={{ ...S.btn, ...S.btnPrimary, padding:"10px 20px" }} onClick={offlineGenerieren} disabled={saving}>{saving?"Wird generiert...":"Generieren & Exportieren"}</button>
+        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie Anzahl und Gültigkeit fest, dann exportieren Sie die Tokens als Liste zum Ausdrucken.</p>
+        <div style={{ display:"flex", gap:24, flexWrap:"wrap", alignItems:"flex-end", marginBottom:16 }}>
+          <div>
+            <label style={S.label}>Anzahl</label>
+            <input style={{ ...S.input, width:80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/>
+          </div>
+          <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
         </div>
-        <p style={{ color:C.textLight, fontSize:12 }}>Tokens werden in der Datenbank gespeichert und als .txt-Datei exportiert (Format: XXXX-YYYY).</p>
+        <button style={{ ...S.btn, ...S.btnPrimary, padding:"10px 24px" }} onClick={offlineGenerieren} disabled={saving}>
+          {saving ? "Wird generiert…" : "Generieren & Exportieren"}
+        </button>
+        <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>Tokens werden in der Datenbank gespeichert und als .txt-Datei exportiert (Format: XXXX-YYYY).</p>
       </div>
       <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger}/>
     </div>
