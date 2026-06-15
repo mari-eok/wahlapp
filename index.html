@@ -753,7 +753,7 @@ function LeitungWaehler({ appData, eventID }) {
       // Lokal sofort aktualisieren — kein await um 502-Timeout zu vermeiden
       setWaehler(prev=>prev.map(w=>zuSenden.find(s=>s.id===w.id)?{...w,status:"versendet"}:w));
       // Im Hintergrund SharePoint aktualisieren (fire & forget)
-      callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet" })) }).catch(()=>{});
+      callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet", tokenAktiv:true })) }).catch(()=>{});
       setErfolg(`${zuSenden.length} E-Mails versendet.`); setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setSending(false);
@@ -763,7 +763,7 @@ function LeitungWaehler({ appData, eventID }) {
     try {
       await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:[parseInt(w.id)] });
       setWaehler(prev=>prev.map(x=>x.id===w.id?{...x,status:"versendet"}:x));
-      callFlow("updateWaehler",{ updates:[{ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet" }] }).catch(()=>{});
+      callFlow("updateWaehler",{ updates:[{ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet", tokenAktiv:true }] }).catch(()=>{});
       setErfolg(`E-Mail an ${w.email} versendet.`); setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setSaving(false);
