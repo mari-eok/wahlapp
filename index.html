@@ -149,6 +149,44 @@ const S = {
   alertSuccess:{ background:C.successBg, color:"#2d6a4f", border:`1px solid ${C.success}` },
 };
 
+// Nutzerfreundlicher Datum/Uhrzeit-Picker
+function DateTimePicker({ value, onChange, label, hint }) {
+  // value ist ein datetime-local string "YYYY-MM-DDTHH:MM"
+  const parts = (value||"").split("T");
+  const datePart = parts[0]||"";
+  const timePart = parts[1]||"00:00";
+  const [h, m] = timePart.split(":");
+
+  const hours = Array.from({length:24},(_,i)=>String(i).padStart(2,"0"));
+  const minutes = ["00","05","10","15","20","25","30","35","40","45","50","55"];
+
+  function update(newDate, newH, newM) {
+    onChange(`${newDate}T${newH}:${newM}`);
+  }
+
+  return (
+    <div style={S.formGroup}>
+      {label&&<label style={S.label}>{label}</label>}
+      <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+        <input type="date" value={datePart} onChange={e=>update(e.target.value,h||"09",m||"00")}
+          style={{ ...S.input, width:160, cursor:"pointer" }}/>
+        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <select value={h||"09"} onChange={e=>update(datePart,e.target.value,m||"00")}
+            style={{ ...S.select, width:80, padding:"10px 8px" }}>
+            {hours.map(hh=><option key={hh} value={hh}>{hh} Uhr</option>)}
+          </select>
+          <span style={{ color:C.textLight, fontWeight:700 }}>:</span>
+          <select value={m||"00"} onChange={e=>update(datePart,h||"09",e.target.value)}
+            style={{ ...S.select, width:70, padding:"10px 8px" }}>
+            {minutes.map(mm=><option key={mm} value={mm}>{mm}</option>)}
+          </select>
+        </div>
+      </div>
+      {hint&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>{hint}</p>}
+    </div>
+  );
+}
+
 function generateToken() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let t = "";
@@ -706,14 +744,16 @@ function LeitungWaehler({ appData, eventID }) {
     setSaving(true); setFehler(null);
     try {
       // 1. Wähler anlegen
-      const result = await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
+      await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
       // 2. Token generieren und speichern
       const token = generateToken();
       await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
-      // 3. Token dem Wähler zuweisen — ID aus dem saveWaehler-Ergebnis
-      const waehlerID = result?.id || result?.ID || result?.[0]?.ID;
-      if (waehlerID) {
-        await callFlow("updateWaehler", { updates:[{ id:parseInt(waehlerID), tokenCode:token, status:"zugewiesen" }] });
+      // 3. Wähler neu laden um ID zu bekommen
+      const freshResult = await callFlow("getWaehler", { eventID });
+      const alleWaehler = (freshResult||[]).map(mapWaehler);
+      const neuerWaehler = alleWaehler.find(w=>w.email===email&&!w.tokenCode);
+      if (neuerWaehler) {
+        await callFlow("updateWaehler", { updates:[{ id:parseInt(neuerWaehler.id), tokenCode:token, status:"zugewiesen", tokenAktiv:true }] });
       }
       setEmailInput(""); await loadWaehler();
       setErfolg(`Wähler angelegt und Token ${token} zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
@@ -787,8 +827,7 @@ function LeitungWaehler({ appData, eventID }) {
     <div style={{ ...S.card, marginBottom:16 }}>
       <div style={S.sectionLabel}>Token-Gültigkeit</div>
       <div style={{ display:"flex", gap:12, alignItems:"flex-end", flexWrap:"wrap" }}>
-        <div><label style={S.label}>Gültig bis</label><input style={{ ...S.input, width:220 }} type="datetime-local" value={gueltigBis} onChange={e=>setGueltigBis(e.target.value)}/></div>
-        <p style={{ color:C.textLight, fontSize:12, paddingBottom:10 }}>Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar.</p>
+        <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
       </div>
     </div>
   );
@@ -901,11 +940,31 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   function togglePin(id) {
     setShowPin(p=>{ const next={...p,[id]:!p[id]}; if(next[id]){ if(pinTimers.current[id]) clearTimeout(pinTimers.current[id]); pinTimers.current[id]=setTimeout(()=>setShowPin(pp=>({...pp,[id]:false})),5000); } else { if(pinTimers.current[id]) clearTimeout(pinTimers.current[id]); } return next; });
   }
-  async function laden() { setLoading(true); try{ const r=await callFlow("getAlle",{}); setWahllokale(Array.isArray(r)?r.map(mapWahllokal):appData.wahllokale); }catch(e){ setFehler(e.message); } setLoading(false); }
+  const [alleWahlen, setAlleWahlen] = useState(appData.wahlen);
+  async function laden() {
+    setLoading(true);
+    try {
+      const r = await callFlow("getAlle", {});
+      const wls = Array.isArray(r) ? r.map(mapWahllokal) : appData.wahllokale;
+      setWahllokale(wls);
+      // Alle Wahlen aller Wahllokale laden
+      const alleWahlenArr = [];
+      for (const wl of wls) {
+        try {
+          const raw = await callFlow("getDaten", { eventID: wl.eventID });
+          const optionen = (raw.optionen||[]).map(mapOption);
+          const wahlen = (raw.wahlen||[]).map(mapWahl);
+          wahlen.forEach(w=>{ w.optionen=optionen.filter(o=>o.wahlID===w.id); });
+          alleWahlenArr.push(...wahlen);
+        } catch(e) {}
+      }
+      setAlleWahlen(alleWahlenArr);
+    } catch(e) { setFehler(e.message); }
+    setLoading(false);
+  }
   useEffect(()=>{ laden(); },[]);
   async function saveWahllokal(f) { setSaving(true); setFehler(null); try{ await callFlow("saveWahllokal",{ wahllokalID:f.id?parseInt(f.id):null, eventID:f.eventID, name:f.name, aktiv:f.aktiv!==false, leitungPIN:f.leitungPIN||"0000" }); await laden(); await onDataChange(); setForm(null); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function deleteWahllokal(wl) { if(!confirm(`Wahllokal "${wl.name}" wirklich löschen?`)) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id) }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
-  const alleWahlen = appData.wahlen;
   const tabs = [{ id:"wahllokale", label:"🏛️ Wahllokale" },{ id:"wahlen", label:"📊 Alle Wahlen" },{ id:"flows", label:"⚙️ Flows" }];
 
   if (form!==null) return (
@@ -1143,7 +1202,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={S.card}>
         <div style={S.formGroup}><label style={S.label}>Titel</label><input style={S.input} value={f.titel} onChange={e=>setField("titel",e.target.value)} placeholder="z.B. Diakoniepfarrer*in"/></div>
-        <div style={S.formGroup}><label style={S.label}>Startzeit (lokale Zeit)</label><input style={S.input} type="datetime-local" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):"" } onChange={e=>setField("startzeit",e.target.value)}/><p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Angabe in Ihrer lokalen Zeit (MEZ/MESZ).</p></div>
+        <DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ)."/>
         <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap", opacity:f.hatStimmen?0.5:1, pointerEvents:f.hatStimmen?"none":"auto" }}>
           <label style={{ display:"flex", alignItems:"center", gap:8, cursor:f.hatStimmen?"not-allowed":"pointer", fontSize:14 }}><input type="checkbox" checked={f.mehrfach} disabled={!!f.hatStimmen} onChange={e=>setField("mehrfach",e.target.checked)}/>Mehrfachauswahl</label>
           {f.mehrfach&&<><label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}><input type="checkbox" checked={f.exakt} disabled={!!f.hatStimmen} onChange={e=>setField("exakt",e.target.checked)}/>Exakte Anzahl</label><label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>Max: <input style={{ ...S.input, width:60 }} type="number" min={1} value={f.maxAuswahl} disabled={!!f.hatStimmen} onChange={e=>setField("maxAuswahl",parseInt(e.target.value))}/></label></>}
