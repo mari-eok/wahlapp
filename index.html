@@ -891,20 +891,37 @@ function LeitungWaehler({ appData, eventID }) {
     if (!email || !email.includes("@")) return;
     setSaving(true); setFehler(null);
     try {
-      // 1. Wähler anlegen
       await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
-      // 2. Token generieren und speichern
       const token = generateToken();
       await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
-      // 3. Wähler neu laden um ID zu bekommen
+      const freshResult = await callFlow("getWaehler", { eventID });
+      const alleWaehler = (freshResult||[]).map(mapWaehler);
+      const neuerWaehler = alleWaehler.find(w=>w.email===email&&!w.tokenCode);
+      if (neuerWaehler) await callFlow("updateWaehler", { updates:[{ id:parseInt(neuerWaehler.id), tokenCode:token, status:"zugewiesen", tokenAktiv:true }] });
+      setEmailInput(""); await loadWaehler();
+      setErfolg(`Wähler angelegt, Token ${token} zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+    } catch(e) { setFehler(e.message); }
+    setSaving(false);
+  }
+  async function addEmailUndVersenden() {
+    const email = emailInput.trim().toLowerCase();
+    if (!email || !email.includes("@")) return;
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
+      const token = generateToken();
+      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
       const neuerWaehler = alleWaehler.find(w=>w.email===email&&!w.tokenCode);
       if (neuerWaehler) {
         await callFlow("updateWaehler", { updates:[{ id:parseInt(neuerWaehler.id), tokenCode:token, status:"zugewiesen", tokenAktiv:true }] });
+        await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:[parseInt(neuerWaehler.id)] });
+        setWaehler(prev=>prev.map(w=>w.id===neuerWaehler.id?{...w,status:"versendet"}:w));
+        callFlow("updateWaehler",{ updates:[{ id:parseInt(neuerWaehler.id), tokenCode:token, status:"versendet", tokenAktiv:true }] }).catch(()=>{});
       }
       setEmailInput(""); await loadWaehler();
-      setErfolg(`Wähler angelegt und Token ${token} zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+      setErfolg(`Wähler angelegt und E-Mail an ${email} versendet.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -913,21 +930,42 @@ function LeitungWaehler({ appData, eventID }) {
     if (lines.length===0) return;
     setSaving(true); setFehler(null);
     try {
-      // 1. Alle Wähler anlegen
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
-      // 2. Tokens generieren und speichern
       const tokens = lines.map(()=>generateToken());
       await callFlow("saveTokens", { eventID, tokens, typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
-      // 3. Wähler neu laden um IDs zu bekommen, dann Token zuweisen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
       const ohneToken = alleWaehler.filter(w=>w.status==="angelegt"||!w.tokenCode);
       if (ohneToken.length > 0) {
-        const updates = ohneToken.slice(0, tokens.length).map((w,i)=>({ id:parseInt(w.id), tokenCode:tokens[i], status:"zugewiesen" }));
+        const updates = ohneToken.slice(0, tokens.length).map((w,i)=>({ id:parseInt(w.id), tokenCode:tokens[i], status:"zugewiesen", tokenAktiv:true }));
         await callFlow("updateWaehler", { updates });
       }
       setCsvInput(""); await loadWaehler();
       setErfolg(`${lines.length} Wähler importiert und Tokens zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+    } catch(e) { setFehler(e.message); }
+    setSaving(false);
+  }
+  async function importCSVUndVersenden() {
+    const lines = csvInput.split(/[\n\r,;]+/).map(l=>l.trim().toLowerCase()).filter(l=>l.includes("@"));
+    if (lines.length===0) return;
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
+      const tokens = lines.map(()=>generateToken());
+      await callFlow("saveTokens", { eventID, tokens, typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
+      const freshResult = await callFlow("getWaehler", { eventID });
+      const alleWaehler = (freshResult||[]).map(mapWaehler);
+      const ohneToken = alleWaehler.filter(w=>w.status==="angelegt"||!w.tokenCode);
+      if (ohneToken.length > 0) {
+        const updates = ohneToken.slice(0, tokens.length).map((w,i)=>({ id:parseInt(w.id), tokenCode:tokens[i], status:"zugewiesen", tokenAktiv:true }));
+        await callFlow("updateWaehler", { updates });
+        // E-Mails versenden
+        const zuSenden = ohneToken.slice(0, tokens.length);
+        await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:zuSenden.map(w=>parseInt(w.id)) });
+        callFlow("updateWaehler",{ updates:zuSenden.map((w,i)=>({ id:parseInt(w.id), tokenCode:tokens[i], status:"versendet", tokenAktiv:true })) }).catch(()=>{});
+      }
+      setCsvInput(""); await loadWaehler();
+      setErfolg(`${lines.length} Wähler angelegt und E-Mails versendet.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -1087,24 +1125,43 @@ function LeitungWaehler({ appData, eventID }) {
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}<button onClick={()=>setFehler(null)} style={{ float:"right", background:"none", border:"none", cursor:"pointer" }}>✕</button></div>}
       {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
 
-      {/* SCHRITT 1: Wähler hinzufügen */}
+      {/* SCHRITT 1: Gültigkeit festlegen */}
+      <div style={{ ...S.card, border:`2px solid ${C.primary}` }}>
+        <div style={{ ...S.sectionLabel, color:C.primary }}>1 · Token-Gültigkeit festlegen</div>
+        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie zuerst fest wie lange die Zugangscodes gültig sein sollen. Diese Einstellung gilt für alle Wähler die Sie anlegen.</p>
+        <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
+      </div>
+
+      {/* SCHRITT 2: Wähler hinzufügen */}
       <div style={S.card}>
-        <div style={S.sectionLabel}>1 · Wähler hinzufügen</div>
-        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Tragen Sie E-Mail-Adressen ein. Token und Gültigkeit werden automatisch beim Anlegen vergeben.</p>
+        <div style={S.sectionLabel}>2 · Wähler hinzufügen</div>
         <div style={S.formGroup}>
           <label style={S.label}>Einzeln</label>
-          <div style={{ display:"flex", gap:8 }}>
-            <input style={{ ...S.input, flex:1 }} type="email" value={emailInput} onChange={e=>setEmailInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addEmail()} placeholder="name@ekiba.de"/>
-            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmail} disabled={saving}>{saving?"…":"+ Hinzufügen"}</button>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <input style={{ ...S.input, flex:1, minWidth:200 }} type="email" value={emailInput} onChange={e=>setEmailInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addEmail()} placeholder="name@ekiba.de"/>
+            <button style={{ ...S.btn, ...S.btnGhost }} onClick={addEmail} disabled={saving||!emailInput.includes("@")} title="Anlegen, E-Mail später versenden">
+              {saving?"…":"+ Anlegen"}
+            </button>
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmailUndVersenden} disabled={saving||!emailInput.includes("@")} title="Anlegen und sofort E-Mail versenden">
+              {saving?"…":"+ Anlegen & versenden"}
+            </button>
           </div>
+          <p style={{ fontSize:12, color:C.textLight, marginTop:6 }}>„Anlegen" speichert den Wähler ohne E-Mail zu versenden. „Anlegen & versenden" macht beides auf einmal.</p>
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Mehrere (CSV)</label>
           <p style={{ color:C.textLight, fontSize:12, marginBottom:6 }}>E-Mail-Adressen durch Komma, Semikolon oder Zeilenumbruch getrennt</p>
           <textarea style={{ ...S.input, height:80, resize:"vertical", marginBottom:8 }} value={csvInput} onChange={e=>setCsvInput(e.target.value)} placeholder="max@ekiba.de, anna@ekiba.de"/>
-          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={importCSV} disabled={saving}>{saving?"Importieren…":"📋 Importieren"}</button>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button style={{ ...S.btn, ...S.btnGhost }} onClick={importCSV} disabled={saving}>
+              {saving?"…":"📋 Importieren"}
+            </button>
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={importCSVUndVersenden} disabled={saving}>
+              {saving?"…":"📋 Importieren & versenden"}
+            </button>
+          </div>
+          <p style={{ fontSize:12, color:C.textLight, marginTop:6 }}>„Importieren" legt alle Wähler an ohne E-Mails zu versenden. „Importieren & versenden" macht beides auf einmal.</p>
         </div>
-        <DateTimePicker label="Token gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Gilt für neu angelegte Wähler."/>
       </div>
 
       {/* SCHRITT 2: Versand */}
