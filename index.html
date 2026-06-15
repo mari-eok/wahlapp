@@ -43,6 +43,8 @@ async function callFlow(flowName, body) {
   const url = API.flows[flowName];
   if (url.startsWith("PLATZHALTER")) throw new Error(`Flow '${flowName}' noch nicht konfiguriert.`);
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: API.key, ...body }) });
+  // 502 bei deleteToken = Flow-Timeout, SharePoint hat aber trotzdem gelöscht
+  if (res.status === 502 && flowName === "deleteToken") return { status:"ok", timeout:true };
   if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
   return res.json();
 }
@@ -68,6 +70,7 @@ function mapToken(item) {
     id: String(item.ID), code: item.Title, eventID: item.EventID, verwendet: item.Verwendet, aktiv: item.Aktiv !== false,
     verwendeteWahlen: item.UsedForWahlID ? [String(item.UsedForWahlID)] : (() => { try { return JSON.parse(item.VerwendeteWahlen || "[]"); } catch { return []; } })(),
     gueltigBis: item.GueltigBis || null,
+    erstellt: item.Zeitstempel || item.Created || null,
   };
 }
 
@@ -655,7 +658,13 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
     try {
       const result = await callFlow("getDaten",{ eventID });
       const rawTokens = result.tokenList||[];
-      setTokens(rawTokens.map(mapToken));
+      // Sortierung: neu → alt
+      const mapped = rawTokens.map(mapToken).sort((a,b)=>{
+        const da = a.erstellt ? new Date(a.erstellt) : new Date(0);
+        const db = b.erstellt ? new Date(b.erstellt) : new Date(0);
+        return db - da;
+      });
+      setTokens(mapped);
       if (rawTokens.length===0 && (result.tokenCount||0)>0) setFehler("tokenList fehlt im Flow-Antwort-Body.");
       else setFehler(null);
     }catch(e){ setFehler(e.message); }
@@ -782,6 +791,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
             <th style={{ ...S.th, width:36 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th>
             <th style={{ ...S.th }}>Token</th>
             <th style={{ ...S.th }}>Status</th>
+            <th style={{ ...S.th }}>Erstellt</th>
             <th style={{ ...S.th }}>Gültig bis</th>
             <th style={{ ...S.th }}>Aktion</th>
           </tr></thead>
@@ -803,6 +813,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
                 <td style={S.td}><input type="checkbox" checked={ausgewaehlt.includes(t.id)} onChange={()=>toggleAuswahl(t.id)}/></td>
                 <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.08em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{formatCode(t.code)}</td>
                 <td style={S.td}><span style={{ ...S.badge, background:gs.bg, color:gs.color, fontSize:11 }}>{gs.label}</span></td>
+                <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{formatDatum(t.erstellt)}</td>
                 <td style={{ ...S.td, fontSize:12, color:t.gueltigBis&&new Date(t.gueltigBis)<now?C.warning:C.textLight }}>{formatDatum(t.gueltigBis)}</td>
                 <td style={S.td}>
                   <div style={{ display:"flex", gap:4 }}>
