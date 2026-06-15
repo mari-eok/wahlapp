@@ -151,40 +151,47 @@ const S = {
 
 // Nutzerfreundlicher Datum/Uhrzeit-Picker
 function DateTimePicker({ value, onChange, label, hint }) {
-  // value ist ein datetime-local string "YYYY-MM-DDTHH:MM"
   const parts = (value||"").split("T");
   const datePart = parts[0]||"";
   const timePart = parts[1]||"00:00";
   const [h, m] = timePart.split(":");
 
   const hours = Array.from({length:24},(_,i)=>String(i).padStart(2,"0"));
-  const minutes = ["00","05","10","15","20","25","30","35","40","45","50","55"];
+  const minutes = ["00","15","30","45"];
 
-  function update(newDate, newH, newM) {
-    onChange(`${newDate}T${newH}:${newM}`);
-  }
+  function update(newDate, newH, newM) { onChange(`${newDate}T${newH}:${newM}`); }
+
+  const inputStyle = { ...S.input, fontSize:14, padding:"10px 12px" };
 
   return (
     <div style={S.formGroup}>
       {label&&<label style={S.label}>{label}</label>}
       <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
         <input type="date" value={datePart} onChange={e=>update(e.target.value,h||"09",m||"00")}
-          style={{ ...S.input, width:160, cursor:"pointer" }}/>
-        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-          <select value={h||"09"} onChange={e=>update(datePart,e.target.value,m||"00")}
-            style={{ ...S.select, width:80, padding:"10px 8px" }}>
-            {hours.map(hh=><option key={hh} value={hh}>{hh} Uhr</option>)}
-          </select>
-          <span style={{ color:C.textLight, fontWeight:700 }}>:</span>
-          <select value={m||"00"} onChange={e=>update(datePart,h||"09",e.target.value)}
-            style={{ ...S.select, width:70, padding:"10px 8px" }}>
-            {minutes.map(mm=><option key={mm} value={mm}>{mm}</option>)}
-          </select>
-        </div>
+          style={{ ...inputStyle, width:150 }}/>
+        <select value={h||"09"} onChange={e=>update(datePart,e.target.value,m||"00")}
+          style={{ ...inputStyle, width:72, appearance:"none", textAlign:"center", cursor:"pointer" }}>
+          {hours.map(hh=><option key={hh} value={hh}>{hh}:00</option>)}
+        </select>
+        <span style={{ color:C.textLight, fontWeight:700, fontSize:16 }}>:</span>
+        <select value={m||"00"} onChange={e=>update(datePart,h||"09",e.target.value)}
+          style={{ ...inputStyle, width:60, appearance:"none", textAlign:"center", cursor:"pointer" }}>
+          {minutes.map(mm=><option key={mm} value={mm}>{mm}</option>)}
+        </select>
+        <span style={{ fontSize:13, color:C.textLight }}>Uhr</span>
       </div>
       {hint&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>{hint}</p>}
     </div>
   );
+}
+
+// Nächste halbe Stunde berechnen
+function naechsteHalbeStunde() {
+  const now = new Date();
+  const m = now.getMinutes();
+  if (m < 30) { now.setMinutes(30, 0, 0); }
+  else { now.setHours(now.getHours()+1, 0, 0, 0); }
+  return toLocalInputValue(now);
 }
 
 function generateToken() {
@@ -581,7 +588,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <h3 style={{ margin:0, color:C.primary }}>Wahlen</h3>
-        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:new Date().toISOString().slice(0,16), mehrfach:false, exakt:false, maxAuswahl:1, optionen:[{ id:"o1", name:"", istEnthaltung:false },{ id:"enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), mehrfach:false, exakt:false, maxAuswahl:1, optionen:[{ id:"o1", name:"", istEnthaltung:false },{ id:"enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
       </div>
       <div style={S.card}>
         {wahlen.length===0 ? <p style={{ color:C.textLight, fontSize:14 }}>Noch keine Wahlen.</p> :
