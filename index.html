@@ -171,7 +171,7 @@ function DateTimePicker({ value, onChange, label, hint }) {
           style={{ ...inputStyle, width:150 }}/>
         <select value={h||"09"} onChange={e=>update(datePart,e.target.value,m||"00")}
           style={{ ...inputStyle, width:72, appearance:"none", textAlign:"center", cursor:"pointer" }}>
-          {hours.map(hh=><option key={hh} value={hh}>{hh}:00</option>)}
+          {hours.map(hh=><option key={hh} value={hh}>{hh}</option>)}
         </select>
         <span style={{ color:C.textLight, fontWeight:700, fontSize:16 }}>:</span>
         <select value={m||"00"} onChange={e=>update(datePart,h||"09",e.target.value)}
@@ -754,7 +754,7 @@ function LeitungWaehler({ appData, eventID }) {
       await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
       // 2. Token generieren und speichern
       const token = generateToken();
-      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
+      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", erstellt:new Date().toISOString(), gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
       // 3. Wähler neu laden um ID zu bekommen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
@@ -776,7 +776,7 @@ function LeitungWaehler({ appData, eventID }) {
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
       // 2. Tokens generieren und speichern
       const tokens = lines.map(()=>generateToken());
-      await callFlow("saveTokens", { eventID, tokens, typ:"online", gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
+      await callFlow("saveTokens", { eventID, tokens, typ:"online", erstellt:new Date().toISOString(), gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
       // 3. Wähler neu laden um IDs zu bekommen, dann Token zuweisen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
@@ -819,7 +819,7 @@ function LeitungWaehler({ appData, eventID }) {
   async function ausgewaehlteLoschen() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.status!=="versendet"); if(zu.length===0) return; if(!confirm(`${zu.length} Wähler wirklich löschen?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deleteWaehler",{ waehlerIDs:zu.map(w=>parseInt(w.id)) }); await loadWaehler(); setErfolg(`${zu.length} Wähler gelöscht.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler deaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Tokens gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler reaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:new Date(gueltigBis).toISOString() }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", erstellt:new Date().toISOString(), gueltigBis:new Date(gueltigBis).toISOString() }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
 
   const gefilterteWaehler = waehler.filter(w=>!suche||w.email.includes(suche.toLowerCase()));
   const alleAusgewaehlt = gefilterteWaehler.length>0&&gefilterteWaehler.every(w=>ausgewaehlt.includes(w.id));
