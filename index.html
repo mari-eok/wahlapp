@@ -43,8 +43,8 @@ async function callFlow(flowName, body) {
   const url = API.flows[flowName];
   if (url.startsWith("PLATZHALTER")) throw new Error(`Flow '${flowName}' noch nicht konfiguriert.`);
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: API.key, ...body }) });
-  // 502 bei deleteToken = Flow-Timeout, SharePoint hat aber trotzdem gelöscht
-  if (res.status === 502 && flowName === "deleteToken") return { status:"ok", timeout:true };
+  // 502 bei deleteToken/saveTokens = Flow-Timeout, SharePoint hat aber trotzdem ausgeführt
+  if (res.status === 502 && (flowName === "deleteToken" || flowName === "saveTokens")) return { status:"ok", timeout:true };
   if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
   return res.json();
 }
@@ -1000,7 +1000,7 @@ function LeitungWaehler({ appData, eventID }) {
       <div style={S.card}>
         <div style={S.sectionLabel}>Tokens generieren</div>
         <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie Anzahl und Gültigkeit fest, dann exportieren Sie die Tokens als Liste zum Ausdrucken.</p>
-        <div style={{ display:"flex", gap:24, flexWrap:"wrap", alignItems:"flex-end", marginBottom:16 }}>
+        <div style={{ display:"flex", gap:32, flexWrap:"wrap", alignItems:"flex-start", marginBottom:20 }}>
           <div>
             <label style={S.label}>Anzahl</label>
             <input style={{ ...S.input, width:80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/>
