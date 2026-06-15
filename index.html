@@ -468,7 +468,7 @@ function TokenInput({ value, onChange }) {
         <div style={S.tokenDash}>–</div>
         {cells.slice(4).map((char,i)=>(<div key={i+4} style={{ ...S.tokenCell, ...(char?S.tokenCellFilled:{}), ...(focused&&cursorPos===i+4?S.tokenCellActive:{}) }}>{char}{focused&&cursorPos===i+4&&<span style={{ position:"absolute", bottom:6, width:2, height:16, background:C.primary, animation:"pulse 1s ease infinite" }}/>}</div>))}
       </div>
-      <input ref={inputRef} type="text" value={clean} onChange={e=>onChange(e.target.value.replace(/-/g,"").toUpperCase().slice(0,8))} onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)} maxLength={8} style={{ position:"absolute", opacity:0, top:0, left:0, width:"100%", height:"100%", cursor:"text", fontSize:16 }} autoComplete="off" autoCapitalize="characters" spellCheck={false}/>
+      <input ref={inputRef} type="text" value={clean} onChange={e=>onChange(e.target.value.replace(/-/g,"").toUpperCase().slice(0,8))} onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)} maxLength={9} style={{ position:"absolute", opacity:0, top:0, left:0, width:"100%", height:"100%", cursor:"text", fontSize:16 }} autoComplete="off" autoCapitalize="characters" spellCheck={false}/>
       <p style={{ textAlign:"center", fontSize:12, color:C.textLight, marginTop:8 }}>Tippen Sie hier um Ihren Code einzugeben</p>
     </div>
   );
