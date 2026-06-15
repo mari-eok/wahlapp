@@ -201,6 +201,27 @@ function naechsteViertelStunde() {
   const now = new Date();
   const m = now.getMinutes();
   const rest = 15 - (m % 15);
+  now.setMinutes(m + (rest === 15 ? 15 : rest), 0, 0);
+  return toLocalInputValue(now);
+}
+// Deutsches Datumsformat "DD.MM.YYYY HH:MM" → Date
+function parseGueltigBis(val) {
+  if (!val) return null;
+  // Deutsches Format: 15.06.2026 10:30
+  const m = val.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);
+  if (m) return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]), parseInt(m[4]), parseInt(m[5]));
+  // Fallback: ISO oder anderes Format
+  return new Date(val);
+}
+function formatGueltigBis(val) {
+  const d = parseLocalDatetime(val);
+  if (!d) return "";
+  const pad = n => String(n).padStart(2,"0");
+  return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+  const now = new Date();
+  const m = now.getMinutes();
+  const rest = 15 - (m % 15);
   now.setMinutes(m + rest, 0, 0);
   return toLocalInputValue(now);
 }
@@ -704,7 +725,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
   function gueltigkeitStatus(t) {
     if (!t.aktiv) return { label:"🔒 gesperrt", color:C.error, bg:C.errorBg };
     if (t.verwendet) return { label:"✓ abgestimmt", color:"#166534", bg:"#dcfce7" };
-    if (t.gueltigBis && new Date(t.gueltigBis) < now) return { label:"⏱ abgelaufen", color:"#92400e", bg:"#fff8e1" };
+    if (t.gueltigBis && parseGueltigBis(t.gueltigBis) < now) return { label:"⏱ abgelaufen", color:"#92400e", bg:"#fff8e1" };
     return { label:"● gültig", color:"#166534", bg:"#dcfce7" };
   }
   function formatDatum(iso) {
@@ -714,9 +735,9 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
   }
   const gefiltert = tokens.filter(t=>{
     if(suche && !t.code.toLowerCase().includes(suche.toLowerCase().replace("-",""))) return false;
-    if(filter==="gueltig") return t.aktiv && !t.verwendet && (!t.gueltigBis || new Date(t.gueltigBis) >= now);
+    if(filter==="gueltig") return t.aktiv && !t.verwendet && (!t.gueltigBis || parseGueltigBis(t.gueltigBis) >= now);
     if(filter==="abgestimmt") return t.verwendet;
-    if(filter==="abgelaufen") return t.aktiv && !t.verwendet && t.gueltigBis && new Date(t.gueltigBis) < now;
+    if(filter==="abgelaufen") return t.aktiv && !t.verwendet && t.gueltigBis && parseGueltigBis(t.gueltigBis) < now;
     if(filter==="gesperrt") return !t.aktiv;
     return true;
   });
@@ -724,10 +745,10 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
   function toggleAuswahl(id){ setAusgewaehlt(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]); }
   function toggleAlle(){ if(alleAusgewaehlt) setAusgewaehlt([]); else setAusgewaehlt(gefiltert.map(t=>t.id)); }
 
-  const abgelaufenCount = tokens.filter(t=>t.aktiv&&!t.verwendet&&t.gueltigBis&&new Date(t.gueltigBis)<now).length;
+  const abgelaufenCount = tokens.filter(t=>t.aktiv&&!t.verwendet&&t.gueltigBis&&parseGueltigBis(t.gueltigBis)<now).length;
   const filterBtns = [
     { id:"alle", label:`Alle (${tokens.length})` },
-    { id:"gueltig", label:`Gültig (${tokens.filter(t=>t.aktiv&&!t.verwendet&&(!t.gueltigBis||new Date(t.gueltigBis)>=now)).length})` },
+    { id:"gueltig", label:`Gültig (${tokens.filter(t=>t.aktiv&&!t.verwendet&&(!t.gueltigBis||parseGueltigBis(t.gueltigBis)>=now)).length})` },
     { id:"abgestimmt", label:`Abgestimmt (${tokens.filter(t=>t.verwendet).length})` },
     { id:"abgelaufen", label:`Abgelaufen (${abgelaufenCount})`, warn: abgelaufenCount > 0 },
     { id:"gesperrt", label:`Gesperrt (${tokens.filter(t=>!t.aktiv).length})` },
@@ -814,7 +835,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
                 <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.08em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{formatCode(t.code)}</td>
                 <td style={S.td}><span style={{ ...S.badge, background:gs.bg, color:gs.color, fontSize:11 }}>{gs.label}</span></td>
                 <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{formatDatum(t.erstellt)}</td>
-                <td style={{ ...S.td, fontSize:12, color:t.gueltigBis&&new Date(t.gueltigBis)<now?C.warning:C.textLight }}>{formatDatum(t.gueltigBis)}</td>
+                <td style={{ ...S.td, fontSize:12, color:t.gueltigBis&&parseGueltigBis(t.gueltigBis)<now?C.warning:C.textLight }}>{t.gueltigBis||"—"}</td>
                 <td style={S.td}>
                   <div style={{ display:"flex", gap:4 }}>
                     <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:t.aktiv?C.error:C.success, border:`1px solid ${t.aktiv?C.error:C.success}` }} onClick={()=>toggleToken(t)} disabled={toggling===t.id||t.verwendet} title={t.verwendet?"Bereits verwendet":""}>
@@ -857,7 +878,7 @@ function LeitungWaehler({ appData, eventID }) {
       await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
       // 2. Token generieren und speichern
       const token = generateToken();
-      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", erstellt:toLocalInputValue(new Date(), true), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis), true) });
+      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
       // 3. Wähler neu laden um ID zu bekommen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
@@ -879,7 +900,7 @@ function LeitungWaehler({ appData, eventID }) {
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
       // 2. Tokens generieren und speichern
       const tokens = lines.map(()=>generateToken());
-      await callFlow("saveTokens", { eventID, tokens, typ:"online", erstellt:toLocalInputValue(new Date(), true), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis), true) });
+      await callFlow("saveTokens", { eventID, tokens, typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
       // 3. Wähler neu laden um IDs zu bekommen, dann Token zuweisen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
@@ -938,7 +959,7 @@ function LeitungWaehler({ appData, eventID }) {
   }
   async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler deaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Tokens gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler reaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", erstellt:toLocalInputValue(new Date(), true), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis), true) }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setTokenReloadTrigger(t=>t+1); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setTokenReloadTrigger(t=>t+1); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
 
   const gefilterteWaehler = waehler.filter(w=>!suche||w.email.includes(suche.toLowerCase()));
   const alleAusgewaehlt = gefilterteWaehler.length>0&&gefilterteWaehler.every(w=>ausgewaehlt.includes(w.id));
