@@ -1125,69 +1125,71 @@ function LeitungWaehler({ appData, eventID }) {
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}<button onClick={()=>setFehler(null)} style={{ float:"right", background:"none", border:"none", cursor:"pointer" }}>✕</button></div>}
       {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
 
-      {/* SCHRITT 1: Gültigkeit festlegen */}
+      {/* SCHRITT 1: Gültigkeit */}
       <div style={{ ...S.card, border:`2px solid ${C.primary}` }}>
         <div style={{ ...S.sectionLabel, color:C.primary }}>1 · Token-Gültigkeit festlegen</div>
-        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie zuerst fest wie lange die Zugangscodes gültig sein sollen. Diese Einstellung gilt für alle Wähler die Sie anlegen.</p>
+        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie zuerst fest wie lange die Zugangscodes gültig sein sollen. Gilt für alle Wähler die Sie anlegen.</p>
         <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
       </div>
 
-      {/* SCHRITT 2: Wähler hinzufügen */}
+      {/* SCHRITT 2: Wähler anlegen */}
       <div style={S.card}>
-        <div style={S.sectionLabel}>2 · Wähler hinzufügen</div>
-        <div style={S.formGroup}>
-          <label style={S.label}>Einzeln</label>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <input style={{ ...S.input, flex:1, minWidth:200 }} type="email" value={emailInput} onChange={e=>setEmailInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addEmail()} placeholder="name@ekiba.de"/>
-            <button style={{ ...S.btn, ...S.btnGhost }} onClick={addEmail} disabled={saving||!emailInput.includes("@")} title="Anlegen, E-Mail später versenden">
-              {saving?"…":"+ Anlegen"}
-            </button>
-            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={addEmailUndVersenden} disabled={saving||!emailInput.includes("@")} title="Anlegen und sofort E-Mail versenden">
-              {saving?"…":"+ Anlegen & versenden"}
-            </button>
-          </div>
-          <p style={{ fontSize:12, color:C.textLight, marginTop:6 }}>„Anlegen" speichert den Wähler ohne E-Mail zu versenden. „Anlegen & versenden" macht beides auf einmal.</p>
+        <div style={S.sectionLabel}>2 · Wähler anlegen</div>
+        <p style={{ color:C.textLight, fontSize:13, marginBottom:12 }}>Eine oder mehrere E-Mail-Adressen eingeben — komma- oder zeilengetrennt.</p>
+        <textarea
+          style={{ ...S.input, height:90, resize:"vertical", marginBottom:10 }}
+          value={emailInput}
+          onChange={e=>{ setEmailInput(e.target.value); setCsvInput(e.target.value); }}
+          placeholder={"max@ekiba.de\nanna@ekiba.de, tom@ekiba.de"}
+        />
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>{
+            const lines = emailInput.split(/[\n\r,;]+/).map(l=>l.trim().toLowerCase()).filter(l=>l.includes("@"));
+            if(lines.length===0) return;
+            if(lines.length===1) addEmail(); else importCSV();
+          }} disabled={saving||!emailInput.trim()}>
+            {saving?"…":"Anlegen"}
+          </button>
+          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>{
+            const lines = emailInput.split(/[\n\r,;]+/).map(l=>l.trim().toLowerCase()).filter(l=>l.includes("@"));
+            if(lines.length===0) return;
+            if(lines.length===1) addEmailUndVersenden(); else importCSVUndVersenden();
+          }} disabled={saving||!emailInput.trim()}>
+            {saving?"…":"Anlegen & sofort versenden"}
+          </button>
         </div>
-        <div style={S.formGroup}>
-          <label style={S.label}>Mehrere (CSV)</label>
-          <p style={{ color:C.textLight, fontSize:12, marginBottom:6 }}>E-Mail-Adressen durch Komma, Semikolon oder Zeilenumbruch getrennt</p>
-          <textarea style={{ ...S.input, height:80, resize:"vertical", marginBottom:8 }} value={csvInput} onChange={e=>setCsvInput(e.target.value)} placeholder="max@ekiba.de, anna@ekiba.de"/>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <button style={{ ...S.btn, ...S.btnGhost }} onClick={importCSV} disabled={saving}>
-              {saving?"…":"📋 Importieren"}
-            </button>
-            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={importCSVUndVersenden} disabled={saving}>
-              {saving?"…":"📋 Importieren & versenden"}
-            </button>
-          </div>
-          <p style={{ fontSize:12, color:C.textLight, marginTop:6 }}>„Importieren" legt alle Wähler an ohne E-Mails zu versenden. „Importieren & versenden" macht beides auf einmal.</p>
-        </div>
+        <p style={{ fontSize:12, color:C.textLight, marginTop:8 }}>„Anlegen" speichert die Wähler ohne E-Mail — Sie können später gesammelt versenden. „Anlegen & sofort versenden" macht beides in einem Schritt.</p>
       </div>
 
-      {/* SCHRITT 2: Versand */}
-      <div style={S.card}>
-        <div style={S.sectionLabel}>2 · E-Mails versenden</div>
-        <div style={S.statGrid}>
-          <StatCard num={waehler.length} label="Wähler gesamt" color={C.primary}/>
-          <StatCard num={zugewiesen} label="Bereit zum Versand" color={C.warning}/>
-          <StatCard num={versendet} label="Versendet" color={C.accent}/>
+      {/* STATUS + SAMMELVERSAND */}
+      {waehler.length > 0 && (
+        <div style={{ ...S.card, padding:"16px 20px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:12 }}>
+            <div style={{ display:"flex", gap:20, flexWrap:"wrap" }}>
+              <span style={{ fontSize:14, color:C.text }}><strong>{waehler.length}</strong> <span style={{ color:C.textLight }}>Wähler</span></span>
+              <span style={{ fontSize:14, color:C.accent }}><strong>{versendet}</strong> <span style={{ color:C.textLight }}>versendet</span></span>
+              {zugewiesen>0&&<span style={{ fontSize:14, color:C.warning }}><strong>{zugewiesen}</strong> <span style={{ color:C.textLight }}>ausstehend</span></span>}
+            </div>
+            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+              {zugewiesen>0&&<button style={{ ...S.btn, ...S.btnPrimary }} onClick={emailsVersenden} disabled={sending}>
+                {sending?"Wird versendet…":`📧 Alle ausstehenden versenden (${zugewiesen})`}
+              </button>}
+              <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={loadWaehler} disabled={loading}>🔄</button>
+            </div>
+          </div>
         </div>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-          <button style={{ ...S.btn, ...S.btnSuccess, opacity:zugewiesen===0?0.5:1 }} onClick={emailsVersenden} disabled={sending||zugewiesen===0}>
-            {sending?"Wird versendet…":`📧 E-Mails versenden (${zugewiesen})`}
-          </button>
-          {hatAuswahl&&kannLoeschen&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehlteLoschen} disabled={saving}>🗑️ Löschen ({ausgewaehlt.filter(id=>waehler.find(w=>w.id===id)?.status!=="versendet").length})</button>}
-          {hatAuswahl&&kannDeaktivieren&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={ausgewaehltDeaktivieren} disabled={saving}>🚫 Token sperren</button>}
-          {hatAuswahl&&kannAktivieren&&<button style={{ ...S.btn, ...S.btnSuccess }} onClick={ausgewaehltAktivieren} disabled={saving}>✅ Token aktivieren</button>}
-          <button style={{ ...S.btn, ...S.btnGhost }} onClick={loadWaehler} disabled={loading}>🔄</button>
-        </div>
-      </div>
+      )}
 
       {/* SCHRITT 3: Wähler-Liste */}
       <div style={S.card}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <div style={S.sectionLabel}>3 · Wähler-Liste</div>
-          {hatAuswahl&&<div style={{ fontSize:13, color:C.textLight }}>{ausgewaehlt.length} ausgewählt</div>}
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            {hatAuswahl&&kannLoeschen&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12 }} onClick={ausgewaehlteLoschen} disabled={saving}>🗑️ Löschen ({ausgewaehlt.filter(id=>waehler.find(w=>w.id===id)?.status!=="versendet").length})</button>}
+            {hatAuswahl&&kannDeaktivieren&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12 }} onClick={ausgewaehltDeaktivieren} disabled={saving}>🚫 Sperren</button>}
+            {hatAuswahl&&kannAktivieren&&<button style={{ ...S.btn, ...S.btnSuccess, fontSize:12 }} onClick={ausgewaehltAktivieren} disabled={saving}>✅ Aktivieren</button>}
+            {hatAuswahl&&<span style={{ fontSize:12, color:C.textLight }}>{ausgewaehlt.length} ausgewählt</span>}
+          </div>
         </div>
         <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
           {statusFilterBtns.map(b=><button key={b.id} style={{ ...S.btn, fontSize:12, padding:"4px 10px", ...(filterStatus===b.id?S.btnPrimary:S.btnGhost) }} onClick={()=>setFilterStatus(b.id)}>{b.label}</button>)}
