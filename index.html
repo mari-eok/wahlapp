@@ -88,11 +88,12 @@ function parseSharePointDate(val) {
   if (val.includes("Z") || val.includes("+")) return new Date(val);
   return new Date(val + "Z");
 }
-function toLocalInputValue(date) {
+function toLocalInputValue(date, withSeconds = false) {
   if (!date) return "";
   const d = new Date(date);
   const pad = n => String(n).padStart(2,"0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const base = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return withSeconds ? `${base}:${pad(d.getSeconds())}` : base;
 }
 
 const C = { primary:"#1a3a5c", primaryLight:"#2a5a8c", accent:"#4a9b6f", bg:"#f5f7fa", bgWhite:"#ffffff", border:"#dde3ea", text:"#1a2733", textLight:"#5a6a7a", error:"#c0392b", errorBg:"#fde8e8", success:"#27ae60", successBg:"#e8f8ee", warning:"#d4a017", warningBg:"#fef9e7", disabled:"#b0bec5", superadmin:"#2d1b4e" };
@@ -191,6 +192,13 @@ function naechsteHalbeStunde() {
   const m = now.getMinutes();
   if (m < 30) { now.setMinutes(30, 0, 0); }
   else { now.setHours(now.getHours()+1, 0, 0, 0); }
+  return toLocalInputValue(now);
+}
+function naechsteViertelStunde() {
+  const now = new Date();
+  const m = now.getMinutes();
+  const rest = 15 - (m % 15);
+  now.setMinutes(m + rest, 0, 0);
   return toLocalInputValue(now);
 }
 
@@ -638,7 +646,7 @@ function ArchivWahlen({ wahlen, onDelete }) {
 }
 
 // FIX: OfflineTokenListe liest tokenList aus getDaten und mappt korrekt via mapToken
-function OfflineTokenListe({ eventID }) {
+function OfflineTokenListe({ eventID, reloadTrigger }) {
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null); const [ausgewaehlt, setAusgewaehlt] = useState([]); const [loesching, setLoesching] = useState(false);
   const deleteVerfuegbar = !API.flows.deleteToken.startsWith("PLATZHALTER");
@@ -653,7 +661,7 @@ function OfflineTokenListe({ eventID }) {
     }catch(e){ setFehler(e.message); }
     setLoading(false);
   }
-  useEffect(()=>{ laden(); },[eventID]);
+  useEffect(()=>{ laden(); },[eventID, reloadTrigger]);
   async function toggleToken(token) {
     const aktiv = !token.aktiv;
     setToggling(token.id);
@@ -780,7 +788,7 @@ function OfflineTokenListe({ eventID }) {
               if (!confirm(msg)) return;
               setLoesching(true);
               callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
-                .then(()=>{ setFilter("alle"); laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); })
+                .then(async ()=>{ setFilter("alle"); await laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); })
                 .catch(e=>setFehler(e.message))
                 .finally(()=>setLoesching(false));
             }
@@ -818,8 +826,9 @@ function LeitungWaehler({ appData, eventID }) {
   const [saving, setSaving] = useState(false); const [sending, setSending] = useState(false);
   const [fehler, setFehler] = useState(null); const [erfolg, setErfolg] = useState(null);
   const [tab, setTab] = useState("liste"); const [offlineAnzahl, setOfflineAnzahl] = useState(10);
+  const [tokenReloadTrigger, setTokenReloadTrigger] = useState(0);
   const [suche, setSuche] = useState(""); const [ausgewaehlt, setAusgewaehlt] = useState([]);
-  const [gueltigBis, setGueltigBis] = useState(()=>{ const d=new Date(); d.setHours(23,59,0,0); return toLocalInputValue(d); });
+  const [gueltigBis, setGueltigBis] = useState(()=>naechsteViertelStunde());
 
   async function loadWaehler() { setLoading(true); try{ const r=await callFlow("getWaehler",{ eventID }); setWaehler((r||[]).map(mapWaehler)); setAusgewaehlt([]); }catch(e){ setFehler(e.message); } setLoading(false); }
   async function addEmail() {
@@ -831,7 +840,7 @@ function LeitungWaehler({ appData, eventID }) {
       await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
       // 2. Token generieren und speichern
       const token = generateToken();
-      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", erstellt:toLocalInputValue(new Date()), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis)) });
+      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", erstellt:toLocalInputValue(new Date(), true), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis), true) });
       // 3. Wähler neu laden um ID zu bekommen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
@@ -853,7 +862,7 @@ function LeitungWaehler({ appData, eventID }) {
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
       // 2. Tokens generieren und speichern
       const tokens = lines.map(()=>generateToken());
-      await callFlow("saveTokens", { eventID, tokens, typ:"online", erstellt:toLocalInputValue(new Date()), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis)) });
+      await callFlow("saveTokens", { eventID, tokens, typ:"online", erstellt:toLocalInputValue(new Date(), true), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis), true) });
       // 3. Wähler neu laden um IDs zu bekommen, dann Token zuweisen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
@@ -912,7 +921,7 @@ function LeitungWaehler({ appData, eventID }) {
   }
   async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler deaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Tokens gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler reaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", erstellt:toLocalInputValue(new Date()), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis)) }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", erstellt:toLocalInputValue(new Date(), true), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis), true) }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setTokenReloadTrigger(t=>t+1); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
 
   const gefilterteWaehler = waehler.filter(w=>!suche||w.email.includes(suche.toLowerCase()));
   const alleAusgewaehlt = gefilterteWaehler.length>0&&gefilterteWaehler.every(w=>ausgewaehlt.includes(w.id));
@@ -960,9 +969,9 @@ function LeitungWaehler({ appData, eventID }) {
           <div><label style={S.label}>Anzahl</label><input style={{ ...S.input, width:80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/></div>
           <button style={{ ...S.btn, ...S.btnPrimary, padding:"10px 20px" }} onClick={offlineGenerieren} disabled={saving}>{saving?"Wird generiert...":"Generieren & Exportieren"}</button>
         </div>
-        <p style={{ color:C.textLight, fontSize:12 }}>Tokens werden in SharePoint gespeichert und als .txt-Datei exportiert (Format: XXXX-YYYY).</p>
+        <p style={{ color:C.textLight, fontSize:12 }}>Tokens werden in der Datenbank gespeichert und als .txt-Datei exportiert (Format: XXXX-YYYY).</p>
       </div>
-      <OfflineTokenListe eventID={eventID}/>
+      <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger}/>
     </div>
   );
 
