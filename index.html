@@ -773,20 +773,33 @@ function OfflineTokenListe({ eventID }) {
           </tr></thead>
           <tbody>{gefiltert.map(t=>{
             const gs = gueltigkeitStatus(t);
+            function einzelLoeschen() {
+              const msg = t.verwendet
+                ? "Dieser Token wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nToken trotzdem löschen?"
+                : "Token löschen?";
+              if (!confirm(msg)) return;
+              setLoesching(true);
+              callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
+                .then(()=>{ laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); })
+                .catch(e=>setFehler(e.message))
+                .finally(()=>setLoesching(false));
+            }
             return (
               <tr key={t.id} style={{ background:ausgewaehlt.includes(t.id)?"#f0f4ff":"transparent" }}>
                 <td style={S.td}><input type="checkbox" checked={ausgewaehlt.includes(t.id)} onChange={()=>toggleAuswahl(t.id)}/></td>
                 <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.08em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{formatCode(t.code)}</td>
                 <td style={S.td}><span style={{ ...S.badge, background:gs.bg, color:gs.color, fontSize:11 }}>{gs.label}</span></td>
-                <td style={{ ...S.td, fontSize:12, color: t.gueltigBis&&new Date(t.gueltigBis)<now ? C.warning : C.textLight }}>{formatDatum(t.gueltigBis)}</td>
+                <td style={{ ...S.td, fontSize:12, color:t.gueltigBis&&new Date(t.gueltigBis)<now?C.warning:C.textLight }}>{formatDatum(t.gueltigBis)}</td>
                 <td style={S.td}>
                   <div style={{ display:"flex", gap:4 }}>
                     <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:t.aktiv?C.error:C.success, border:`1px solid ${t.aktiv?C.error:C.success}` }} onClick={()=>toggleToken(t)} disabled={toggling===t.id||t.verwendet} title={t.verwendet?"Bereits verwendet":""}>
                       {toggling===t.id?"…":t.aktiv?"Sperren":"Aktivieren"}
                     </button>
-                    {deleteVerfuegbar&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={()=>{ const msg=t.verwendet?"Dieser Token wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nToken trotzdem löschen?":"Token löschen?"; if(confirm(msg)) { setLoesching(true); callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] }).then(()=>{ laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); }).catch(e=>setFehler(e.message)).finally(()=>setLoesching(false)); } }} disabled={loesching}>
-                      🗑️
-                    </button>
+                    {deleteVerfuegbar&&(
+                      <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={einzelLoeschen} disabled={loesching}>
+                        🗑️
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
