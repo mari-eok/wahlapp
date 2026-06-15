@@ -723,7 +723,7 @@ function OfflineTokenListe({ eventID }) {
     setLoesching(true); setFehler(null);
     try {
       await callFlow("deleteToken",{ eventID, tokenIDs:zu.map(t=>parseInt(t.id)), tokenCodes:zu.map(t=>t.code) });
-      setAusgewaehlt([]); await laden();
+      setAusgewaehlt([]); setFilter("alle"); await laden();
       setErfolg(`${zu.length} Token(s) gelöscht.`); setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setLoesching(false);
@@ -739,7 +739,7 @@ function OfflineTokenListe({ eventID }) {
     setLoesching(true); setFehler(null);
     try {
       await callFlow("deleteToken",{ eventID, tokenIDs:tokens.map(t=>parseInt(t.id)), tokenCodes:tokens.map(t=>t.code) });
-      setAusgewaehlt([]); await laden();
+      setAusgewaehlt([]); setFilter("alle"); await laden();
       setErfolg("Alle Tokens gelöscht."); setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setLoesching(false);
@@ -780,7 +780,7 @@ function OfflineTokenListe({ eventID }) {
               if (!confirm(msg)) return;
               setLoesching(true);
               callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
-                .then(()=>{ laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); })
+                .then(()=>{ setFilter("alle"); laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); })
                 .catch(e=>setFehler(e.message))
                 .finally(()=>setLoesching(false));
             }
@@ -819,7 +819,7 @@ function LeitungWaehler({ appData, eventID }) {
   const [fehler, setFehler] = useState(null); const [erfolg, setErfolg] = useState(null);
   const [tab, setTab] = useState("liste"); const [offlineAnzahl, setOfflineAnzahl] = useState(10);
   const [suche, setSuche] = useState(""); const [ausgewaehlt, setAusgewaehlt] = useState([]);
-  const [gueltigBis, setGueltigBis] = useState(()=>{ const d=new Date(); d.setHours(23,59,0,0); return d.toISOString().slice(0,16); });
+  const [gueltigBis, setGueltigBis] = useState(()=>{ const d=new Date(); d.setHours(23,59,0,0); return toLocalInputValue(d); });
 
   async function loadWaehler() { setLoading(true); try{ const r=await callFlow("getWaehler",{ eventID }); setWaehler((r||[]).map(mapWaehler)); setAusgewaehlt([]); }catch(e){ setFehler(e.message); } setLoading(false); }
   async function addEmail() {
@@ -831,7 +831,7 @@ function LeitungWaehler({ appData, eventID }) {
       await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
       // 2. Token generieren und speichern
       const token = generateToken();
-      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", erstellt:new Date().toISOString(), gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
+      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", erstellt:toLocalInputValue(new Date()), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis)) });
       // 3. Wähler neu laden um ID zu bekommen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
@@ -853,7 +853,7 @@ function LeitungWaehler({ appData, eventID }) {
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
       // 2. Tokens generieren und speichern
       const tokens = lines.map(()=>generateToken());
-      await callFlow("saveTokens", { eventID, tokens, typ:"online", erstellt:new Date().toISOString(), gueltigBis:parseLocalDatetime(gueltigBis).toISOString() });
+      await callFlow("saveTokens", { eventID, tokens, typ:"online", erstellt:toLocalInputValue(new Date()), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis)) });
       // 3. Wähler neu laden um IDs zu bekommen, dann Token zuweisen
       const freshResult = await callFlow("getWaehler", { eventID });
       const alleWaehler = (freshResult||[]).map(mapWaehler);
@@ -912,7 +912,7 @@ function LeitungWaehler({ appData, eventID }) {
   }
   async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler deaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Tokens gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler reaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", erstellt:new Date().toISOString(), gueltigBis:new Date(gueltigBis).toISOString() }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", erstellt:toLocalInputValue(new Date()), gueltigBis:toLocalInputValue(parseLocalDatetime(gueltigBis)) }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
 
   const gefilterteWaehler = waehler.filter(w=>!suche||w.email.includes(suche.toLowerCase()));
   const alleAusgewaehlt = gefilterteWaehler.length>0&&gefilterteWaehler.every(w=>ausgewaehlt.includes(w.id));
