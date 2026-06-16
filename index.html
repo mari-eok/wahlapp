@@ -308,7 +308,7 @@ function App() {
       const wahllokale = (raw.wahllokale || []).map(mapWahllokal);
       const wahlen = (raw.wahlen || []).map(mapWahl);
       const optionen = (raw.optionen || []).map(mapOption);
-      wahlen.forEach(w => { w.optionen = optionen.filter(o => o.wahlID === w.id); });
+      wahlen.forEach(w => { w.optionen = optionen.filter(o => o.wahlID === w.id).sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }); });
       setAppData({ wahllokale, wahlen, optionen, tokens: [], tokenCount: raw.tokenCount || 0 });
       setLoadError(null);
     } catch (e) { if (!appData) { setAppData(FALLBACK_DATA); setLoadError("cors_fallback"); } }
@@ -570,7 +570,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
       {selectedWahl && (
         <div style={S.card}>
           <div style={S.sectionLabel}>{selectedWahl.mehrfach?`Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen.`:"Bitte wählen Sie genau 1 Person."}</div>
-          {selectedWahl.optionen.map(opt => {
+          {[...selectedWahl.optionen].sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }).map(opt => {
             const isSel = selected.find(s=>s.id===opt.id);
             return (<div key={opt.id} style={{ ...S.optionRow, ...(isSel?S.optionRowSelected:{}), ...(opt.istEnthaltung?{ background:C.bg }:{}) }} onClick={()=>toggleOption(opt)}><div style={{ ...S.checkbox, ...(isSel?S.checkboxChecked:{}) }}>{isSel&&<span style={{ color:"#fff", fontSize:13, fontWeight:700 }}>✓</span>}</div><span style={{ fontSize:15, fontWeight:500, color:opt.istEnthaltung?C.textLight:C.text }}>{opt.name}</span></div>);
           })}
@@ -1501,7 +1501,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
           const raw = await callFlow("getDaten", { eventID: wl.eventID });
           const optionen = (raw.optionen||[]).map(mapOption);
           const wahlen = (raw.wahlen||[]).map(mapWahl);
-          wahlen.forEach(w=>{ w.optionen=optionen.filter(o=>o.wahlID===w.id); });
+          wahlen.forEach(w=>{ w.optionen=optionen.filter(o=>o.wahlID===w.id).sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }); });
           alleWahlenArr.push(...wahlen);
         } catch(e) {}
       }
@@ -1631,7 +1631,7 @@ function PraesentationsModus({ appData, wahllokalID, onExit }) {
       const raw=await callFlow("getDaten",{ eventID:wahllokalID });
       const optionen=(raw.optionen||[]).map(mapOption);
       const w=(raw.wahlen||[]).map(mapWahl).filter(wahl=>wahl.geschlossen);
-      w.forEach(wahl=>{ wahl.optionen=optionen.filter(o=>o.wahlID===wahl.id); });
+      w.forEach(wahl=>{ wahl.optionen=optionen.filter(o=>o.wahlID===wahl.id).sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }); });
       setWahlenFrisch(w);
     }catch(e){} }
     laden();
@@ -1930,7 +1930,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
   const [wahlenFrisch, setWahlenFrisch] = useState(null);
   const wahlen = wahlenFrisch||appData.wahlen.filter(w=>w.eventID===wahllokalID);
   useEffect(()=>{
-    async function ladeWahlen(){ try{ const raw=await callFlow("getDaten",{ eventID:wahllokalID }); const optionen=(raw.optionen||[]).map(mapOption); const w=(raw.wahlen||[]).map(mapWahl); w.forEach(wahl=>{ wahl.optionen=optionen.filter(o=>o.wahlID===wahl.id); }); setWahlenFrisch(w); }catch(e){ console.error(e); } }
+    async function ladeWahlen(){ try{ const raw=await callFlow("getDaten",{ eventID:wahllokalID }); const optionen=(raw.optionen||[]).map(mapOption); const w=(raw.wahlen||[]).map(mapWahl); w.forEach(wahl=>{ wahl.optionen=optionen.filter(o=>o.wahlID===wahl.id).sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }); }); setWahlenFrisch(w); }catch(e){ console.error(e); } }
     ladeWahlen();
   },[wahllokalID]);
   const gruppen = gruppiereWahlen(wahlen);
