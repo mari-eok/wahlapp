@@ -845,7 +845,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   );
 }
 
-function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl }) {
+function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl, onErgebnisse }) {
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
   const { confirm, dialog } = useConfirm();
   // Alle Wahlen — aktive, geschlossene und archivierte
