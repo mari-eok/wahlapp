@@ -1286,7 +1286,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   }
   useEffect(()=>{ laden(); },[]);
   async function saveWahllokal(f) { setSaving(true); setFehler(null); try{ await callFlow("saveWahllokal",{ wahllokalID:f.id?parseInt(f.id):null, eventID:f.eventID, name:f.name, aktiv:f.aktiv!==false, leitungPIN:f.leitungPIN||"0000", modus:f.modus||"beides" }); await laden(); await onDataChange(); setForm(null); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function deleteWahllokal(wl) { if(!confirm(`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen werden ebenfalls gelöscht.`)) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
+  async function deleteWahllokal(wl) { if(!confirm(`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen und Tokens werden unwiderruflich gelöscht.`)) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
   const tabs = [{ id:"wahllokale", label:"🏛️ Wahllokale" },{ id:"wahlen", label:"📊 Alle Wahlen" },{ id:"flows", label:"⚙️ Flows" }];
 
   if (form!==null) return (
