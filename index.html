@@ -852,7 +852,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   const alleWahlen = appData.wahlen.filter(w=>w.eventID===eventID);
   const wahlen = alleWahlen.filter(w=>!w.archiviert); // aktiv + geschlossen (nicht archiviert)
   const archiviertWahlen = alleWahlen.filter(w=>w.archiviert);
-  useEffect(()=>{ if(initialStichwahl){ const sw={...initialStichwahl, startzeit:initialStichwahl.startzeit||toLocalInputValue(new Date()), hatEndzeit:false, endzeit:"" }; setForm(sw); if(onStichwahl) onStichwahl(); } },[]);
+  useEffect(()=>{ if(initialStichwahl){ setForm({...initialStichwahl, startzeit:"", hatEndzeit:false, endzeit:"" }); if(onStichwahl) onStichwahl(); } },[]);
   async function openForm(wahl) {
     let hatStimmen = false;
     try { const r=await callFlow("getErgebnisse",{ wahlID:parseInt(wahl.id), eventID }); hatStimmen=(Array.isArray(r)?r.length:(r.value?.length||0))>0; } catch(e) {}
@@ -2080,12 +2080,11 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
           : "Gem. Grundordnung § Abs. 1 Nr. 4: Im zweiten Wahlgang gilt einfache Mehrheit mit mindestens 1/3 der abgegebenen Stimmen."}
       </div>
       <button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>{
-        const startzeitJetzt = toLocalInputValue(new Date());
         window._stichwahl = {
           id: null,
           titel: naechsterTitel,
           istStichwahl: true,
-          startzeit: startzeitJetzt,
+          startzeit: "",
           mehrfach: false,
           exakt: false,
           maxAuswahl: 1,
@@ -2370,12 +2369,13 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
             placeholder="z.B. Diakoniepfarrer*in"/>
           {f.istStichwahl&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Titel einer Stichwahl kann nicht geändert werden.</p>}
         </div>
-        <DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ)."/>
+        {f.istStichwahl&&<div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:13, marginBottom:16 }}>⏱️ Die Stichwahl wird nach dem Speichern manuell gestartet — über den ▶ Starten-Button in der Wahlenübersicht.</div>}
+        {!f.istStichwahl&&<DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ)."/>}
         <div style={S.formGroup}>
-          <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:f.hatEndzeit?10:0 }}>
+          {!f.istStichwahl&&<label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:f.hatEndzeit?10:0 }}>
             <input type="checkbox" checked={!!f.hatEndzeit} onChange={e=>setF(x=>({...x, hatEndzeit:e.target.checked, endzeit:""}))}/>
             <span style={S.label}>Endzeit festlegen (optional)</span>
-          </label>
+          </label>}
           {f.hatEndzeit&&(()=>{
             const startVal = f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):"";
             const startDatum = startVal.split("T")[0]||"";
