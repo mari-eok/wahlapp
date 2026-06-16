@@ -1293,7 +1293,73 @@ Diese Wähler können danach nicht mehr abstimmen.`, bestaetigen:"Sperren", typ:
   async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; const ok = await confirm({ titel:`${zu.length} Tokens reaktivieren`, nachricht:`Token für ${zu.length} Wähler reaktivieren?
 
 Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ:"warn" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setTokenReloadTrigger(t=>t+1); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function offlineGenerieren() {
+    setSaving(true); setFehler(null);
+    try {
+      const tokens = Array.from({ length:offlineAnzahl }, ()=>generateToken());
+      await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) });
+      // PDF generieren: 2x6 Token pro Seite, zum Ausschneiden
+      generiereTokenPDF(tokens, wahllokal?.name||eventID, eventID);
+      setTokenReloadTrigger(t=>t+1);
+      setErfolg(`${offlineAnzahl} Tokens generiert und als PDF exportiert.`);
+      setTimeout(()=>setErfolg(null),3000);
+    } catch(e){ setFehler(e.message); }
+    setSaving(false);
+  }
+
+  function generiereTokenPDF(tokens, wahllokalName, evID) {
+    const COLS = 2, ROWS = 6, PER_PAGE = COLS * ROWS;
+    const pages = [];
+    for (let i = 0; i < tokens.length; i += PER_PAGE) {
+      pages.push(tokens.slice(i, i + PER_PAGE));
+    }
+    // A4 in mm: 210 x 297
+    // Karte: (210-20) / 2 = 95mm breit, (297-20) / 6 = ~46mm hoch (mit Rand)
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Tokens ${wahllokalName}</title>
+    <style>
+      @page { size: A4; margin: 10mm; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; }
+      .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
+      .page:last-child { page-break-after: auto; }
+      .karte {
+        border: 1px dashed #aaa;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        padding: 6mm; text-align: center;
+      }
+      .logo { font-size: 7pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 2mm; }
+      .wahllokal { font-size: 8pt; color: #5a6a7a; margin-bottom: 3mm; }
+      .label { font-size: 7pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5a6a7a; margin-bottom: 1mm; }
+      .token { font-size: 20pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.15em; color: #1a3a5c; margin-bottom: 2mm; }
+      .hinweis { font-size: 6pt; color: #aaa; }
+      .leer { border: 1px dashed #eee; }
+    </style>
+    </head><body>
+    ${pages.map(page => `
+      <div class="page">
+        ${Array.from({length: PER_PAGE}, (_, i) => {
+          const t = page[i];
+          if (!t) return '<div class="karte leer"></div>';
+          return `<div class="karte">
+            <div class="logo">Evangelische Landeskirche in Baden</div>
+            <div class="wahllokal">${wahllokalName}</div>
+            <div class="label">Persönlicher Wahlcode</div>
+            <div class="token">${t}</div>
+            <div class="hinweis">Diesen Code geheim halten</div>
+          </div>`;
+        }).join('')}
+      </div>`).join('')}
+    </body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (win) {
+      win.onload = () => { win.print(); };
+    }
+  }
 
   // Sortierung & Filter State
   const [sortWaehler, setSortWaehler] = useState({ col:"email", dir:"asc" });
@@ -1398,9 +1464,9 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
           <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
         </div>
         <button style={{ ...S.btn, ...S.btnPrimary, padding:"10px 24px" }} onClick={offlineGenerieren} disabled={saving}>
-          {saving ? "Wird generiert…" : "Generieren & Exportieren"}
+          {saving ? "Wird generiert…" : "Generieren & PDF drucken"}
         </button>
-        <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>Tokens werden in der Datenbank gespeichert und als .txt-Datei exportiert (Format: XXXX-YYYY).</p>
+        <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>Tokens werden in der Datenbank gespeichert und als druckfertiges PDF geöffnet (2×6 Token pro A4-Seite, zum Ausschneiden).</p>
       </div>
       <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger}/>
     </div>
@@ -1706,10 +1772,10 @@ function PraesentationsModus({ appData, wahllokalID, onExit }) {
   return (
     <div style={{ position:"fixed", inset:0, background:C.primary, zIndex:9999, display:"flex", flexDirection:"column", overflow:"hidden" }}>
       {/* Header */}
-      <div style={{ padding:"24px 40px 16px", borderBottom:"1px solid rgba(255,255,255,0.15)", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+      <div style={{ padding:"clamp(12px, 2vh, 24px) clamp(16px, 3vw, 48px)", borderBottom:"1px solid rgba(255,255,255,0.15)", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
         <div>
           <div style={{ fontSize:12, fontWeight:700, letterSpacing:"0.15em", textTransform:"uppercase", color:"rgba(255,255,255,0.5)", marginBottom:4 }}>Evangelische Landeskirche in Baden</div>
-          <h1 style={{ fontSize:28, fontWeight:900, color:"#fff", margin:0 }}>{wahllokal?.name||wahllokalID} · Wahlergebnisse</h1>
+          <h1 style={{ fontSize:"clamp(18px, 3vh, 32px)", fontWeight:900, color:"#fff", margin:0 }}>{wahllokal?.name||wahllokalID} · Wahlergebnisse</h1>
         </div>
         <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:13 }}>✕ Beenden</button>
       </div>
@@ -1728,7 +1794,7 @@ function PraesentationsModus({ appData, wahllokalID, onExit }) {
       )}
 
       {/* Inhalt */}
-      <div style={{ flex:1, overflowY:"auto", padding:"24px 40px" }}>
+      <div style={{ flex:1, overflowY:"auto", overflowX:"hidden", padding:"clamp(12px, 2vh, 32px) clamp(16px, 3vw, 48px)" }}>
         {wahlen.length===0&&<div style={{ textAlign:"center", paddingTop:80, color:"rgba(255,255,255,0.5)", fontSize:18 }}>Noch keine abgeschlossenen Wahlen.</div>}
         {gruppen[selectedGruppeIdx]&&(
           <KombinierteGruppenAnsicht
@@ -1850,7 +1916,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   <p style={{ margin:"6px 0 0", fontSize:13 }}>Bisher: <strong style={{ color:C.primary }}>{total}</strong> Stimme{total!==1?"n":""}</p>
                 </div>
               )}
-              {total>0&&wahlGeschlossen&&<div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {total>0&&wahlGeschlossen&&<div style={{ display:"flex", flexDirection:"column", gap:VB?"clamp(8px, 1.5vh, 20px)":"12px" }}>
                 {optErg.map(e => {
                   const pct = total>0 ? Math.round(e.stimmen/total*100) : 0;
                   const istFuehrend = !e.istEnthaltung&&e.id===fuehrend?.id&&!gleichstand;
@@ -1861,12 +1927,12 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                           {istFuehrend&&wahlGeschlossen&&mehrheitErreicht&&<span>🏆</span>}
                           {istGleichstand&&wahlGeschlossen&&<span>⚖️</span>}
-                          <span style={{ fontWeight:istFuehrend?800:600, fontSize:14, color:C.text }}>{e.name}</span>
+                          <span style={{ fontWeight:istFuehrend?800:600, fontSize:VB?"clamp(14px, 2vh, 24px)":"14px", color:VB?"#fff":C.text }}>{e.name}</span>
                           {e.istEnthaltung&&<span style={{ ...S.badge, ...S.badgeGray, fontSize:10 }}>Enthaltung</span>}
                         </div>
-                        <span style={{ fontWeight:700, fontSize:14, color:C.primary }}>{e.stimmen} ({pct}%)</span>
+                        <span style={{ fontWeight:700, fontSize:VB?"clamp(14px, 2vh, 22px)":"14px", color:VB?"#fff":C.primary }}>{e.stimmen} ({pct}%)</span>
                       </div>
-                      <div style={{ background:C.border, borderRadius:6, height:14, overflow:"hidden" }}>
+                      <div style={{ background:C.border, borderRadius:6, height:VB?"clamp(12px, 2vh, 28px)":"14px", overflow:"hidden" }}>
                         <div style={{ height:"100%", width:`${(e.stimmen/maxS)*100}%`, borderRadius:6, transition:"width 0.8s ease",
                           background: e.istEnthaltung?C.textLight:(istFuehrend&&wahlGeschlossen&&mehrheitErreicht?C.accent:(istGleichstand?C.warning:C.primaryLight))
                         }}/>
@@ -1906,7 +1972,6 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                 </div>
                 );
               })()}
-              )}
 
               {/* Stichwahl vorbereiten */}
               {istLetzte&&wahlGeschlossen&&total>0&&(!mehrheitErreicht||gleichstand)&&isLeitung&&!hatNaechsteStichwahl&&(()=>{
