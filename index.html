@@ -235,18 +235,70 @@ function generateToken() {
   return t.slice(0,4) + "-" + t.slice(4);
 }
 
+function WahllokalAuswahl({ onSelect }) {
+  const [wahllokale, setWahllokale] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [fehler, setFehler] = useState(null);
+
+  useEffect(() => {
+    async function laden() {
+      try {
+        const result = await callFlow("getAlle", {});
+        const aktive = (result || []).map(mapWahllokal).filter(w => w.aktiv);
+        setWahllokale(aktive);
+      } catch(e) { setFehler("Wahllokale konnten nicht geladen werden."); }
+      setLoading(false);
+    }
+    laden();
+  }, []);
+
+  return (
+    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:C.bg, padding:24 }}>
+      <div style={{ ...S.card, width:"100%", maxWidth:420, textAlign:"center" }}>
+        <div style={S.wlLogo}>Evangelische Landeskirche in Baden</div>
+        <h1 style={{ ...S.wlTitle, marginBottom:8 }}>Digitales Wahllokal</h1>
+        <p style={{ color:C.textLight, fontSize:14, marginBottom:28 }}>Bitte wählen Sie Ihr Wahllokal aus.</p>
+        {loading && <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}><div style={S.spinner}/></div>}
+        {fehler && <div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
+        {!loading && wahllokale.length === 0 && !fehler && (
+          <p style={{ color:C.textLight, fontSize:14, marginBottom:16 }}>Aktuell sind keine Wahllokale aktiv.</p>
+        )}
+        {!loading && wahllokale.map(wl => (
+          <button key={wl.id} onClick={() => onSelect(wl.eventID)} style={{
+            width:"100%", padding:"14px 20px", marginBottom:10, borderRadius:10,
+            border:`1.5px solid ${C.border}`, background:C.bgWhite, cursor:"pointer",
+            textAlign:"left", transition:"all 0.12s", display:"flex", alignItems:"center", justifyContent:"space-between"
+          }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.background = "#eef4fb"; }}
+          onMouseOut={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.bgWhite; }}>
+            <div>
+              <div style={{ fontWeight:700, fontSize:15, color:C.primary }}>{wl.name}</div>
+              <div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>{wl.eventID}</div>
+            </div>
+            <span style={{ color:C.textLight, fontSize:18 }}>→</span>
+          </button>
+        ))}
+        <p style={{ fontSize:11, color:C.textLight, marginTop:16 }}>
+          Ihren persönlichen Wahlcode haben Sie per E-Mail erhalten.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const urlParams = new URL(window.location.href).searchParams;
-  const wahllokalID = urlParams.get("wahllokal") || "EOK";
+  const wahllokalID = urlParams.get("wahllokal") || "";
   const ansicht = urlParams.get("ansicht") || "";
-  const [view, setView] = useState(ansicht === "ergebnisse" ? "ergebnisse" : ansicht === "leitung" ? "leitung" : ansicht === "superadmin" ? "superadmin" : "wahllokal");
+  const keinWahllokal = !urlParams.get("wahllokal");
+  const [view, setView] = useState(keinWahllokal && !ansicht ? "startseite" : ansicht === "ergebnisse" ? "ergebnisse" : ansicht === "leitung" ? "leitung" : ansicht === "superadmin" ? "superadmin" : "wahllokal");
   const [leitungAuth, setLeitungAuth] = useState(null);
   const [superadminAuth, setSuperadminAuth] = useState(false);
   const [appData, setAppData] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
-  useEffect(() => { loadAppData(); }, []);
-  useEffect(() => { const t = setInterval(loadAppData, 10000); return () => clearInterval(t); }, []);
+  useEffect(() => { if (wahllokalID) loadAppData(); }, []);
+  useEffect(() => { if (!wahllokalID) return; const t = setInterval(loadAppData, 10000); return () => clearInterval(t); }, []);
 
   const FALLBACK_DATA = { wahllokale:[{ id:"1", eventID:"EOK", name:"Synode Ortenau", aktiv:true }], wahlen:[{ id:"1", eventID:"EOK", titel:"Diakoniepfarrer*in", aktiv:true, startzeit:new Date(Date.now()-60000).toISOString(), mehrfach:false, exakt:true, maxAuswahl:1, optionen:[{ id:"1", wahlID:"1", eventID:"EOK", name:"Leon Hartmann", istEnthaltung:false },{ id:"2", wahlID:"1", eventID:"EOK", name:"Enthaltung", istEnthaltung:true }] }], optionen:[], tokens:[], tokenCount:0 };
 
@@ -274,6 +326,12 @@ function App() {
 
   return (
     <div style={S.app}><style>{CSS}</style>
+      {view === "startseite" && (
+        <WahllokalAuswahl onSelect={(eventID) => {
+          window.history.pushState({}, "", `?wahllokal=${eventID}`);
+          setView("wahllokal");
+        }}/>
+      )}
       {view === "wahllokal" && (
         <>
           {loadError === "cors_fallback" && <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1000, background:C.warning, color:"#fff", fontSize:12, padding:"6px 16px", textAlign:"center" }}>⚠️ Demo-Modus: Verbindung zu SharePoint nicht möglich (CORS).</div>}
