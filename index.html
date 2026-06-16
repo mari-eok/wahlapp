@@ -1109,7 +1109,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
           </tr></thead>
           <tbody>{gefiltert.map(t=>{
             const gs = gueltigkeitStatus(t);
-            function einzelLoeschen() {
+            async function einzelLoeschen() {
               const msg = t.verwendet
                 ? "Dieser Token wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nToken trotzdem löschen?"
                 : "Token löschen?";
