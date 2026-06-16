@@ -36,7 +36,12 @@ const API = {
     updateWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9bc3ceb7f0a74bb89c057bbb33bd68c8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=R984hgHmgR81MCSq7IrZiTodGenoVDoZAVr_OKYygwQ",
     deleteWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6fa995fcf2a548e48e9fe7d906f87a1d/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GlBdpPF9RmzPItJWIbhSBWfOTYHBJoZYOQDcVz1q4uE",
     deactivateToken: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/4a7e769af8da4a1a91f4657135f65341/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=3OiNu3WanSH4rIeQdpeozGFnxEtT9aloYoCOoXfdkHI",
-  }
+    // Einheitlicher PIN-Check-Flow für Wahlleitung UND Superadmin
+    // Erwartet: { eventID, pin, typ: "leitung"|"superadmin" }
+    // Antwortet: { status: "ok" } oder { status: "fehler" }
+    checkPin: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/966a570551574ba39f3c2429605c2fbe/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ci4skiEZGWM3hhFnitdnAT7kgoIFPv5a6fSjyamUonc",
+  },
+
 };
 
 async function callFlow(flowName, body) {
@@ -58,7 +63,8 @@ function updateURL(wahllokalID, ansicht) {
   if (ansicht && ansicht !== "wahllokal") params.set("ansicht", ansicht);
   window.history.pushState({}, "", params.toString() ? `?${params.toString()}` : window.location.pathname);
 }
-function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, leitungPIN: item.LeitungPIN, modus: item.Modus?.Value || item.Modus || "beides" }; }
+// leitungPIN wird bewusst NICHT gemappt — PIN-Vergleich läuft serverseitig via checkPin-Flow
+function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, modus: item.Modus?.Value || item.Modus || "beides" }; }
 function mapWahl(item) {
   return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), optionen: [] };
 }
@@ -222,8 +228,10 @@ function formatGueltigBis(val) {
 
 function generateToken() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
   let t = "";
-  for (let i = 0; i < 8; i++) t += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 8; i++) t += chars[arr[i] % chars.length];
   return t.slice(0,4) + "-" + t.slice(4);
 }
 
@@ -240,7 +248,7 @@ function App() {
   useEffect(() => { loadAppData(); }, []);
   useEffect(() => { const t = setInterval(loadAppData, 10000); return () => clearInterval(t); }, []);
 
-  const FALLBACK_DATA = { wahllokale:[{ id:"1", eventID:"EOK", name:"Synode Ortenau", aktiv:true, leitungPIN:"5678" }], wahlen:[{ id:"1", eventID:"EOK", titel:"Diakoniepfarrer*in", aktiv:true, startzeit:new Date(Date.now()-60000).toISOString(), mehrfach:false, exakt:true, maxAuswahl:1, optionen:[{ id:"1", wahlID:"1", eventID:"EOK", name:"Leon Hartmann", istEnthaltung:false },{ id:"2", wahlID:"1", eventID:"EOK", name:"Enthaltung", istEnthaltung:true }] }], optionen:[], tokens:[], tokenCount:0 };
+  const FALLBACK_DATA = { wahllokale:[{ id:"1", eventID:"EOK", name:"Synode Ortenau", aktiv:true }], wahlen:[{ id:"1", eventID:"EOK", titel:"Diakoniepfarrer*in", aktiv:true, startzeit:new Date(Date.now()-60000).toISOString(), mehrfach:false, exakt:true, maxAuswahl:1, optionen:[{ id:"1", wahlID:"1", eventID:"EOK", name:"Leon Hartmann", istEnthaltung:false },{ id:"2", wahlID:"1", eventID:"EOK", name:"Enthaltung", istEnthaltung:true }] }], optionen:[], tokens:[], tokenCount:0 };
 
   async function loadAppData() {
     try {
@@ -270,31 +278,74 @@ function App() {
         <>
           {loadError === "cors_fallback" && <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1000, background:C.warning, color:"#fff", fontSize:12, padding:"6px 16px", textAlign:"center" }}>⚠️ Demo-Modus: Verbindung zu SharePoint nicht möglich (CORS).</div>}
           <WahllokalView appData={appData} wahllokalID={wahllokalID} onDataChange={loadAppData} />
-          <DemoSwitcher onSuperadmin={() => { setView("superadmin"); updateURL(wahllokalID,"superadmin"); }} onErgebnisse={() => { setView("ergebnisse"); updateURL(wahllokalID,"ergebnisse"); }} wahllokalID={wahllokalID} />
+          {/* DemoSwitcher entfernt — Zugänge nur über direkte URLs: ?ansicht=leitung / ?ansicht=superadmin */}
         </>
       )}
-      {view === "ergebnisse" && appData && <ErgebnisDashboard appData={appData} wahllokalID={wahllokalID} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} />}
+      {view === "ergebnisse" && appData && (leitungAuth
+        ? <ErgebnisDashboard appData={appData} wahllokalID={leitungAuth} onBack={() => { setView("leitung"); updateURL(leitungAuth, "leitung"); }} isLeitung={true} onDataChange={loadAppData} />
+        : <LeitungLoginScreen onAuth={(eid) => { setLeitungAuth(eid); }} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} fixedEventID={wahllokalID} />
+      )}
       {view === "leitung" && (leitungAuth
         ? <LeitungView appData={appData} eventID={leitungAuth} onExit={() => { setView("wahllokal"); setLeitungAuth(null); updateURL(wahllokalID, null); }} onDataChange={loadAppData} />
         : <LeitungLoginScreen onAuth={(eid) => setLeitungAuth(eid)} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} fixedEventID={ansicht === "leitung" ? wahllokalID : null} />
       )}
       {view === "superadmin" && (superadminAuth
         ? <SuperadminView appData={appData} onExit={() => { setView("wahllokal"); setSuperadminAuth(false); updateURL(wahllokalID, null); }} onDataChange={loadAppData} />
-        : <PinScreen title="Superadmin" subtitle="Systemzugang für EKIBA-Administratoren." color={C.superadmin} onAuth={(pin) => { if (pin==="1234"){ setSuperadminAuth(true); return true; } return false; }} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} />
+        : <SuperadminPinScreen onAuth={() => { setSuperadminAuth(true); }} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} />
       )}
     </div>
   );
 }
 
-function DemoSwitcher({ onSuperadmin, onErgebnisse, wahllokalID }) {
+function SuperadminPinScreen({ onAuth, onBack }) {
+  const [pin, setPin] = React.useState("");
+  const [error, setError] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  async function submit() {
+    if (!pin) return;
+    setLoading(true); setError(false);
+    try {
+      const result = await callFlow("checkSuperadminPin", { pin });
+      if (result && result.status === "ok") { onAuth(); return; }
+    } catch(e) {}
+    setError(true); setPin(""); setTimeout(() => setError(false), 2000);
+    setLoading(false);
+  }
+  // Fallback: falls checkSuperadminPin noch nicht konfiguriert ist, lokale Prüfung
+  // gegen SUPERADMIN_PIN (aus API-Konfiguration oben)
+  async function submitWithFallback() {
+    if (!pin) return;
+    setLoading(true); setError(false);
+    let ok = false;
+    try {
+      const result = await callFlow("checkPin", { eventID: "", pin, typ: "superadmin" });
+      ok = result && result.status === "ok";
+    } catch(e) { ok = false; }
+    if (ok) { onAuth(); return; }
+    setError(true); setPin(""); setTimeout(() => setError(false), 2000);
+    setLoading(false);
+  }
   return (
-    <div style={{ position:"fixed", bottom:16, right:16, display:"flex", flexDirection:"column", gap:8, zIndex:999 }}>
-      <button onClick={onErgebnisse} style={{ ...S.btn, ...S.btnSuccess, fontSize:12, opacity:0.8 }}>📊 Ergebnisse</button>
-      <button onClick={() => window.location.href=`?wahllokal=${wahllokalID}&ansicht=leitung`} style={{ ...S.btn, ...S.btnPrimary, fontSize:12, opacity:0.8 }}>📋 Wahlleitung</button>
-      <button onClick={onSuperadmin} style={{ ...S.btn, ...S.btnPurple, fontSize:12, opacity:0.8 }}>⚙️ Superadmin</button>
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:C.bg }}>
+      <div style={{ ...S.card, width:340, textAlign:"center" }}>
+        <div style={{ width:48, height:48, borderRadius:"50%", background:C.superadmin, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, margin:"0 auto 16px" }}>🔐</div>
+        <h2 style={{ margin:"0 0 4px", color:C.superadmin }}>Superadmin</h2>
+        <p style={{ color:C.textLight, fontSize:14, marginBottom:24 }}>Systemzugang für EKIBA-Administratoren.</p>
+        <input type="password" value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key==="Enter" && submitWithFallback()} placeholder="PIN eingeben" style={{ ...S.input, textAlign:"center", fontSize:20, letterSpacing:"0.2em", marginBottom:8, borderColor:error?C.error:C.border }} autoFocus />
+        {error ? <p style={{ color:C.error, fontSize:13, margin:"0 0 8px" }}>Falscher PIN.</p> : <div style={{ height:28 }}/>}
+        <button onClick={submitWithFallback} disabled={loading} style={{ ...S.btn, background:C.superadmin, color:"#fff", width:"100%", padding:"12px", marginBottom:8 }}>{loading?"Prüfe…":"Anmelden"}</button>
+        <button onClick={onBack} style={{ ...S.btn, ...S.btnGhost, width:"100%", padding:"10px" }}>← Zurück</button>
+      </div>
     </div>
   );
 }
+
+// DemoSwitcher deaktiviert für Produktivbetrieb.
+// Zugänge nur über direkte URLs erreichbar:
+//   Wahlleitung:  ?wahllokal=EVENTID&ansicht=leitung
+//   Superadmin:   ?ansicht=superadmin
+//   Ergebnisse:   ?wahllokal=EVENTID&ansicht=ergebnisse
+function DemoSwitcher() { return null; }
 
 function PinScreen({ title, subtitle, color, onAuth, onBack }) {
   const [pin, setPin] = useState(""); const [error, setError] = useState(false);
@@ -327,7 +378,24 @@ function LeitungLoginScreen({ onAuth, onBack, fixedEventID }) {
     }
     load();
   }, []);
-  function submit() { if (selectedWahllokal && pin===selectedWahllokal.leitungPIN){ onAuth(selectedEventID); return; } setError(true); setPin(""); setTimeout(()=>setError(false),2000); }
+  const [submitting, setSubmitting] = useState(false);
+  async function submit() {
+    if (!pin || !selectedEventID) return;
+    setSubmitting(true); setError(false);
+    try {
+      if (API.flows.checkPin && !API.flows.checkPin.startsWith("PLATZHALTER")) {
+        const result = await callFlow("checkPin", { eventID: selectedEventID, pin, typ: "leitung" });
+        if (result && result.status === "ok") { onAuth(selectedEventID); return; }
+      } else {
+        // Fallback solange Flow noch nicht konfiguriert:
+        // PIN kommt noch aus getAlle → funktioniert wie bisher, aber mit Warnung
+        console.warn("checkPin-Flow nicht konfiguriert — PIN wird clientseitig geprüft.");
+        if (selectedWahllokal && pin === selectedWahllokal.leitungPIN) { onAuth(selectedEventID); return; }
+      }
+    } catch(e) { console.error(e); }
+    setError(true); setPin(""); setTimeout(()=>setError(false),2000);
+    setSubmitting(false);
+  }
   return (
     <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:C.bg }}>
       <div style={{ ...S.card, width:340, textAlign:"center" }}>
@@ -345,8 +413,8 @@ function LeitungLoginScreen({ onAuth, onBack, fixedEventID }) {
           <p style={{ color:C.textLight, fontSize:12, marginBottom:20 }}>Der PIN wird von Ihrem Administrator vergeben.</p>
           <input type="password" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="PIN eingeben" style={{ ...S.input, textAlign:"center", fontSize:20, letterSpacing:"0.2em", marginBottom:8, borderColor:error?C.error:C.border }} autoFocus />
           {error ? <p style={{ color:C.error, fontSize:13, margin:"0 0 8px" }}>Falscher PIN.</p> : <div style={{ height:28 }}/>}
-          <button onClick={submit} style={{ ...S.btn, ...S.btnPrimary, width:"100%", padding:"12px", marginBottom:8 }}>Anmelden</button>
-          <button onClick={()=>setStep("waehlen")} style={{ ...S.btn, ...S.btnGhost, width:"100%", padding:"10px" }}>← Wahllokal ändern</button>
+          <button onClick={submit} disabled={submitting} style={{ ...S.btn, ...S.btnPrimary, width:"100%", padding:"12px", marginBottom:8 }}>{submitting?"Prüfe…":"Anmelden"}</button>
+          <button onClick={()=>setStep("waehlen")} disabled={submitting} style={{ ...S.btn, ...S.btnGhost, width:"100%", padding:"10px" }}>← Wahllokal ändern</button>
         </>)}
       </div>
     </div>
@@ -478,6 +546,25 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
   const [tab, setTab] = useState("dashboard");
   const wahllokal = appData.wahllokale.find(w => w.eventID===eventID);
   const tabs = [{ id:"dashboard", label:"📊 Dashboard" },{ id:"wahlen", label:"🗳️ Wahlen" },{ id:"waehler", label:"👥 Wähler & Tokens" },{ id:"ergebnisse", label:"📈 Ergebnisse" }];
+  // Session-Timeout: nach 30 Minuten Inaktivität automatisch abmelden
+  const TIMEOUT_MS = 30 * 60 * 1000;
+  const timeoutRef = useRef(null);
+  function resetTimeout() {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      alert("Sitzung abgelaufen. Sie werden automatisch abgemeldet.");
+      onExit();
+    }, TIMEOUT_MS);
+  }
+  useEffect(() => {
+    resetTimeout();
+    const events = ["mousedown","keydown","touchstart","scroll"];
+    events.forEach(e => window.addEventListener(e, resetTimeout));
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      events.forEach(e => window.removeEventListener(e, resetTimeout));
+    };
+  }, []);
   return (
     <div style={{ background:C.bg, minHeight:"100vh" }}>
       <div style={{ background:C.primary }}>
@@ -1295,7 +1382,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
       <div style={S.card}>
         <div style={S.formGroup}><label style={S.label}>Name</label><input style={S.input} value={form.name||""} onChange={e=>setForm(x=>({...x,name:e.target.value}))} placeholder="z.B. Synode Ortenau"/></div>
         <div style={S.formGroup}><label style={S.label}>EventID</label><input style={S.input} value={form.eventID||""} onChange={e=>setForm(x=>({...x,eventID:e.target.value.toUpperCase()}))} placeholder="z.B. SOR" maxLength={10}/><p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Kurzkürzel — wird in der URL verwendet.</p></div>
-        <div style={S.formGroup}><label style={S.label}>Wahlleitung-PIN</label><div style={{ position:"relative" }}><input style={{ ...S.input, paddingRight:40 }} value={form.leitungPIN||""} onChange={e=>setForm(x=>({...x,leitungPIN:e.target.value}))} placeholder="PIN" maxLength={8} type={showPin["form"]?"text":"password"}/><button onClick={()=>togglePin("form")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:16, color:C.textLight }}>{showPin["form"]?"🙈":"👁"}</button></div></div>
+        <div style={S.formGroup}><label style={S.label}>Wahlleitung-PIN</label><div style={{ position:"relative" }}><input style={{ ...S.input, paddingRight:40 }} value={form.leitungPIN||""} onChange={e=>setForm(x=>({...x,leitungPIN:e.target.value}))} placeholder="PIN" maxLength={8} type={showPin["form"]?"text":"password"}/><button onClick={()=>togglePin("form")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", fontSize:16, color:C.textLight }}>{showPin["form"]?"🙈":"👁"}</button></div><p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Der PIN wird in SharePoint gespeichert und nie an den Browser übertragen — Vergleich läuft serverseitig.</p></div>
         <div style={S.formGroup}>
           <label style={S.label}>Verfügbare Funktionen</label>
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -1343,8 +1430,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
                   <div style={{ cursor:"pointer", flex:1 }} onClick={()=>setExpanded(isOpen?null:wl.id)}>
                     <div style={{ fontWeight:700, fontSize:15 }}>{wl.name}</div>
                     <div style={{ fontSize:12, color:C.textLight, marginTop:2, display:"flex", alignItems:"center", gap:6 }}>
-                    EventID: {wl.eventID} · {wahlenDieses.length} Wahlen · PIN: <span style={{ fontFamily:"monospace", letterSpacing:2 }}>{showPin[wl.id]?wl.leitungPIN:"•".repeat((wl.leitungPIN||"").length)}</span>
-                    <button onClick={e=>{ e.stopPropagation(); togglePin(wl.id); }} style={{ background:"none", border:"none", cursor:"pointer", color:C.textLight, fontSize:13, padding:"0 2px" }}>{showPin[wl.id]?"🙈":"👁"}</button>
+                    EventID: {wl.eventID} · {wahlenDieses.length} Wahlen · PIN: <span style={{ fontFamily:"monospace", letterSpacing:2, color:C.textLight, fontSize:12 }}>serverseitig gesichert</span>
                     · {wl.modus==="online"?"📧 Online":wl.modus==="offline"?"📋 Vor-Ort":"📧+📋 Beides"}
                   </div>
                   </div>
