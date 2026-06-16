@@ -1385,6 +1385,18 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
     } catch(e){ setFehler(e.message); }
     setSaving(false);
   }
+  async function offlineGenerierenMitPDF() {
+    setSaving(true); setFehler(null);
+    try {
+      const tokens = Array.from({ length:offlineAnzahl }, ()=>generateToken());
+      await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) });
+      generiereTokenPDF(tokens, wahllokal?.name||eventID, eventID);
+      setTokenReloadTrigger(t=>t+1);
+      setErfolg(`${offlineAnzahl} Tokens generiert und PDF geöffnet.`);
+      setTimeout(()=>setErfolg(null),3000);
+    } catch(e){ setFehler(e.message); }
+    setSaving(false);
+  }
 
 // Sortierung & Filter State
   const [sortWaehler, setSortWaehler] = useState({ col:"email", dir:"asc" });
