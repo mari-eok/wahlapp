@@ -774,7 +774,37 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   async function toggleAktiv(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:!wahl.aktiv, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function pauseWahl(wahl) { if(!confirm(`Wahl "${wahl.titel}" pausieren?`)) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function starteWahl(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:true, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
-  async function deleteWahl(wahl) { if(!confirm(`Wahl "${wahl.titel}" wirklich löschen?`)) return; try{ await callFlow("deleteWahl",{ wahlID:parseInt(wahl.id) }); await onDataChange(); }catch(e){ setFehler(e.message); } }
+  async function deleteWahl(wahl) {
+    // Erst prüfen ob Stimmen vorhanden
+    let stimmenAnzahl = 0;
+    try {
+      const r = await callFlow("getErgebnisse", { wahlID:parseInt(wahl.id), eventID });
+      stimmenAnzahl = Array.isArray(r) ? r.length : (r.value?.length||0);
+    } catch(e) {}
+
+    let msg = `Wahl "${wahl.titel}" wirklich löschen?`;
+    if (stimmenAnzahl > 0) {
+      msg += `
+
+⚠️ ACHTUNG: Es wurden bereits ${stimmenAnzahl} Stimme${stimmenAnzahl!==1?"n":""} abgegeben.
+
+Diese Stimmen werden zusammen mit der Wahl unwiderruflich gelöscht.
+
+Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht ist.`;
+    }
+    msg += "
+
+Wirklich löschen?";
+
+    if (!confirm(msg)) return;
+    // Bei Stimmen zweite Bestätigung
+    if (stimmenAnzahl > 0 && !confirm(`Letzte Bestätigung: ${stimmenAnzahl} Stimme${stimmenAnzahl!==1?"n":""} werden unwiderruflich gelöscht. Fortfahren?`)) return;
+
+    try {
+      await callFlow("deleteWahl", { wahlID:parseInt(wahl.id) });
+      await onDataChange();
+    } catch(e) { setFehler(e.message); }
+  }
   async function saveWahl(f) {
     setSaving(true); setFehler(null);
     try {
