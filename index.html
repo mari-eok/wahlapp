@@ -316,7 +316,7 @@ function App() {
 
   const CSS = `@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} } * { box-sizing: border-box; } body { margin: 0; } button:hover { filter: brightness(1.08); }`;
 
-  if (!appData && !loadError) return (
+  if (wahllokalID && !appData && !loadError) return (
     <div style={S.app}><style>{CSS}</style>
       <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
         <div style={S.spinner}/><p style={{ color:C.textLight, fontSize:14 }}>Wahllokal wird geladen…</p>
