@@ -824,7 +824,9 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
         optionen: f.optionen.map(o => ({
           id: o.id && !isNaN(parseInt(o.id)) ? String(parseInt(o.id)) : null,
           name: o.name,
-          istEnthaltung: o.istEnthaltung
+          istEnthaltung: o.istEnthaltung,
+          // hatStimmen mitschicken damit der Flow weiß ob Name aktualisiert werden darf
+          hatStimmen: !!f.hatStimmen
         }))
       });
       await onDataChange(); setForm(null);
@@ -837,7 +839,7 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <h3 style={{ margin:0, color:C.primary }}>Wahlen</h3>
-        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), mehrfach:false, exakt:false, maxAuswahl:1, optionen:[{ id:null, name:"", istEnthaltung:false },{ id:null, name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), mehrfach:false, exakt:false, maxAuswahl:1, optionen:[{ id:null, _tempKey:"tmp_1", name:"", istEnthaltung:false },{ id:null, _tempKey:"tmp_enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
       </div>
       <div style={S.card}>
         {wahlen.length===0 ? <p style={{ color:C.textLight, fontSize:14 }}>Noch keine Wahlen.</p> :
@@ -2102,9 +2104,9 @@ function StatCard({ num, label, color }) {
 function WahlForm({ form, onSave, onCancel, saving, fehler }) {
   const [f, setF] = useState(form);
   function setField(key,val){ setF(x=>({...x,[key]:val})); }
-  function addOption(){ setF(x=>({...x, optionen:[...x.optionen.filter(o=>!o.istEnthaltung),{ id:null, name:"", istEnthaltung:false },...x.optionen.filter(o=>o.istEnthaltung)]})); }
-  function setOptName(id,name){ setF(x=>({...x, optionen:x.optionen.map(o=>o.id===id?{...o,name}:o)})); }
-  function removeOpt(id){ setF(x=>({...x, optionen:x.optionen.filter(o=>o.id!==id)})); }
+  function addOption(){ setF(x=>({...x, optionen:[...x.optionen.filter(o=>!o.istEnthaltung),{ id:null, _tempKey:"tmp_"+Date.now(), name:"", istEnthaltung:false },...x.optionen.filter(o=>o.istEnthaltung)]})); }
+  function setOptName(key,name){ setF(x=>({...x, optionen:x.optionen.map(o=>(o.id===key||o._tempKey===key)?{...o,name}:o)})); }
+  function removeOpt(key){ setF(x=>({...x, optionen:x.optionen.filter(o=>o.id!==key&&o._tempKey!==key)})); }
   return (
     <div>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}><button style={{ ...S.btn, ...S.btnGhost }} onClick={onCancel}>← Zurück</button><h3 style={{ margin:0, color:C.primary }}>{f.isNew?"Neue Wahl":"Wahl bearbeiten"}</h3></div>
@@ -2128,16 +2130,32 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
           <label style={S.label}>Kandidaten</label>
           {f.hatStimmen&&<div style={{ ...S.alert, ...S.alertWarning, marginBottom:12 }}>⚠️ Bereits Stimmen abgegeben — Kandidaten können nicht mehr geändert werden.</div>}
           {f.optionen.filter(o=>!o.istEnthaltung).map((o,idx,arr)=>(
-            <div key={o.id} style={{ display:"flex", gap:8, marginBottom:8 }}>
-              <input style={{ ...S.input, flex:1, ...(f.hatStimmen?{ background:"#f5f5f5", color:"#999" }:{}) }} value={o.name} onChange={e=>!f.hatStimmen&&setOptName(o.id,e.target.value)} placeholder="Name" readOnly={f.hatStimmen} autoFocus={!f.hatStimmen&&idx===arr.length-1&&o.name===""} onKeyDown={e=>{ if(e.key==="Enter"&&!f.hatStimmen){ e.preventDefault(); addOption(); } }}/>
-              {!f.hatStimmen&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={()=>removeOpt(o.id)}>✕</button>}
+            <div key={o.id||o._tempKey||idx} style={{ display:"flex", gap:8, marginBottom:8 }}>
+              {(() => {
+                const istGespeichert = o.id && !isNaN(parseInt(o.id));
+                const nameReadonly = f.hatStimmen && istGespeichert;
+                return (<>
+                  <input
+                    style={{ ...S.input, flex:1, ...(nameReadonly?{ background:"#f5f5f5", color:"#555" }:{}) }}
+                    value={o.name}
+                    onChange={e=>!nameReadonly&&setOptName(o.id||o._tempKey,e.target.value)}
+                    placeholder="Name"
+                    readOnly={nameReadonly}
+                    autoFocus={!nameReadonly&&idx===arr.length-1&&o.name===""}
+                    onKeyDown={e=>{ if(e.key==="Enter"&&!nameReadonly){ e.preventDefault(); addOption(); } }}
+                    title={nameReadonly?"Name kann nicht geändert werden da bereits Stimmen abgegeben wurden.":""}
+                  />
+                  {!f.hatStimmen&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={()=>removeOpt(o.id||o._tempKey)}>✕</button>}
+                  {f.hatStimmen&&!istGespeichert&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={()=>removeOpt(o.id||o._tempKey)}>✕</button>}
+                </>);
+              })()}
             </div>
           ))}
           {!f.hatStimmen&&<button style={{ ...S.btn, ...S.btnGhost, marginTop:4 }} onClick={addOption}>+ Kandidat hinzufügen</button>}
         </div>
         <div style={{ marginBottom:16 }}>
           <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:14 }}>
-            <input type="checkbox" checked={f.optionen.some(o=>o.istEnthaltung)} onChange={e=>{ if(e.target.checked) setF(x=>({...x, optionen:[...x.optionen.filter(o=>!o.istEnthaltung),{ id:null, name:"Enthaltung", istEnthaltung:true }]})); else setF(x=>({...x, optionen:x.optionen.filter(o=>!o.istEnthaltung)})); }}/>
+            <input type="checkbox" checked={f.optionen.some(o=>o.istEnthaltung)} onChange={e=>{ if(e.target.checked) setF(x=>({...x, optionen:[...x.optionen.filter(o=>!o.istEnthaltung),{ id:null, _tempKey:"tmp_enth_"+Date.now(), name:"Enthaltung", istEnthaltung:true }]})); else setF(x=>({...x, optionen:x.optionen.filter(o=>!o.istEnthaltung)})); }}/>
             Enthaltung als Option anbieten
           </label>
         </div>
