@@ -512,6 +512,8 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   },[status]);
 
   const tokenClean = tokenRaw.replace(/-/g,"").toUpperCase().slice(0,8);
+  // Mit Bindestrich für Flow und SharePoint (Format: XXXX-YYYY)
+  const tokenFormatted = tokenClean.length===8 ? tokenClean.slice(0,4)+"-"+tokenClean.slice(4) : tokenClean;
   const selectedWahl = appData.wahlen.find(w => w.id===selectedWahlID);
 
   function toggleOption(opt) {
@@ -536,7 +538,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
     if (!isValid()) return;
     setSubmitting(true); setStatus("pruefen"); setFlowFehler(null);
     try {
-      const result = await callFlow("submitStimme", { tokenCode:tokenClean, eventID:wahllokalID, wahlID:parseInt(selectedWahlID), wahlTitel:selectedWahl.titel, positionen:selected.map(s=>({ optionID:parseInt(s.id), name:s.name })), maxAuswahl:selectedWahl.maxAuswahl||1 });
+      const result = await callFlow("submitStimme", { tokenCode:tokenFormatted, eventID:wahllokalID, wahlID:parseInt(selectedWahlID), wahlTitel:selectedWahl.titel, positionen:selected.map(s=>({ optionID:parseInt(s.id), name:s.name })), maxAuswahl:selectedWahl.maxAuswahl||1 });
       if (result.status==="gueltig") { setStatus("gueltig"); setStatusMsg(`Ihre Stimme wurde für die Wahl '${selectedWahl.titel}' gezählt.`); onDataChange(); }
       else if (result.status==="doppelt") { setStatus("doppelt"); setStatusMsg("Dieser Token wurde für diese Wahl bereits verwendet."); }
       else { setStatus("ungueltig"); setStatusMsg(`Ungültiger Token. Bitte prüfen Sie Ihre Eingabe.`); }
