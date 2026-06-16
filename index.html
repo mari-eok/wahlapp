@@ -66,7 +66,7 @@ function updateURL(wahllokalID, ansicht) {
 // leitungPIN wird bewusst NICHT gemappt — PIN-Vergleich läuft serverseitig via checkPin-Flow
 function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, modus: item.Modus?.Value || item.Modus || "beides" }; }
 function mapWahl(item) {
-  return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), optionen: [] };
+  return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), archiviert: !!(item.Archiviert === true || item.Archiviert === "true" || item.Archiviert === 1), optionen: [] };
 }
 function mapOption(item) { return { id: String(item.ID), wahlID: String(item.WahlID), eventID: item.EventID, name: item.Title, istEnthaltung: item.IstEnthaltung }; }
 
@@ -233,6 +233,51 @@ function generateToken() {
   let t = "";
   for (let i = 0; i < 8; i++) t += chars[arr[i] % chars.length];
   return t.slice(0,4) + "-" + t.slice(4);
+}
+
+// ─── Token PDF Generierung (global) ─────────────────────────────────────────
+function generiereTokenPDF(tokens, wahllokalName, evID) {
+  const COLS = 2, ROWS = 6, PER_PAGE = COLS * ROWS;
+  const pages = [];
+  for (let i = 0; i < tokens.length; i += PER_PAGE) {
+    pages.push(tokens.slice(i, i + PER_PAGE));
+  }
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Tokens ${wahllokalName}</title>
+  <style>
+    @page { size: A4; margin: 10mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; }
+    .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
+    .page:last-child { page-break-after: auto; }
+    .karte { border: 1px dashed #aaa; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6mm; text-align: center; }
+    .logo { font-size: 7pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 2mm; }
+    .wahllokal { font-size: 8pt; color: #5a6a7a; margin-bottom: 3mm; }
+    .label { font-size: 7pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5a6a7a; margin-bottom: 1mm; }
+    .token { font-size: 20pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.15em; color: #1a3a5c; margin-bottom: 2mm; }
+    .hinweis { font-size: 6pt; color: #aaa; }
+    .leer { border: 1px dashed #eee; }
+  </style>
+  </head><body>
+  ${pages.map(page => `
+    <div class="page">
+      ${Array.from({length: PER_PAGE}, (_, i) => {
+        const t = page[i];
+        if (!t) return '<div class="karte leer"></div>';
+        return \`<div class="karte">
+          <div class="logo">Evangelische Landeskirche in Baden</div>
+          <div class="wahllokal">${wahllokalName}</div>
+          <div class="label">Persönlicher Wahlcode</div>
+          <div class="token">${t}</div>
+          <div class="hinweis">Diesen Code geheim halten</div>
+        </div>\`;
+      }).join('')}
+    </div>`).join('')}
+  </body></html>`;
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank");
+  if (win) { win.onload = () => { win.print(); }; }
 }
 
 function WahllokalAuswahl({ onSelect }) {
@@ -705,7 +750,7 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
       <div style={{ maxWidth:960, margin:"0 auto", padding:"24px 16px" }}>
         <div style={S.navTabs}>{tabs.map(t=><button key={t.id} style={{ ...S.navTab, ...(tab===t.id?S.navTabActive:{}) }} onClick={()=>setTab(t.id)}>{t.label}</button>)}</div>
         {tab==="dashboard" && <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange}/>}
-        {tab==="wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} initialStichwahl={window._stichwahl} onStichwahl={()=>{ window._stichwahl=null; }}/>}
+        {tab==="wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} initialStichwahl={window._stichwahl} onStichwahl={()=>{ window._stichwahl=null; }} onErgebnisse={(wahlId)=>{ window._ergebnisWahlId=wahlId; setTab("ergebnisse"); }}/>}
         {tab==="waehler" && <LeitungWaehler appData={appData} eventID={eventID} onDataChange={onDataChange}/>}
         {tab==="ergebnisse" && <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setTab}/>}
       </div>
@@ -803,8 +848,10 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
 function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl }) {
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
   const { confirm, dialog } = useConfirm();
-  // Nur nicht-geschlossene Wahlen in der Hauptliste, geschlossene nur im Archiv
-  const wahlen = appData.wahlen.filter(w=>w.eventID===eventID && !w.geschlossen);
+  // Alle Wahlen — aktive, geschlossene und archivierte
+  const alleWahlen = appData.wahlen.filter(w=>w.eventID===eventID);
+  const wahlen = alleWahlen.filter(w=>!w.archiviert); // aktiv + geschlossen (nicht archiviert)
+  const archiviertWahlen = alleWahlen.filter(w=>w.archiviert);
   useEffect(()=>{ if(initialStichwahl){ setForm(initialStichwahl); if(onStichwahl) onStichwahl(); } },[]);
   async function openForm(wahl) {
     let hatStimmen = false;
@@ -849,6 +896,13 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
       await onDataChange();
     } catch(e) { setFehler(e.message); }
   }
+  async function archiviereWahl(wahl) {
+    const ok = await confirm({ titel:"Wahl archivieren", nachricht:`Wahl "${wahl.titel}" archivieren?
+
+Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestaetigen:"Archivieren", typ:"warn" });
+    if (!ok) return;
+    try { await callFlow("saveWahl",{ wahlID:parseInt(wahl.id), eventID, titel:wahl.titel, aktiv:false, startzeit:wahl.startzeit, mehrfach:wahl.mehrfach, exakt:wahl.exakt, maxAuswahl:wahl.maxAuswahl, mehrheitsregel:wahl.mehrheitsregel||"relativ", geschlossen:true, archiviert:true, optionen:wahl.optionen.map(o=>({ id:o.id&&!isNaN(parseInt(o.id))?String(parseInt(o.id)):null, name:o.name, istEnthaltung:o.istEnthaltung, hatStimmen:true })) }); await onDataChange(); }catch(e){ setFehler(e.message); }
+  }
   async function saveWahl(f) {
     setSaving(true); setFehler(null);
     try {
@@ -888,27 +942,35 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
         <h3 style={{ margin:0, color:C.primary }}>Wahlen</h3>
         <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), mehrfach:false, exakt:false, maxAuswahl:1, mehrheitsregel:"absolut", optionen:[{ id:null, _tempKey:"tmp_1", name:"", istEnthaltung:false },{ id:null, _tempKey:"tmp_enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
       </div>
+
+      {/* Aktive & geschlossene Wahlen */}
       <div style={S.card}>
-        {wahlen.length===0 ? <p style={{ color:C.textLight, fontSize:14 }}>Noch keine Wahlen.</p> :
-          <table style={S.table}><thead><tr><th style={S.th}>Titel</th><th style={S.th}>Typ</th><th style={S.th}>Opt.</th><th style={S.th}>Status</th><th style={S.th}>Aktionen</th></tr></thead>
+        {wahlen.length===0 ? <p style={{ color:C.textLight, fontSize:14 }}>Noch keine Wahlen angelegt.</p> :
+          <table style={S.table}><thead><tr><th style={S.th}>Titel</th><th style={S.th}>Typ</th><th style={S.th}>Status</th><th style={S.th}>Aktionen</th></tr></thead>
           <tbody>{wahlen.map(w=>(
-            <tr key={w.id}>
+            <tr key={w.id} style={{ opacity:w.geschlossen?0.85:1 }}>
               <td style={S.td}><strong>{w.titel}</strong></td>
-              <td style={S.td}>{w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"}</td>
-              <td style={S.td}>{w.optionen.length}</td>
-              <td style={S.td}>{w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}</td>
-              <td style={S.td}><div style={{ display:"flex", gap:6 }}>
+              <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"} · {w.optionen.length} Opt.</td>
+              <td style={S.td}>
+                {w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}
+              </td>
+              <td style={S.td}><div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 {!w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>openForm(w)}>Bearbeiten</button>}
                 {!w.geschlossen&&w.aktiv&&<button style={{ ...S.btn, ...S.btnWarning, fontSize:12, padding:"5px 11px" }} onClick={()=>pauseWahl&&pauseWahl(w)}>⏸ Pause</button>}
                 {!w.geschlossen&&!w.aktiv&&<button style={{ ...S.btn, ...S.btnSuccess, fontSize:12, padding:"5px 11px" }} onClick={()=>starteWahl&&starteWahl(w)}>▶ Starten</button>}
+                {!w.geschlossen&&<button style={{ ...S.btn, fontSize:12, padding:"5px 11px", background:"transparent", color:"#d97706", border:"1px solid #d97706" }} onClick={()=>{ const closeWahl = async()=>{ const ok=await confirm({ titel:"Wahl schließen", nachricht:`Wahl "${w.titel}" endgültig schließen?`, bestaetigen:"Schließen", typ:"warn" }); if(!ok) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(w.id), aktiv:false, geschlossen:true }); await onDataChange(); }catch(e){ setFehler(e.message); } }; closeWahl(); }}>🔒 Schließen</button>}
+                {w.geschlossen&&<button style={{ ...S.btn, ...S.btnPrimary, fontSize:12, padding:"5px 11px" }} onClick={()=>onErgebnisse&&onErgebnisse(w.id)}>📊 Ergebnisse</button>}
+                {w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>archiviereWahl(w)}>📦 Archivieren</button>}
                 <button style={{ ...S.btn, fontSize:12, padding:"5px 11px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={()=>deleteWahl(w)}>Löschen</button>
               </div></td>
             </tr>
           ))}</tbody></table>
         }
       </div>
-      {appData.wahlen.filter(w=>w.eventID===eventID&&w.geschlossen).length>0&&(
-        <ArchivWahlen wahlen={appData.wahlen.filter(w=>w.eventID===eventID&&w.geschlossen)} onDelete={deleteWahl}/>
+
+      {/* Archiv */}
+      {archiviertWahlen.length>0&&(
+        <ArchivWahlen wahlen={archiviertWahlen} onDelete={deleteWahl}/>
       )}
     </div>
   );
@@ -919,15 +981,14 @@ function ArchivWahlen({ wahlen, onDelete }) {
   return (
     <div style={S.card}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:zeig?12:0 }}>
-        <div style={S.sectionLabel}>🗄️ Archiv ({wahlen.length} geschlossene {wahlen.length===1?"Wahl":"Wahlen"})</div>
+        <div style={S.sectionLabel}>📦 Archiv ({wahlen.length} archivierte {wahlen.length===1?"Wahl":"Wahlen"})</div>
         <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>setZeig(!zeig)}>{zeig?"Ausblenden":"Anzeigen"}</button>
       </div>
-      {zeig&&(<table style={S.table}><thead><tr><th style={S.th}>Titel</th><th style={S.th}>Typ</th><th style={S.th}>Opt.</th><th style={S.th}>Status</th><th style={S.th}>Aktionen</th></tr></thead>
-        <tbody>{wahlen.map(w=>(<tr key={w.id} style={{ opacity:0.7 }}>
+      {zeig&&(<table style={S.table}><thead><tr><th style={S.th}>Titel</th><th style={S.th}>Typ</th><th style={S.th}>Status</th><th style={S.th}>Aktionen</th></tr></thead>
+        <tbody>{wahlen.map(w=>(<tr key={w.id} style={{ opacity:0.6 }}>
           <td style={S.td}><strong>{w.titel}</strong></td>
-          <td style={S.td}>{w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"}</td>
-          <td style={S.td}>{w.optionen.length}</td>
-          <td style={S.td}><span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span></td>
+          <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"} · {w.optionen.length} Opt.</td>
+          <td style={S.td}><span style={{ ...S.badge, background:"#e2e8f0", color:"#475569" }}>📦 archiviert</span></td>
           <td style={S.td}><button style={{ ...S.btn, fontSize:12, padding:"5px 11px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={()=>onDelete(w)}>Löschen</button></td>
         </tr>))}</tbody>
       </table>)}
@@ -1318,61 +1379,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
     setSaving(false);
   }
 
-function generiereTokenPDF(tokens, wahllokalName, evID) {
-    const COLS = 2, ROWS = 6, PER_PAGE = COLS * ROWS;
-    const pages = [];
-    for (let i = 0; i < tokens.length; i += PER_PAGE) {
-      pages.push(tokens.slice(i, i + PER_PAGE));
-    }
-    // A4 in mm: 210 x 297
-    // Karte: (210-20) / 2 = 95mm breit, (297-20) / 6 = ~46mm hoch (mit Rand)
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Tokens ${wahllokalName}</title>
-    <style>
-      @page { size: A4; margin: 10mm; }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; }
-      .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
-      .page:last-child { page-break-after: auto; }
-      .karte {
-        border: 1px dashed #aaa;
-        display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        padding: 6mm; text-align: center;
-      }
-      .logo { font-size: 7pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 2mm; }
-      .wahllokal { font-size: 8pt; color: #5a6a7a; margin-bottom: 3mm; }
-      .label { font-size: 7pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5a6a7a; margin-bottom: 1mm; }
-      .token { font-size: 20pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.15em; color: #1a3a5c; margin-bottom: 2mm; }
-      .hinweis { font-size: 6pt; color: #aaa; }
-      .leer { border: 1px dashed #eee; }
-    </style>
-    </head><body>
-    ${pages.map(page => `
-      <div class="page">
-        ${Array.from({length: PER_PAGE}, (_, i) => {
-          const t = page[i];
-          if (!t) return '<div class="karte leer"></div>';
-          return `<div class="karte">
-            <div class="logo">Evangelische Landeskirche in Baden</div>
-            <div class="wahllokal">${wahllokalName}</div>
-            <div class="label">Persönlicher Wahlcode</div>
-            <div class="token">${t}</div>
-            <div class="hinweis">Diesen Code geheim halten</div>
-          </div>`;
-        }).join('')}
-      </div>`).join('')}
-    </body></html>`;
-
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, "_blank");
-    if (win) {
-      win.onload = () => { win.print(); };
-    }
-  }
-
-  // Sortierung & Filter State
+// Sortierung & Filter State
   const [sortWaehler, setSortWaehler] = useState({ col:"email", dir:"asc" });
   const [filterStatus, setFilterStatus] = useState("alle");
 
@@ -1615,7 +1622,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID) {
 
 function LeitungErgebnisse({ appData, eventID, onDataChange, onSwitchTab }) {
   useEffect(()=>{ window._switchToWahlen=()=>onSwitchTab&&onSwitchTab("wahlen"); return ()=>{ window._switchToWahlen=null; }; },[onSwitchTab]);
-  return <ErgebnisDashboard appData={appData} wahllokalID={eventID} onBack={null} isLeitung={true} onDataChange={onDataChange}/>;
+  return <ErgebnisDashboard appData={appData} wahllokalID={eventID} onBack={null} isLeitung={true} onDataChange={onDataChange} initialWahlId={window._ergebnisWahlId}/>;
 }
 
 function SuperadminView({ appData, onExit, onDataChange }) {
@@ -2121,7 +2128,7 @@ function gruppiereWahlen(wahlen) {
   return gruppen;
 }
 
-function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDataChange }) {
+function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDataChange, initialWahlId }) {
   const wahllokal = appData.wahllokale.find(w=>w.eventID===wahllokalID);
   const [wahlenFrisch, setWahlenFrisch] = useState(null);
   const wahlen = wahlenFrisch||appData.wahlen.filter(w=>w.eventID===wahllokalID);
@@ -2130,8 +2137,9 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
     ladeWahlen();
   },[wahllokalID]);
   const gruppen = gruppiereWahlen(wahlen);
-  const [selectedGruppeIdx, setSelectedGruppeIdx] = useState(0);
-  const [selectedWahlID, setSelectedWahlID] = useState(wahlen[0]?.id||"");
+  const initialGruppeIdx = initialWahlId ? Math.max(0, gruppen.findIndex(g => g.hauptwahl.id===initialWahlId||g.stichwahlen.some(s=>s.id===initialWahlId))) : 0;
+  const [selectedGruppeIdx, setSelectedGruppeIdx] = useState(initialGruppeIdx);
+  const [selectedWahlID, setSelectedWahlID] = useState(initialWahlId||wahlen[0]?.id||"");
   const [ansicht, setAnsicht] = useState("kombiniert"); // "kombiniert" | "einzeln"
   const [ergebnisse, setErgebnisse] = useState(null); const [loading, setLoading] = useState(false);
   const [letzteAktualisierung, setLetzteAktualisierung] = useState(null); const [vollbild, setVollbild] = useState(false);
