@@ -2371,23 +2371,41 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
             placeholder="z.B. Diakoniepfarrer*in"/>
           {f.istStichwahl&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Titel einer Stichwahl kann nicht geändert werden.</p>}
         </div>
-        <DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ)."/>
         <div style={S.formGroup}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:f.hatEndzeit?10:0 }}>
-            <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:14, margin:0 }}>
-              <input type="checkbox" checked={!!f.hatEndzeit} onChange={e=>setF(x=>({...x, hatEndzeit:e.target.checked, endzeit:e.target.checked?x.endzeit||"":""}))}/>
-              <span style={{ fontWeight:600, fontSize:13, letterSpacing:"0.05em", textTransform:"uppercase", color:C.textLight }}>Endzeit festlegen</span>
-            </label>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"start" }}>
+            <div>
+              <label style={S.label}>Startzeit (lokale Zeit)</label>
+              <DateTimePicker label="" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint=""/>
+              <p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Angabe in Ihrer lokalen Zeit (MEZ/MESZ).</p>
+            </div>
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, marginTop:2 }}>
+                <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:13, margin:0, fontWeight:600, color:C.textLight, letterSpacing:"0.04em", textTransform:"uppercase" }}>
+                  <input type="checkbox" checked={!!f.hatEndzeit} onChange={e=>setF(x=>({...x, hatEndzeit:e.target.checked, endzeit:""}))}/>
+                  Endzeit
+                </label>
+              </div>
+              {f.hatEndzeit&&<>
+                <DateTimePicker label="" value={f.endzeit||""} onChange={v=>{
+                  const start = f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):"";
+                  // Gleiches Datum erlaubt, aber Uhrzeit muss später sein
+                  if (start && v) {
+                    const [sd, st] = start.split("T");
+                    const [vd, vt] = v.split("T");
+                    if (vd === sd && vt <= st) return; // gleicher Tag aber frühere Zeit
+                    if (vd < sd) return; // früheres Datum
+                  }
+                  setField("endzeit", v);
+                }} hint=""/>
+                {f.endzeit&&f.startzeit&&(()=>{
+                  const start = f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16);
+                  const [sd,st]=start.split("T"); const [vd,vt]=(f.endzeit||"").split("T");
+                  const fehler = vd<sd || (vd===sd&&vt<=st);
+                  return fehler ? <p style={{ color:C.error, fontSize:12, marginTop:4 }}>⚠️ Endzeit muss nach der Startzeit liegen.</p> : null;
+                })()}
+              </>}
+            </div>
           </div>
-          {f.hatEndzeit&&<>
-            <DateTimePicker label="" value={f.endzeit||""} onChange={v=>{
-              if (f.startzeit && v && v <= (f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16))) return;
-              setField("endzeit", v);
-            }} hint="Muss nach der Startzeit liegen. Die Wahl wird automatisch geschlossen."/>
-            {f.endzeit&&f.startzeit&&f.endzeit<=(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16))&&(
-              <p style={{ color:C.error, fontSize:12, marginTop:4 }}>⚠️ Endzeit muss nach der Startzeit liegen.</p>
-            )}
-          </>}
         </div>
         <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap", opacity:f.hatStimmen?0.5:1, pointerEvents:f.hatStimmen?"none":"auto" }}>
           <label style={{ display:"flex", alignItems:"center", gap:8, cursor:f.hatStimmen?"not-allowed":"pointer", fontSize:14 }}><input type="checkbox" checked={f.mehrfach} disabled={!!f.hatStimmen} onChange={e=>setField("mehrfach",e.target.checked)}/>Mehrfachauswahl</label>
