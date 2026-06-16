@@ -936,7 +936,7 @@ function ArchivWahlen({ wahlen, onDelete }) {
 }
 
 // FIX: OfflineTokenListe liest tokenList aus getDaten und mappt korrekt via mapToken
-function OfflineTokenListe({ eventID, reloadTrigger }) {
+function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null); const [ausgewaehlt, setAusgewaehlt] = useState([]); const [loesching, setLoesching] = useState(false);
   const { confirm, dialog } = useConfirm();
@@ -1084,7 +1084,18 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
       {dialog}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
         <div style={S.sectionLabel}>Ausgegebene Tokens</div>
-        <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}>🔄</button>
+        <div style={{ display:"flex", gap:6 }}>
+          {tokens.filter(t=>t.aktiv&&!t.verwendet).length>0&&(
+            <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
+              const druckTokens = gefiltert.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
+              if (druckTokens.length===0) return;
+              generiereTokenPDF(druckTokens, wahllokalName||eventID, eventID);
+            }} disabled={loading} title="Aktive, unverwendete Tokens als PDF drucken">
+              🖨️ PDF drucken ({tokens.filter(t=>t.aktiv&&!t.verwendet).length})
+            </button>
+          )}
+          <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}>🔄</button>
+        </div>
       </div>
       <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
         {filterBtns.map(b=><button key={b.id} style={{ ...S.btn, fontSize:12, padding:"5px 12px", ...(filter===b.id?S.btnPrimary:S.btnGhost), ...(b.warn&&filter!==b.id?{ borderColor:C.warning, color:C.warning }:{}) }} onClick={()=>setFilter(b.id)}>{b.label}</button>)}
@@ -1307,7 +1318,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
     setSaving(false);
   }
 
-  function generiereTokenPDF(tokens, wahllokalName, evID) {
+function generiereTokenPDF(tokens, wahllokalName, evID) {
     const COLS = 2, ROWS = 6, PER_PAGE = COLS * ROWS;
     const pages = [];
     for (let i = 0; i < tokens.length; i += PER_PAGE) {
@@ -1468,7 +1479,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
         </button>
         <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>Tokens werden in der Datenbank gespeichert und als druckfertiges PDF geöffnet (2×6 Token pro A4-Seite, zum Ausschneiden).</p>
       </div>
-      <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger}/>
+      <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger} wahllokalName={wahllokal?.name}/>
     </div>
   );
 
