@@ -810,7 +810,23 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
       if (startzeitISO && !startzeitISO.includes("Z") && !startzeitISO.includes("+")) {
         startzeitISO = parseLocalDatetime(startzeitISO).toISOString();
       }
-      await callFlow("saveWahl",{ wahlID:(!f.id||f.isNew)?null:parseInt(f.id), eventID, titel:f.titel, aktiv:f.aktiv||false, startzeit:startzeitISO, mehrfach:f.mehrfach, exakt:f.exakt, maxAuswahl:f.maxAuswahl, mehrheitsregel:(typeof f.mehrheitsregel==="object"?f.mehrheitsregel?.Value:f.mehrheitsregel)||"relativ", geschlossen:f.geschlossen||false, optionen:f.optionen });
+      await callFlow("saveWahl",{
+        wahlID: (!f.id||f.isNew) ? null : parseInt(f.id),
+        eventID,
+        titel: f.titel,
+        aktiv: f.aktiv||false,
+        startzeit: startzeitISO,
+        mehrfach: f.mehrfach,
+        exakt: f.exakt,
+        maxAuswahl: f.maxAuswahl,
+        mehrheitsregel: (typeof f.mehrheitsregel==="object" ? f.mehrheitsregel?.Value : f.mehrheitsregel)||"relativ",
+        geschlossen: f.geschlossen||false,
+        optionen: f.optionen.map(o => ({
+          id: o.id && !isNaN(parseInt(o.id)) ? String(parseInt(o.id)) : null,
+          name: o.name,
+          istEnthaltung: o.istEnthaltung
+        }))
+      });
       await onDataChange(); setForm(null);
     }catch(e){ setFehler(e.message); }
     setSaving(false);
@@ -821,7 +837,7 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <h3 style={{ margin:0, color:C.primary }}>Wahlen</h3>
-        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), mehrfach:false, exakt:false, maxAuswahl:1, optionen:[{ id:"o1", name:"", istEnthaltung:false },{ id:"enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), mehrfach:false, exakt:false, maxAuswahl:1, optionen:[{ id:null, name:"", istEnthaltung:false },{ id:null, name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
       </div>
       <div style={S.card}>
         {wahlen.length===0 ? <p style={{ color:C.textLight, fontSize:14 }}>Noch keine Wahlen.</p> :
@@ -1867,7 +1883,7 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
           exakt: false,
           maxAuswahl: 1,
           mehrheitsregel,
-          optionen: kandidaten.map((k,idx)=>({ id:String(Date.now()+idx), name:k.name, istEnthaltung:false })),
+          optionen: kandidaten.map(k=>({ id:null, name:k.name, istEnthaltung:false })),
           eventID: wahllokalID,
           hatStimmen: false
         };
@@ -2086,7 +2102,7 @@ function StatCard({ num, label, color }) {
 function WahlForm({ form, onSave, onCancel, saving, fehler }) {
   const [f, setF] = useState(form);
   function setField(key,val){ setF(x=>({...x,[key]:val})); }
-  function addOption(){ setF(x=>({...x, optionen:[...x.optionen.filter(o=>!o.istEnthaltung),{ id:Date.now().toString(), name:"", istEnthaltung:false },...x.optionen.filter(o=>o.istEnthaltung)]})); }
+  function addOption(){ setF(x=>({...x, optionen:[...x.optionen.filter(o=>!o.istEnthaltung),{ id:null, name:"", istEnthaltung:false },...x.optionen.filter(o=>o.istEnthaltung)]})); }
   function setOptName(id,name){ setF(x=>({...x, optionen:x.optionen.map(o=>o.id===id?{...o,name}:o)})); }
   function removeOpt(id){ setF(x=>({...x, optionen:x.optionen.filter(o=>o.id!==id)})); }
   return (
@@ -2121,7 +2137,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
         </div>
         <div style={{ marginBottom:16 }}>
           <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:14 }}>
-            <input type="checkbox" checked={f.optionen.some(o=>o.istEnthaltung)} onChange={e=>{ if(e.target.checked) setF(x=>({...x, optionen:[...x.optionen.filter(o=>!o.istEnthaltung),{ id:"enthaltung", name:"Enthaltung", istEnthaltung:true }]})); else setF(x=>({...x, optionen:x.optionen.filter(o=>!o.istEnthaltung)})); }}/>
+            <input type="checkbox" checked={f.optionen.some(o=>o.istEnthaltung)} onChange={e=>{ if(e.target.checked) setF(x=>({...x, optionen:[...x.optionen.filter(o=>!o.istEnthaltung),{ id:null, name:"Enthaltung", istEnthaltung:true }]})); else setF(x=>({...x, optionen:x.optionen.filter(o=>!o.istEnthaltung)})); }}/>
             Enthaltung als Option anbieten
           </label>
         </div>
