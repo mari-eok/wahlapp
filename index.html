@@ -167,7 +167,7 @@ function DateTimePicker({ value, onChange, label, hint, minDate }) {
   const [h, m] = timePart.split(":");
 
   const hours = Array.from({length:24},(_,i)=>String(i).padStart(2,"0"));
-  const minutes = ["00","15","30","45"];
+  const minutes = ["00","05","10","15","20","25","30","35","40","45","50","55"];
 
   function update(newDate, newH, newM) { onChange(`${newDate}T${newH}:${newM}`); }
 
@@ -852,7 +852,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   const alleWahlen = appData.wahlen.filter(w=>w.eventID===eventID);
   const wahlen = alleWahlen.filter(w=>!w.archiviert); // aktiv + geschlossen (nicht archiviert)
   const archiviertWahlen = alleWahlen.filter(w=>w.archiviert);
-  useEffect(()=>{ if(initialStichwahl){ setForm(initialStichwahl); if(onStichwahl) onStichwahl(); } },[]);
+  useEffect(()=>{ if(initialStichwahl){ const sw={...initialStichwahl, startzeit:initialStichwahl.startzeit||toLocalInputValue(new Date()), hatEndzeit:false, endzeit:"" }; setForm(sw); if(onStichwahl) onStichwahl(); } },[]);
   async function openForm(wahl) {
     let hatStimmen = false;
     try { const r=await callFlow("getErgebnisse",{ wahlID:parseInt(wahl.id), eventID }); hatStimmen=(Array.isArray(r)?r.length:(r.value?.length||0))>0; } catch(e) {}
@@ -2382,8 +2382,9 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
             return (<>
               <DateTimePicker label="" value={f.endzeit||""} minDate={startDatum} onChange={v=>{
                 if (startVal && v) {
-                  const [sd,st]=startVal.split("T"); const [vd,vt]=v.split("T");
-                  if (vd<sd || (vd===sd&&vt<=st)) return;
+                  const [sd]=startVal.split("T"); const [vd]=v.split("T");
+                  if (vd<sd) return; // früheres Datum blockieren
+                  // Gleiches oder späteres Datum: immer setzen, Fehler wird separat angezeigt
                 }
                 setField("endzeit",v);
               }} hint="Gleicher Tag möglich — Uhrzeit muss nach der Startzeit liegen."/>
