@@ -545,11 +545,11 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   if (status==="gueltig") return <div style={{ ...S.statusScreen, background:C.successBg }}><div style={{ fontSize:64 }}>✅</div><h2 style={{ ...S.statusTitle, color:C.success }}>STIMME GÜLTIG</h2><p style={{ ...S.statusMsg, color:"#2d6a4f" }}>{statusMsg}</p><p style={{ fontSize:14, color:"rgba(0,0,0,0.4)" }}>Zurück in {countdown} Sekunden…</p></div>;
   if (status==="ungueltig") return <div style={{ ...S.statusScreen, background:C.errorBg }}><div style={{ fontSize:64 }}>❌</div><h2 style={{ ...S.statusTitle, color:C.error }}>STIMME UNGÜLTIG</h2><p style={{ ...S.statusMsg, color:"#7b2d2d" }}>{statusMsg}</p><p style={{ fontSize:14, color:"rgba(0,0,0,0.4)" }}>Zurück in {countdown} Sekunden…</p></div>;
   if (status==="doppelt") return <div style={{ ...S.statusScreen, background:C.warningBg }}><div style={{ fontSize:64 }}>⚠️</div><h2 style={{ ...S.statusTitle, color:C.warning }}>TOKEN BEREITS VERWENDET</h2><p style={{ ...S.statusMsg, color:"#7d5a0a" }}>{statusMsg}</p><p style={{ fontSize:14, color:"rgba(0,0,0,0.4)" }}>Zurück in {countdown} Sekunden…</p></div>;
-  if (!wahllokal||!wahllokal.aktiv) return <div style={S.wlContainer}><WlHeader/><div style={S.closedScreen}><div style={{ fontSize:48 }}>🔒</div><h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>Das Wahllokal ist geschlossen.</h2></div></div>;
+  if (!wahllokal||!wahllokal.aktiv) return <div style={S.wlContainer}><WlHeader/><WahllokalGear wahllokalID={wahllokalID}/><div style={S.closedScreen}><div style={{ fontSize:48 }}>🔒</div><h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>Das Wahllokal ist geschlossen.</h2></div></div>;
   if (aktiveWahlen.length===0) {
     const diff = naechsteWahl ? Math.max(0,Math.floor((parseSharePointDate(naechsteWahl.startzeit)-nowTime)/1000)) : null;
     const fmt = s => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; return h>0?`${h}h ${String(m).padStart(2,"0")}m ${String(sec).padStart(2,"0")}s`:`${m}m ${String(sec).padStart(2,"0")}s`; };
-    return (<div style={S.wlContainer}><WlHeader name={wahllokal?.name}/><div style={S.closedScreen}><div style={{ fontSize:48 }}>{naechsteWahl?"⏰":"🔒"}</div><h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>{naechsteWahl?"Abstimmung beginnt in Kürze":"Keine aktive Abstimmung."}</h2>{naechsteWahl&&diff!==null&&<div style={{ fontSize:28, fontWeight:700, color:C.accent }}>{fmt(diff)}</div>}</div></div>);
+    return (<div style={S.wlContainer}><WlHeader name={wahllokal?.name}/><WahllokalGear wahllokalID={wahllokalID}/><div style={S.closedScreen}><div style={{ fontSize:48 }}>{naechsteWahl?"⏰":"🔒"}</div><h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>{naechsteWahl?"Abstimmung beginnt in Kürze":"Keine aktive Abstimmung."}</h2>{naechsteWahl&&diff!==null&&<div style={{ fontSize:28, fontWeight:700, color:C.accent }}>{fmt(diff)}</div>}</div></div>);
   }
 
   const maxCount = selectedWahl?.mehrfach ? selectedWahl.maxAuswahl : 1;
@@ -557,6 +557,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   return (
     <div style={S.wlContainer}>
       <WlHeader name={wahllokal?.name}/>
+      <WahllokalGear wahllokalID={wahllokalID}/>
       {flowFehler && <div style={{ ...S.alert, ...S.alertError }}>⚠️ {flowFehler}</div>}
       {aktiveWahlen.length>1
         ? <div style={S.card}><div style={S.sectionLabel}>Abstimmung</div><select style={S.select} value={selectedWahlID} onChange={e=>{ setSelectedWahlID(e.target.value); setSelected([]); }}>{aktiveWahlen.map(w=><option key={w.id} value={w.id}>{w.titel}</option>)}</select></div>
@@ -574,6 +575,30 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
         </div>
       )}
       <button style={{ ...S.btnSubmit, ...(isValid()?S.btnSubmitActive:S.btnSubmitDisabled) }} onClick={submitStimme} disabled={!isValid()}>{submitting?"Wird übermittelt…":"Stimme abgeben"}</button>
+    </div>
+  );
+}
+
+function WahllokalGear({ wahllokalID }) {
+  const [offen, setOffen] = useState(false);
+  return (
+    <div style={{ position:"fixed", bottom:20, right:20, zIndex:999 }}>
+      {offen && (
+        <>
+          <div onClick={()=>setOffen(false)} style={{ position:"fixed", inset:0, zIndex:998 }}/>
+          <div style={{ position:"absolute", bottom:52, right:0, background:C.bgWhite, borderRadius:10, border:`1px solid ${C.border}`, boxShadow:"0 4px 16px rgba(0,0,0,0.12)", padding:8, minWidth:180, zIndex:999 }}>
+            <a href={`?wahllokal=${wahllokalID}&ansicht=leitung`} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:8, textDecoration:"none", color:C.text, fontSize:14, fontWeight:600 }}
+              onMouseOver={e=>e.currentTarget.style.background="#f0f4f8"}
+              onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+              <span style={{ fontSize:18 }}>📋</span> Wahlleitung
+            </a>
+          </div>
+        </>
+      )}
+      <button onClick={()=>setOffen(!offen)} style={{ width:44, height:44, borderRadius:"50%", background:C.bgWhite, border:`1px solid ${C.border}`, boxShadow:"0 2px 8px rgba(0,0,0,0.1)", cursor:"pointer", fontSize:20, display:"flex", alignItems:"center", justifyContent:"center", color:C.textLight, transition:"all 0.15s" }}
+        title="Einstellungen">
+        ⚙️
+      </button>
     </div>
   );
 }
