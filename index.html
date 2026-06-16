@@ -288,17 +288,17 @@ function WahllokalAuswahl({ onSelect }) {
 
 function App() {
   const urlParams = new URL(window.location.href).searchParams;
-  const wahllokalID = urlParams.get("wahllokal") || "";
   const ansicht = urlParams.get("ansicht") || "";
   const keinWahllokal = !urlParams.get("wahllokal");
+  const [wahllokalID, setWahllokalID] = useState(urlParams.get("wahllokal") || "");
   const [view, setView] = useState(keinWahllokal && !ansicht ? "startseite" : ansicht === "ergebnisse" ? "ergebnisse" : ansicht === "leitung" ? "leitung" : ansicht === "superadmin" ? "superadmin" : "wahllokal");
   const [leitungAuth, setLeitungAuth] = useState(null);
   const [superadminAuth, setSuperadminAuth] = useState(false);
   const [appData, setAppData] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
-  useEffect(() => { if (wahllokalID) loadAppData(); }, []);
-  useEffect(() => { if (!wahllokalID) return; const t = setInterval(loadAppData, 10000); return () => clearInterval(t); }, []);
+  useEffect(() => { if (wahllokalID) loadAppData(); }, [wahllokalID]);
+  useEffect(() => { if (!wahllokalID) return; const t = setInterval(loadAppData, 10000); return () => clearInterval(t); }, [wahllokalID]);
 
   const FALLBACK_DATA = { wahllokale:[{ id:"1", eventID:"EOK", name:"Synode Ortenau", aktiv:true }], wahlen:[{ id:"1", eventID:"EOK", titel:"Diakoniepfarrer*in", aktiv:true, startzeit:new Date(Date.now()-60000).toISOString(), mehrfach:false, exakt:true, maxAuswahl:1, optionen:[{ id:"1", wahlID:"1", eventID:"EOK", name:"Leon Hartmann", istEnthaltung:false },{ id:"2", wahlID:"1", eventID:"EOK", name:"Enthaltung", istEnthaltung:true }] }], optionen:[], tokens:[], tokenCount:0 };
 
@@ -329,6 +329,7 @@ function App() {
       {view === "startseite" && (
         <WahllokalAuswahl onSelect={(eventID) => {
           window.history.pushState({}, "", `?wahllokal=${eventID}`);
+          setWahllokalID(eventID);
           setView("wahllokal");
         }}/>
       )}
