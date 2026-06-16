@@ -291,7 +291,7 @@ function App() {
   const ansicht = urlParams.get("ansicht") || "";
   const keinWahllokal = !urlParams.get("wahllokal");
   const [wahllokalID, setWahllokalID] = useState(urlParams.get("wahllokal") || "");
-  const [view, setView] = useState(keinWahllokal && !ansicht ? "startseite" : ansicht === "ergebnisse" ? "ergebnisse" : ansicht === "leitung" ? "leitung" : ansicht === "superadmin" ? "superadmin" : "wahllokal");
+  const [view, setView] = useState(keinWahllokal && !ansicht ? "startseite" : ansicht === "ergebnisse" ? "ergebnisse" : ansicht === "leitung" ? "leitung" : ansicht === "superadmin" ? "superadmin" : ansicht === "praesentation" ? "praesentation" : "wahllokal");
   const [leitungAuth, setLeitungAuth] = useState(null);
   const [superadminAuth, setSuperadminAuth] = useState(false);
   const [appData, setAppData] = useState(null);
@@ -351,6 +351,9 @@ function App() {
       {view === "superadmin" && (superadminAuth
         ? <SuperadminView appData={appData} onExit={() => { setView("wahllokal"); setSuperadminAuth(false); updateURL(wahllokalID, null); }} onDataChange={loadAppData} />
         : <SuperadminPinScreen onAuth={() => { setSuperadminAuth(true); }} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} />
+      )}
+      {view === "praesentation" && appData && (
+        <PraesentationsModus appData={appData} wahllokalID={wahllokalID} onExit={() => { setView("wahllokal"); updateURL(wahllokalID, null); }}/>
       )}
     </div>
   );
@@ -591,6 +594,11 @@ function WahllokalGear({ wahllokalID }) {
               onMouseOver={e=>e.currentTarget.style.background="#f0f4f8"}
               onMouseOut={e=>e.currentTarget.style.background="transparent"}>
               <span style={{ fontSize:18 }}>📋</span> Wahlleitung
+            </a>
+            <a href={`?wahllokal=${wahllokalID}&ansicht=praesentation`} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:8, textDecoration:"none", color:C.text, fontSize:14, fontWeight:600 }}
+              onMouseOver={e=>e.currentTarget.style.background="#f0f4f8"}
+              onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+              <span style={{ fontSize:18 }}>📊</span> Ergebnisse präsentieren
             </a>
           </div>
         </>
@@ -1565,6 +1573,312 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   );
 }
 
+function PraesentationsModus({ appData, wahllokalID, onExit }) {
+  const wahllokal = appData.wahllokale.find(w=>w.eventID===wahllokalID);
+  const [wahlenFrisch, setWahlenFrisch] = useState(null);
+  const wahlen = wahlenFrisch||appData.wahlen.filter(w=>w.eventID===wahllokalID&&w.geschlossen);
+  const gruppen = gruppiereWahlen(wahlen);
+  const [selectedGruppeIdx, setSelectedGruppeIdx] = useState(0);
+
+  useEffect(()=>{
+    async function laden(){ try{
+      const raw=await callFlow("getDaten",{ eventID:wahllokalID });
+      const optionen=(raw.optionen||[]).map(mapOption);
+      const w=(raw.wahlen||[]).map(mapWahl).filter(wahl=>wahl.geschlossen);
+      w.forEach(wahl=>{ wahl.optionen=optionen.filter(o=>o.wahlID===wahl.id); });
+      setWahlenFrisch(w);
+    }catch(e){} }
+    laden();
+    const t = setInterval(laden, 30000);
+    return ()=>clearInterval(t);
+  },[wahllokalID]);
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:C.primary, zIndex:9999, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      {/* Header */}
+      <div style={{ padding:"24px 40px 16px", borderBottom:"1px solid rgba(255,255,255,0.15)", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+        <div>
+          <div style={{ fontSize:12, fontWeight:700, letterSpacing:"0.15em", textTransform:"uppercase", color:"rgba(255,255,255,0.5)", marginBottom:4 }}>Evangelische Landeskirche in Baden</div>
+          <h1 style={{ fontSize:28, fontWeight:900, color:"#fff", margin:0 }}>{wahllokal?.name||wahllokalID} · Wahlergebnisse</h1>
+        </div>
+        <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:13 }}>✕ Beenden</button>
+      </div>
+
+      {/* Gruppenauswahl */}
+      {gruppen.length>1&&(
+        <div style={{ padding:"12px 40px", display:"flex", gap:8, flexWrap:"wrap", borderBottom:"1px solid rgba(255,255,255,0.1)", flexShrink:0 }}>
+          {gruppen.map((g,idx)=>(
+            <button key={g.hauptwahl.id} onClick={()=>setSelectedGruppeIdx(idx)}
+              style={{ padding:"8px 20px", borderRadius:8, border:"none", cursor:"pointer", fontSize:14, fontWeight:700,
+                background:idx===selectedGruppeIdx?C.accent:"rgba(255,255,255,0.15)", color:"#fff" }}>
+              {getBasisTitel(g.hauptwahl.titel)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Inhalt */}
+      <div style={{ flex:1, overflowY:"auto", padding:"24px 40px" }}>
+        {wahlen.length===0&&<div style={{ textAlign:"center", paddingTop:80, color:"rgba(255,255,255,0.5)", fontSize:18 }}>Noch keine abgeschlossenen Wahlen.</div>}
+        {gruppen[selectedGruppeIdx]&&(
+          <KombinierteGruppenAnsicht
+            gruppe={gruppen[selectedGruppeIdx]}
+            wahllokalID={wahllokalID}
+            isLeitung={false}
+            onDataChange={null}
+            wahlen={wahlen}
+            VB={true}
+          />
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding:"12px 40px", borderTop:"1px solid rgba(255,255,255,0.1)", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+        <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)" }}>Auto-Refresh alle 30 Sekunden</div>
+        <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)" }}>{new Date().toLocaleDateString("de-DE", { day:"2-digit", month:"long", year:"numeric" })}</div>
+      </div>
+    </div>
+  );
+}
+
+function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChange, wahlen, VB }) {
+  const alleWahlen = [gruppe.hauptwahl, ...gruppe.stichwahlen];
+  const [ergebnisseMap, setErgebnisseMap] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [letzteAkt, setLetzteAkt] = useState(null);
+
+  async function laden() {
+    setLoading(true);
+    const neu = {};
+    for (const w of alleWahlen) {
+      try {
+        const result = await callFlow("getErgebnisse", { wahlID: parseInt(w.id), eventID: wahllokalID });
+        neu[w.id] = Array.isArray(result) ? result : (result.value||result.abstimmungen||[]);
+      } catch(e) { neu[w.id] = []; }
+    }
+    setErgebnisseMap(neu);
+    setLetzteAkt(new Date());
+    setLoading(false);
+  }
+
+  useEffect(() => { laden(); }, [gruppe.hauptwahl.id]);
+  useEffect(() => { const t = setInterval(laden, 30000); return () => clearInterval(t); }, [gruppe.hauptwahl.id]);
+
+  function berechneOptErgebnisse(wahl, ergebnisse) {
+    return (wahl?.optionen||[]).map(opt => ({
+      ...opt,
+      stimmen: (ergebnisse||[]).filter(a => {
+        try { const pos = JSON.parse(a.Positionen||a.positionen||"[]"); return pos.some(p=>String(p.optionID)===opt.id); } catch { return false; }
+      }).length
+    })).sort((a,b) => b.stimmen - a.stimmen);
+  }
+
+  function pruefeMehrheit(stimmen, total, regel) {
+    if (total===0) return false;
+    const pct = stimmen/total;
+    if (regel==="absolut") return pct > 0.5;
+    if (regel==="zweidrittel") return pct >= 2/3;
+    return true; // relativ: immer wahr wenn führend
+  }
+
+  const col = (normal, vb) => VB ? vb : normal;
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        {letzteAkt&&<div style={{ fontSize:11, color:C.textLight }}>Aktualisiert: {letzteAkt.toLocaleTimeString("de-DE")} · Auto-Refresh alle 30 Sek.</div>}
+        <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}>🔄</button>
+      </div>
+      {loading&&!Object.keys(ergebnisseMap).length&&<div style={{ textAlign:"center", padding:24 }}><div style={S.spinner}/></div>}
+      {alleWahlen.map((wahl, idx) => {
+        const ergebnisse = ergebnisseMap[wahl.id]||[];
+        const total = ergebnisse.length;
+        const optErg = berechneOptErgebnisse(wahl, ergebnisse);
+        const maxS = Math.max(...optErg.map(e=>e.stimmen), 1);
+        const mehrheitsregel = typeof wahl.mehrheitsregel==="object" ? (wahl.mehrheitsregel?.Value||"relativ") : (wahl.mehrheitsregel||"relativ");
+        const nichtenthaltung = optErg.filter(e=>!e.istEnthaltung);
+        const fuehrend = nichtenthaltung[0];
+        const mehrheitErreicht = fuehrend && pruefeMehrheit(fuehrend.stimmen, total, mehrheitsregel);
+        const gleichstand = nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen&&e.id!==fuehrend?.id).length>0;
+        const wahlGeschlossen = !wahl.aktiv||wahl.geschlossen;
+        const istLetzte = idx===alleWahlen.length-1;
+        const naechsteStichwahl = gruppe.stichwahlen[idx]; // nächste Stichwahl nach dieser Wahl
+        const hatNaechsteStichwahl = !!naechsteStichwahl;
+
+        return (
+          <div key={wahl.id} style={{ marginBottom:24 }}>
+            {/* Verbindungslinie zwischen Wahlgängen */}
+            {idx>0&&<div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16 }}>
+              <div style={{ flex:1, height:1, background:C.border }}/>
+              <span style={{ fontSize:12, color:C.textLight, fontWeight:600, whiteSpace:"nowrap" }}>
+                {idx===1?"1. Stichwahl":`${idx}. Stichwahl`}
+              </span>
+              <div style={{ flex:1, height:1, background:C.border }}/>
+            </div>}
+
+            <div style={{ background:C.bgWhite, borderRadius:12, padding:20, border:`1px solid ${C.border}`, boxShadow:"0 2px 8px rgba(0,0,0,0.05)" }}>
+              {/* Wahlkopf */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+                <div>
+                  <div style={{ fontWeight:800, fontSize:16, color:C.primary }}>{idx===0?"Hauptwahl":wahl.titel}</div>
+                  <div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>
+                    {mehrheitsregel==="absolut"?"Absolute Mehrheit (>50%)":mehrheitsregel==="zweidrittel"?"2/3-Mehrheit (≥66,7%)":"Relative Mehrheit"}
+                    {" · "}{total} Stimme{total!==1?"n":""}
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  {wahl.geschlossen&&<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>}
+                  {!wahl.geschlossen&&wahl.aktiv&&<span style={{ ...S.badge, ...S.badgeGreen }}>● läuft</span>}
+                  {!wahl.geschlossen&&!wahl.aktiv&&<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}
+                </div>
+              </div>
+
+              {/* Balken */}
+              {total===0&&<p style={{ color:C.textLight, fontSize:13 }}>Noch keine Stimmen abgegeben.</p>}
+              {total>0&&<div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {optErg.map(e => {
+                  const pct = total>0 ? Math.round(e.stimmen/total*100) : 0;
+                  const istFuehrend = !e.istEnthaltung&&e.id===fuehrend?.id&&!gleichstand;
+                  const istGleichstand = !e.istEnthaltung&&nichtenthaltung.filter(n=>n.stimmen===e.stimmen).length>1&&e.stimmen>0;
+                  return (
+                    <div key={e.id}>
+                      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          {istFuehrend&&wahlGeschlossen&&mehrheitErreicht&&<span>🏆</span>}
+                          {istGleichstand&&wahlGeschlossen&&<span>⚖️</span>}
+                          <span style={{ fontWeight:istFuehrend?800:600, fontSize:14, color:C.text }}>{e.name}</span>
+                          {e.istEnthaltung&&<span style={{ ...S.badge, ...S.badgeGray, fontSize:10 }}>Enthaltung</span>}
+                        </div>
+                        <span style={{ fontWeight:700, fontSize:14, color:C.primary }}>{e.stimmen} ({pct}%)</span>
+                      </div>
+                      <div style={{ background:C.border, borderRadius:6, height:14, overflow:"hidden" }}>
+                        <div style={{ height:"100%", width:`${(e.stimmen/maxS)*100}%`, borderRadius:6, transition:"width 0.8s ease",
+                          background: e.istEnthaltung?C.textLight:(istFuehrend&&wahlGeschlossen&&mehrheitErreicht?C.accent:(istGleichstand?C.warning:C.primaryLight))
+                        }}/>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>}
+
+              {/* Ergebnis-Banner */}
+              {wahlGeschlossen&&total>0&&(
+                <div style={{ marginTop:14, padding:10, borderRadius:8,
+                  background: mehrheitErreicht&&!gleichstand?"#f0fdf4":gleichstand?"#fff8e1":"#fef3c7",
+                  border:`1px solid ${mehrheitErreicht&&!gleichstand?C.success:gleichstand?C.warning:"#f59e0b"}`
+                }}>
+                  {mehrheitErreicht&&!gleichstand&&<p style={{ fontWeight:700, color:C.success, fontSize:13, margin:0 }}>
+                    ✅ Gewählt: {fuehrend?.name} · {Math.round(fuehrend.stimmen/total*100)}%
+                  </p>}
+                  {gleichstand&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
+                    ⚖️ Gleichstand — Stichwahl erforderlich
+                  </p>}
+                  {!mehrheitErreicht&&!gleichstand&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
+                    ⚠️ {mehrheitsregel==="absolut"?"Absolute Mehrheit":"2/3-Mehrheit"} nicht erreicht — Stichwahl erforderlich
+                  </p>}
+                </div>
+              )}
+
+              {/* Stichwahl vorbereiten — nur wenn letzte Wahl, geschlossen, und Stichwahl nötig */}
+              {istLetzte&&wahlGeschlossen&&total>0&&(!mehrheitErreicht||gleichstand)&&isLeitung&&!hatNaechsteStichwahl&&(
+                <div style={{ marginTop:12 }}>
+                  <StichwahVorbereiten
+                    wahl={wahl}
+                    kandidaten={gleichstand
+                      ? nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen)
+                      : nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0)}
+                    wahllokalID={wahllokalID}
+                    isLeitung={isLeitung}
+                    onDataChange={onDataChange}
+                    wahlen={wahlen}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataChange, wahlen }) {
+  // Ermittle Wahlgang-Nummer anhand bestehender Stichwahlen
+  const basisTitel = wahl?.titel?.replace(/^(\d+\. )?Stichwahl: /, "") || wahl?.titel || "";
+  const vorherigeStichwahlen = wahlen.filter(w => w.titel.includes("Stichwahl:") && w.titel.includes(basisTitel)).length;
+  const naechsterTitel = vorherigeStichwahlen === 0
+    ? "Stichwahl: " + basisTitel
+    : `${vorherigeStichwahlen + 1}. Stichwahl: ${basisTitel}`;
+  const [mehrheitsregel, setMehrheitsregel] = useState("relativ");
+
+  if (!isLeitung || !onDataChange) {
+    return (
+      <button style={{ ...S.btn, ...S.btnGhost, fontSize:13 }} onClick={()=>
+        alert("Stichwahl erforderlich zwischen:\n"+kandidaten.map(k=>"• "+k.name).join("\n")+"\n\nBitte wende dich an die Wahlleitung.")
+      }>🗳️ Stichwahl erforderlich</button>
+    );
+  }
+
+  return (
+    <div style={{ marginTop:12 }}>
+      <div style={{ marginBottom:12 }}>
+        <label style={{ ...S.label, marginBottom:6 }}>Mehrheitsregel für {naechsterTitel}</label>
+        <select style={{ ...S.select, maxWidth:400 }} value={mehrheitsregel} onChange={e=>setMehrheitsregel(e.target.value)}>
+          <option value="relativ">Relative Mehrheit — meiste Stimmen gewinnt</option>
+          <option value="absolut">Absolute Mehrheit — mehr als 50% nötig</option>
+          <option value="zweidrittel">2/3-Mehrheit — mindestens 66,7% nötig</option>
+        </select>
+      </div>
+      <button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>{
+        window._stichwahl = {
+          id: null,
+          titel: naechsterTitel,
+          istStichwahl: true,
+          startzeit: "",
+          mehrfach: false,
+          exakt: false,
+          maxAuswahl: 1,
+          mehrheitsregel,
+          optionen: kandidaten.map((k,idx)=>({ id:String(Date.now()+idx), name:k.name, istEnthaltung:false })),
+          eventID: wahllokalID,
+          hatStimmen: false
+        };
+        window._switchToWahlen&&window._switchToWahlen();
+      }}>🗳️ {naechsterTitel} vorbereiten</button>
+      <p style={{ fontSize:12, color:C.textLight, marginTop:8 }}>
+        Kandidaten: {kandidaten.map(k=>k.name).join(", ")}
+      </p>
+    </div>
+  );
+}
+
+// Hilfsfunktion: Basistitel einer Wahl ermitteln (ohne Stichwahl-Präfix)
+function getBasisTitel(titel) {
+  return titel.replace(/^(\d+\.\s*)?Stichwahl:\s*/i, "").trim();
+}
+// Hilfsfunktion: Wahlen gruppieren (Hauptwahl + Stichwahlen)
+function gruppiereWahlen(wahlen) {
+  const gruppen = [];
+  const zugeordnet = new Set();
+  wahlen.forEach(w => {
+    if (zugeordnet.has(w.id)) return;
+    if (/Stichwahl:/i.test(w.titel)) return; // Stichwahlen separat behandeln
+    // Hauptwahl gefunden — zugehörige Stichwahlen finden
+    const basis = getBasisTitel(w.titel);
+    const stichwahlen = wahlen
+      .filter(s => /Stichwahl:/i.test(s.titel) && getBasisTitel(s.titel) === basis)
+      .sort((a,b) => (a.startzeit||"").localeCompare(b.startzeit||""));
+    stichwahlen.forEach(s => zugeordnet.add(s.id));
+    zugeordnet.add(w.id);
+    gruppen.push({ hauptwahl: w, stichwahlen });
+  });
+  // Verwaiste Stichwahlen (ohne erkannte Hauptwahl) als eigene Gruppe
+  wahlen.filter(w => !zugeordnet.has(w.id)).forEach(w => {
+    gruppen.push({ hauptwahl: w, stichwahlen: [] });
+  });
+  return gruppen;
+}
+
 function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDataChange }) {
   const wahllokal = appData.wahllokale.find(w=>w.eventID===wahllokalID);
   const [wahlenFrisch, setWahlenFrisch] = useState(null);
@@ -1573,7 +1887,10 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
     async function ladeWahlen(){ try{ const raw=await callFlow("getDaten",{ eventID:wahllokalID }); const optionen=(raw.optionen||[]).map(mapOption); const w=(raw.wahlen||[]).map(mapWahl); w.forEach(wahl=>{ wahl.optionen=optionen.filter(o=>o.wahlID===wahl.id); }); setWahlenFrisch(w); }catch(e){ console.error(e); } }
     ladeWahlen();
   },[wahllokalID]);
+  const gruppen = gruppiereWahlen(wahlen);
+  const [selectedGruppeIdx, setSelectedGruppeIdx] = useState(0);
   const [selectedWahlID, setSelectedWahlID] = useState(wahlen[0]?.id||"");
+  const [ansicht, setAnsicht] = useState("kombiniert"); // "kombiniert" | "einzeln"
   const [ergebnisse, setErgebnisse] = useState(null); const [loading, setLoading] = useState(false);
   const [letzteAktualisierung, setLetzteAktualisierung] = useState(null); const [vollbild, setVollbild] = useState(false);
   useEffect(()=>{ if(wahlen.length>0&&!selectedWahlID) setSelectedWahlID(wahlen[0].id); },[wahlen.length]);
@@ -1651,12 +1968,43 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
           <button style={{ ...S.btn, fontSize:12, ...(VB?{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none" }:S.btnPrimary) }} onClick={()=>setVollbild(!VB)}>{VB?"✕ Beenden":"⛶ Vollbild"}</button>
         </div>
       </div>
-      {wahlen.length>0&&!VB&&<div style={{ marginBottom:20 }}>
-        <select style={{ ...S.select, maxWidth:400 }} value={selectedWahlID} onChange={e=>setSelectedWahlID(e.target.value)}>
-          {wahlen.filter(w=>!w.geschlossen).length>0&&<optgroup label="Aktive & pausierte Wahlen">{wahlen.filter(w=>!w.geschlossen).map(w=><option key={w.id} value={w.id}>{w.aktiv?"● ":"⏸ "}{w.titel}</option>)}</optgroup>}
-          {wahlen.filter(w=>w.geschlossen).length>0&&<optgroup label="🗄️ Archiv (geschlossen)">{wahlen.filter(w=>w.geschlossen).map(w=><option key={w.id} value={w.id}>🔒 {w.titel}</option>)}</optgroup>}
-        </select>
-      </div>}
+      {wahlen.length>0&&!VB&&(
+        <div style={{ marginBottom:20 }}>
+          {/* Gruppenauswahl */}
+          {gruppen.length>1&&<div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+            {gruppen.map((g,idx)=>(
+              <button key={g.hauptwahl.id} onClick={()=>{ setSelectedGruppeIdx(idx); setSelectedWahlID(g.hauptwahl.id); setAnsicht("kombiniert"); }}
+                style={{ ...S.btn, fontSize:13, ...(selectedGruppeIdx===idx?S.btnPrimary:S.btnGhost) }}>
+                {getBasisTitel(g.hauptwahl.titel)}
+                {g.stichwahlen.length>0&&<span style={{ marginLeft:6, fontSize:11, opacity:0.8 }}>+{g.stichwahlen.length} Stichwahl{g.stichwahlen.length>1?"en":""}</span>}
+              </button>
+            ))}
+          </div>}
+          {/* Ansicht-Toggle wenn Stichwahlen vorhanden */}
+          {gruppen[selectedGruppeIdx]?.stichwahlen.length>0&&(
+            <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+              <button onClick={()=>setAnsicht("kombiniert")} style={{ ...S.btn, fontSize:12, ...(ansicht==="kombiniert"?S.btnPrimary:S.btnGhost) }}>📊 Gesamtverlauf</button>
+              <button onClick={()=>{ setAnsicht("einzeln"); setSelectedWahlID(gruppen[selectedGruppeIdx].hauptwahl.id); }} style={{ ...S.btn, fontSize:12, ...(ansicht==="einzeln"?S.btnPrimary:S.btnGhost) }}>Einzelansicht</button>
+            </div>
+          )}
+          {/* Einzelansicht-Dropdown */}
+          {ansicht==="einzeln"&&<select style={{ ...S.select, maxWidth:400 }} value={selectedWahlID} onChange={e=>setSelectedWahlID(e.target.value)}>
+            {wahlen.filter(w=>!w.geschlossen).length>0&&<optgroup label="Aktive & pausierte Wahlen">{wahlen.filter(w=>!w.geschlossen).map(w=><option key={w.id} value={w.id}>{w.aktiv?"● ":"⏸ "}{w.titel}</option>)}</optgroup>}
+            {wahlen.filter(w=>w.geschlossen).length>0&&<optgroup label="🗄️ Archiv (geschlossen)">{wahlen.filter(w=>w.geschlossen).map(w=><option key={w.id} value={w.id}>🔒 {w.titel}</option>)}</optgroup>}
+          </select>}
+          {/* Kombinierte Ansicht */}
+          {ansicht==="kombiniert"&&gruppen[selectedGruppeIdx]&&(
+            <KombinierteGruppenAnsicht
+              gruppe={gruppen[selectedGruppeIdx]}
+              wahllokalID={wahllokalID}
+              isLeitung={isLeitung}
+              onDataChange={onDataChange}
+              wahlen={wahlen}
+              VB={VB}
+            />
+          )}
+        </div>
+      )}
       {wahlen.length>1&&VB&&<div style={{ display:"flex", gap:12, marginBottom:32, flexWrap:"wrap" }}>{wahlen.map(w=><button key={w.id} onClick={()=>setSelectedWahlID(w.id)} style={{ padding:"8px 20px", borderRadius:8, border:"none", cursor:"pointer", fontSize:14, fontWeight:600, background:w.id===selectedWahlID?C.accent:"rgba(255,255,255,0.15)", color:"#fff" }}>{w.titel}</button>)}</div>}
       {wahl&&ergebnisse!==null&&(
         <>
@@ -1684,11 +2032,14 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
                 {hatGleichstand&&<p style={{ fontWeight:700, color:"#92400e", marginBottom:8 }}>⚠️ Gleichstand: {[...gleichstandKandidaten,...gewinner.slice(-1)].map(k=>k.name).join(", ")} — je {gewinnerSchwelle} Stimmen.</p>}
                 {!mehrheitErreicht&&!hatGleichstand&&<p style={{ fontWeight:700, color:"#92400e", marginBottom:8 }}>⚠️ {mehrheitsregel==="absolut"?"Absolute Mehrheit (>50%)":"2/3-Mehrheit (≥66,7%)"} nicht erreicht.</p>}
                 <p style={{ fontSize:13, color:"#78350f", marginBottom:12 }}>Eine Stichwahl ist erforderlich.</p>
-                {wahlenFrisch&&<button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>{
-                  const sk=hatGleichstand?[...gleichstandKandidaten,...gewinner.slice(-1)]:sichereGewinner;
-                  if(isLeitung&&onDataChange){ window._stichwahl={ id:null, titel:"Stichwahl: "+(wahl?.titel||""), startzeit:"", mehrfach:false, exakt:false, maxAuswahl:1, mehrheitsregel:wahl?.mehrheitsregel||"relativ", optionen:sk.map((k,idx)=>({ id:String(Date.now()+idx), name:k.name, istEnthaltung:false })), eventID:wahllokalID, hatStimmen:false }; window._switchToWahlen&&window._switchToWahlen(); }
-                  else { alert("Stichwahl erforderlich zwischen:\n"+sk.map(k=>"• "+k.name).join("\n")+"\n\nBitte wende dich an die Wahlleitung."); }
-                }}>🗳️ Stichwahl vorbereiten</button>}
+                {wahlenFrisch&&<StichwahVorbereiten
+                  wahl={wahl}
+                  kandidaten={hatGleichstand?[...gleichstandKandidaten,...gewinner.slice(-1)]:sichereGewinner}
+                  wahllokalID={wahllokalID}
+                  isLeitung={isLeitung}
+                  onDataChange={onDataChange}
+                  wahlen={wahlen}
+                />}
               </>}
             </div>
           )}
@@ -1715,7 +2066,15 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}><button style={{ ...S.btn, ...S.btnGhost }} onClick={onCancel}>← Zurück</button><h3 style={{ margin:0, color:C.primary }}>{f.isNew?"Neue Wahl":"Wahl bearbeiten"}</h3></div>
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={S.card}>
-        <div style={S.formGroup}><label style={S.label}>Titel</label><input style={S.input} value={f.titel} onChange={e=>setField("titel",e.target.value)} placeholder="z.B. Diakoniepfarrer*in"/></div>
+        <div style={S.formGroup}>
+          <label style={S.label}>Titel</label>
+          <input style={{ ...S.input, ...(f.istStichwahl?{ background:"#f5f5f5", color:"#555" }:{}) }}
+            value={f.titel}
+            onChange={e=>!f.istStichwahl&&setField("titel",e.target.value)}
+            readOnly={!!f.istStichwahl}
+            placeholder="z.B. Diakoniepfarrer*in"/>
+          {f.istStichwahl&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Titel einer Stichwahl kann nicht geändert werden.</p>}
+        </div>
         <DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ)."/>
         <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap", opacity:f.hatStimmen?0.5:1, pointerEvents:f.hatStimmen?"none":"auto" }}>
           <label style={{ display:"flex", alignItems:"center", gap:8, cursor:f.hatStimmen?"not-allowed":"pointer", fontSize:14 }}><input type="checkbox" checked={f.mehrfach} disabled={!!f.hatStimmen} onChange={e=>setField("mehrfach",e.target.checked)}/>Mehrfachauswahl</label>
