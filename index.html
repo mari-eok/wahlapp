@@ -349,7 +349,7 @@ function App() {
         : <LeitungLoginScreen onAuth={(eid) => setLeitungAuth(eid)} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} fixedEventID={ansicht === "leitung" ? wahllokalID : null} />
       )}
       {view === "superadmin" && (superadminAuth
-        ? <SuperadminView appData={appData} onExit={() => { setView("wahllokal"); setSuperadminAuth(false); updateURL(wahllokalID, null); }} onDataChange={loadAppData} />
+        ? <SuperadminView appData={appData || { wahllokale:[], wahlen:[], optionen:[], tokens:[], tokenCount:0 }} onExit={() => { setView("wahllokal"); setSuperadminAuth(false); updateURL(wahllokalID, null); }} onDataChange={loadAppData} />
         : <SuperadminPinScreen onAuth={() => { setSuperadminAuth(true); }} onBack={() => { setView("wahllokal"); updateURL(wahllokalID, null); }} />
       )}
       {view === "praesentation" && appData && (
