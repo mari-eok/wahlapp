@@ -264,13 +264,13 @@ function generiereTokenPDF(tokens, wahllokalName, evID) {
       ${Array.from({length: PER_PAGE}, (_, i) => {
         const t = page[i];
         if (!t) return '<div class="karte leer"></div>';
-        return \`<div class="karte">
-          <div class="logo">Evangelische Landeskirche in Baden</div>
-          <div class="wahllokal">${wahllokalName}</div>
-          <div class="label">Persönlicher Wahlcode</div>
-          <div class="token">${t}</div>
-          <div class="hinweis">Diesen Code geheim halten</div>
-        </div>\`;
+        return '<div class="karte">' +
+          '<div class="logo">Evangelische Landeskirche in Baden</div>' +
+          '<div class="wahllokal">' + wahllokalName + '</div>' +
+          '<div class="label">Persönlicher Wahlcode</div>' +
+          '<div class="token">' + t + '</div>' +
+          '<div class="hinweis">Diesen Code geheim halten</div>' +
+          '</div>';
       }).join('')}
     </div>`).join('')}
   </body></html>`;
