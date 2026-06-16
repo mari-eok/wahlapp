@@ -584,6 +584,41 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   );
 }
 
+// ─── Bestätigungsdialog (ersetzt browser confirm()) ────────────────────────
+function ConfirmDialog({ config, onConfirm, onCancel }) {
+  if (!config) return null;
+  const { titel, nachricht, bestaetigen="Bestätigen", abbrechen="Abbrechen", typ="warn" } = config;
+  const farbe = typ==="danger" ? C.error : typ==="warn" ? C.warning : C.primary;
+  const hintergrund = typ==="danger" ? "#fef2f2" : typ==="warn" ? "#fff8e1" : "#eff6ff";
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9998, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:C.bgWhite, borderRadius:12, padding:24, maxWidth:420, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.18)", border:`1px solid ${C.border}` }}>
+        {titel&&<h3 style={{ margin:"0 0 12px", color:farbe, fontSize:17 }}>{titel}</h3>}
+        <p style={{ margin:"0 0 20px", color:C.text, fontSize:14, lineHeight:1.6, whiteSpace:"pre-wrap" }}>{nachricht}</p>
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={onCancel} style={{ ...S.btn, ...S.btnGhost }}>{abbrechen}</button>
+          <button onClick={onConfirm} style={{ ...S.btn, color:"#fff", background:farbe }}>{bestaetigen}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function useConfirm() {
+  const [config, setConfig] = useState(null);
+  const resolveRef = useRef(null);
+  function confirm(cfg) {
+    return new Promise(resolve => {
+      resolveRef.current = resolve;
+      setConfig(cfg);
+    });
+  }
+  function handleConfirm() { setConfig(null); resolveRef.current&&resolveRef.current(true); }
+  function handleCancel() { setConfig(null); resolveRef.current&&resolveRef.current(false); }
+  const dialog = <ConfirmDialog config={config} onConfirm={handleConfirm} onCancel={handleCancel}/>;
+  return { confirm, dialog };
+}
+
 function WahllokalGear({ wahllokalID }) {
   const [offen, setOffen] = useState(false);
   return (
@@ -689,10 +724,11 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   const [toggling, setToggling] = useState(null);
   const wahllokalURL = window.location.origin + window.location.pathname + "?wahllokal=" + eventID;
   const aktiveWahlen = wahlen.filter(w=>w.aktiv&&!w.geschlossen);
+  const { confirm, dialog } = useConfirm();
 
   async function schliesseWahl(wahl) {
     const msg = `Wahl "${wahl.titel}" jetzt endgültig schließen?\n\nNach dem Schließen:\n✓ Das Ergebnis wird für alle sichtbar\n✓ Keine weiteren Stimmabgaben möglich\n✗ Kann nicht rückgängig gemacht werden\n\nWichtig bei Gleichstand oder nicht erreichter Mehrheit:\nFür eine Stichwahl bleiben alle bisherigen Zugangscodes (Tokens) automatisch gültig — sie müssen nicht neu vergeben werden. Deaktivieren Sie die Tokens erst, wenn der gesamte Wahltag abgeschlossen ist.\n\nWahl jetzt schließen?`;
-    if (!confirm(msg)) return;
+    const ok = await confirm({ titel:`Wahl schließen`, nachricht:msg, bestaetigen:"Jetzt schließen", typ:"warn" }); if (!ok) return;
     setToggling(wahl.id);
     try { await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:true }); await onDataChange(); } catch(e){ console.error(e); }
     setToggling(null);
@@ -705,6 +741,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
 
   return (
     <div>
+      {dialog}
       <div style={S.statGrid}>
         <StatCard num={wahlen.filter(w=>w.aktiv).length} label="Aktive Wahlen" color={C.accent}/>
         <StatCard num={wahlen.length} label="Wahlen gesamt" color={C.primary}/>
@@ -765,6 +802,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
 
 function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl }) {
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
+  const { confirm, dialog } = useConfirm();
   // Nur nicht-geschlossene Wahlen in der Hauptliste, geschlossene nur im Archiv
   const wahlen = appData.wahlen.filter(w=>w.eventID===eventID && !w.geschlossen);
   useEffect(()=>{ if(initialStichwahl){ setForm(initialStichwahl); if(onStichwahl) onStichwahl(); } },[]);
@@ -774,7 +812,9 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
     setForm({ ...wahl, optionen:[...wahl.optionen], hatStimmen });
   }
   async function toggleAktiv(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:!wahl.aktiv, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
-  async function pauseWahl(wahl) { if(!confirm(`Wahl "${wahl.titel}" pausieren?`)) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
+  async function pauseWahl(wahl) { const ok = await confirm({ titel:"Wahl pausieren", nachricht:`Wahl "${wahl.titel}" pausieren?
+
+Die Abstimmung wird unterbrochen — Wähler können keine Stimmen mehr abgeben.`, bestaetigen:"Pausieren", typ:"warn" }); if(!ok) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function starteWahl(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:true, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function deleteWahl(wahl) {
     // Erst prüfen ob Stimmen vorhanden
@@ -796,9 +836,13 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
     }
     msg += "\n\nWirklich löschen?";
 
-    if (!confirm(msg)) return;
+    const ok = await confirm({ titel:"Wahl löschen", nachricht:msg, bestaetigen:"Löschen", abbrechen:"Abbrechen", typ:"danger" });
+    if (!ok) return;
     // Bei Stimmen zweite Bestätigung
-    if (stimmenAnzahl > 0 && !confirm(`Letzte Bestätigung: ${stimmenAnzahl} Stimme${stimmenAnzahl!==1?"n":""} werden unwiderruflich gelöscht. Fortfahren?`)) return;
+    if (stimmenAnzahl > 0) {
+      const ok2 = await confirm({ titel:"Letzte Bestätigung", nachricht:`${stimmenAnzahl} Stimme${stimmenAnzahl!==1?"n":""} werden unwiderruflich gelöscht. Wirklich fortfahren?`, bestaetigen:"Endgültig löschen", typ:"danger" });
+      if (!ok2) return;
+    }
 
     try {
       await callFlow("deleteWahl", { wahlID:parseInt(wahl.id) });
@@ -838,6 +882,7 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
   if (form) return <WahlForm form={form} onSave={saveWahl} onCancel={()=>setForm(null)} saving={saving} fehler={fehler}/>;
   return (
     <div>
+      {dialog}
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <h3 style={{ margin:0, color:C.primary }}>Wahlen</h3>
@@ -894,6 +939,7 @@ function ArchivWahlen({ wahlen, onDelete }) {
 function OfflineTokenListe({ eventID, reloadTrigger }) {
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null); const [ausgewaehlt, setAusgewaehlt] = useState([]); const [loesching, setLoesching] = useState(false);
+  const { confirm, dialog } = useConfirm();
   const deleteVerfuegbar = !API.flows.deleteToken.startsWith("PLATZHALTER");
   async function laden() {
     setLoading(true);
@@ -922,7 +968,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
   async function loescheAusgewaehlt() {
     const zu = tokens.filter(t=>ausgewaehlt.includes(t.id));
     if(zu.length===0) return;
-    if(!confirm(`${zu.length} Token(s) wirklich löschen?`)) return;
+    const ok = await confirm({ titel:`${zu.length} Token(s) löschen`, nachricht:`${zu.length} Token(s) wirklich unwiderruflich löschen?`, bestaetigen:`${zu.length} Token(s) löschen`, typ:"danger" }); if(!ok) return;
     setLoesching(true); setFehler(null);
     try { await callFlow("deleteToken",{ eventID, tokenIDs:zu.map(t=>parseInt(t.id)), tokenCodes:zu.map(t=>t.code) }); }
     catch(e){ if(!e.message.includes("502")){ setFehler(e.message); setLoesching(false); return; } }
@@ -932,7 +978,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
   }
   async function loescheAlle() {
     if(tokens.length===0) return;
-    if(!confirm(`ALLE ${tokens.length} Tokens löschen? Nur nach vollständigem Abschluss empfohlen.`)) return;
+    const ok = await confirm({ titel:`Alle ${tokens.length} Tokens löschen`, nachricht:`ALLE ${tokens.length} Tokens unwiderruflich löschen?\n\nDies sollte nur nach vollständigem Abschluss des Wahltags gemacht werden.`, bestaetigen:"Alle löschen", typ:"danger" }); if(!ok) return;
     setLoesching(true); setFehler(null);
     try { await callFlow("deleteToken",{ eventID, tokenIDs:tokens.map(t=>parseInt(t.id)), tokenCodes:tokens.map(t=>t.code) }); }
     catch(e){ if(!e.message.includes("502")){ setFehler(e.message); setLoesching(false); return; } }
@@ -1007,7 +1053,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
     if(mitStimme > 0) msg += `⚠️ ${mitStimme} Token(s) haben bereits eine Stimme abgegeben.\nDie Stimmen bleiben erhalten — nur der Token-Eintrag wird gelöscht.\n\n`;
     if(ohneStimme > 0) msg += `${ohneStimme} Token(s) wurden noch nicht verwendet.\n\n`;
     msg += mitStimme > 0 ? "Löschen empfiehlt sich erst nach vollständigem Abschluss des Wahltags.\n\nTrotzdem fortfahren?" : "Fortfahren?";
-    if(!confirm(msg)) return;
+    const ok = await confirm({ titel:"Wähler löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return;
     setLoesching(true); setFehler(null);
     try {
       await callFlow("deleteToken",{ eventID, tokenIDs:zu.map(t=>parseInt(t.id)), tokenCodes:zu.map(t=>t.code) });
@@ -1023,7 +1069,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
     let msg = `ALLE ${tokens.length} Tokens löschen?\n\n`;
     if(mitStimme > 0) msg += `${mitStimme} Token(s) haben bereits eine Stimme abgegeben.\nDie Stimmen bleiben erhalten.\n\n`;
     msg += "Dies sollte nur nach vollständigem Abschluss des Wahltags gemacht werden.\n\nWirklich alle löschen?";
-    if(!confirm(msg)) return;
+    const ok2 = await confirm({ titel:"Wähler löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!ok2) return;
     setLoesching(true); setFehler(null);
     try {
       await callFlow("deleteToken",{ eventID, tokenIDs:tokens.map(t=>parseInt(t.id)), tokenCodes:tokens.map(t=>t.code) });
@@ -1035,6 +1081,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
 
   return (
     <div style={{ ...S.card, marginTop:16 }}>
+      {dialog}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
         <div style={S.sectionLabel}>Ausgegebene Tokens</div>
         <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}>🔄</button>
@@ -1066,7 +1113,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
               const msg = t.verwendet
                 ? "Dieser Token wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nToken trotzdem löschen?"
                 : "Token löschen?";
-              if (!confirm(msg)) return;
+              const okEl = await confirm({ titel:"Token löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!okEl) return;
               setLoesching(true);
               callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
                 .then(async ()=>{ setFilter("alle"); await laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); })
@@ -1103,6 +1150,7 @@ function OfflineTokenListe({ eventID, reloadTrigger }) {
 
 function LeitungWaehler({ appData, eventID }) {
   const wahllokal = appData.wahllokale.find(w=>w.eventID===eventID);
+  const { confirm, dialog } = useConfirm();
   const [szenario, setSzenario] = useState(null); const [waehler, setWaehler] = useState([]); const [loading, setLoading] = useState(false);
   const [emailInput, setEmailInput] = useState(""); const [csvInput, setCsvInput] = useState("");
   const [saving, setSaving] = useState(false); const [sending, setSending] = useState(false);
@@ -1221,11 +1269,11 @@ function LeitungWaehler({ appData, eventID }) {
     } catch(e){ setFehler(e.message); }
     setSaving(false);
   }
-  async function einzelTokenToggle(w) { const aktiv=w.tokenAktiv===false; if(!confirm(`Token ${w.tokenCode} für ${w.email} wirklich ${aktiv?"reaktivieren":"sperren"}?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:[w.tokenCode], waehlerIDs:[parseInt(w.id)], aktiv }); await loadWaehler(); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function einzelTokenToggle(w) { const aktiv=w.tokenAktiv===false; const ok = await confirm({ titel:`Token ${aktiv?"reaktivieren":"sperren"}`, nachricht:`Token ${w.tokenCode} für ${w.email} wirklich ${aktiv?"reaktivieren":"sperren"}?`, bestaetigen:aktiv?"Reaktivieren":"Sperren", typ:aktiv?"warn":"danger" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:[w.tokenCode], waehlerIDs:[parseInt(w.id)], aktiv }); await loadWaehler(); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehlteLoschen() {
     const zu = waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.status!=="versendet");
     if(zu.length===0) return;
-    if(!confirm(`${zu.length} Wähler wirklich löschen?`)) return;
+    const ok = await confirm({ titel:`${zu.length} Wähler löschen`, nachricht:`${zu.length} Wähler wirklich löschen?\n\nZugehörige Tokens werden ebenfalls entfernt.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return;
     setSaving(true); setFehler(null);
     try {
       await callFlow("deleteWaehler",{ waehlerIDs:zu.map(w=>parseInt(w.id)) });
@@ -1239,8 +1287,12 @@ function LeitungWaehler({ appData, eventID }) {
     } catch(e){ setFehler(e.message); }
     setSaving(false);
   }
-  async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler deaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Tokens gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; if(!confirm(`Token für ${zu.length} Wähler reaktivieren?`)) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; const ok = await confirm({ titel:`${zu.length} Tokens sperren`, nachricht:`Token für ${zu.length} Wähler sperren?
+
+Diese Wähler können danach nicht mehr abstimmen.`, bestaetigen:"Sperren", typ:"danger" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Tokens gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; const ok = await confirm({ titel:`${zu.length} Tokens reaktivieren`, nachricht:`Token für ${zu.length} Wähler reaktivieren?
+
+Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ:"warn" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function offlineGenerieren() { setSaving(true); setFehler(null); try{ const tokens=Array.from({ length:offlineAnzahl },()=>generateToken()); await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) }); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([tokens.join("\n")],{ type:"text/plain" })); a.download=`tokens_${eventID}_${wahllokal?.name||eventID}.txt`; a.click(); setTokenReloadTrigger(t=>t+1); setErfolg(`${offlineAnzahl} Tokens generiert und exportiert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
 
   // Sortierung & Filter State
@@ -1298,13 +1350,20 @@ function LeitungWaehler({ appData, eventID }) {
 
   if (!szenario) {
     const modus = wahllokal?.modus || "beides";
-    const zeigeOnline = modus === "beides" || modus === "online";
-    const zeigeOffline = modus === "beides" || modus === "offline";
+    const nurOnline = modus === "online";
+    const nurOffline = modus === "offline";
+    const zeigeOnline = modus === "beides" || nurOnline;
+    const zeigeOffline = modus === "beides" || nurOffline;
+
+    // Nur ein Modus aktiv → direkt einblenden ohne Auswahlkarte
+    if (nurOnline) { setSzenario("online"); loadWaehler(); return null; }
+    if (nurOffline) { setSzenario("offline"); return null; }
+
     return (
       <div>
         <h3 style={{ margin:"0 0 24px", color:C.primary }}>Wähler & Tokens</h3>
         {!zeigeOnline&&!zeigeOffline&&<div style={{ ...S.alert, ...S.alertWarning }}>Keine Methode für dieses Wahllokal aktiviert. Bitte im Superadmin konfigurieren.</div>}
-        <div style={{ display:"grid", gridTemplateColumns:zeigeOnline&&zeigeOffline?"1fr 1fr":"1fr", gap:16 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
           {zeigeOnline&&<div style={{ ...S.card, cursor:"pointer", border:`2px solid ${C.border}`, textAlign:"center", padding:32 }} onClick={()=>{ setSzenario("online"); loadWaehler(); }}>
             <div style={{ fontSize:48, marginBottom:16 }}>📧</div>
             <h3 style={{ color:C.primary, margin:"0 0 8px" }}>Online-Versand</h3>
@@ -1323,7 +1382,7 @@ function LeitungWaehler({ appData, eventID }) {
   if (szenario==="offline") return (
     <div>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-        <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSzenario(null)}>← Zurück</button>
+        {(wahllokal?.modus==="beides"||!wahllokal?.modus)&&<button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSzenario(null)}>← Zurück</button>}
         <h3 style={{ margin:0, color:C.primary }}>📋 Vor-Ort-Ausgabe</h3>
       </div>
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
@@ -1354,9 +1413,10 @@ function LeitungWaehler({ appData, eventID }) {
   return (
     <div>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-        <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSzenario(null)}>← Zurück</button>
+        {(wahllokal?.modus==="beides"||!wahllokal?.modus)&&<button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSzenario(null)}>← Zurück</button>}
         <h3 style={{ margin:0, color:C.primary }}>📧 Online-Versand</h3>
       </div>
+      {dialog}
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}<button onClick={()=>setFehler(null)} style={{ float:"right", background:"none", border:"none", cursor:"pointer" }}>✕</button></div>}
       {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
 
@@ -1486,6 +1546,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
   const [expanded, setExpanded] = useState(null); const [deleting, setDeleting] = useState(null);
   const [showPin, setShowPin] = useState({}); const pinTimers = useRef({});
+  const { confirm, dialog } = useConfirm();
   function togglePin(id) {
     setShowPin(p=>{ const next={...p,[id]:!p[id]}; if(next[id]){ if(pinTimers.current[id]) clearTimeout(pinTimers.current[id]); pinTimers.current[id]=setTimeout(()=>setShowPin(pp=>({...pp,[id]:false})),5000); } else { if(pinTimers.current[id]) clearTimeout(pinTimers.current[id]); } return next; });
   }
@@ -1513,7 +1574,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   }
   useEffect(()=>{ laden(); },[]);
   async function saveWahllokal(f) { setSaving(true); setFehler(null); try{ await callFlow("saveWahllokal",{ wahllokalID:f.id?parseInt(f.id):null, eventID:f.eventID, name:f.name, aktiv:f.aktiv!==false, leitungPIN:f.leitungPIN||"0000", modus:f.modus||"beides" }); await laden(); await onDataChange(); setForm(null); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function deleteWahllokal(wl) { if(!confirm(`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen und Tokens werden unwiderruflich gelöscht.`)) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
+  async function deleteWahllokal(wl) { const ok = await confirm({ titel:`Wahllokal löschen`, nachricht:`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen, Tokens und Abstimmungen werden unwiderruflich gelöscht.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
   const tabs = [{ id:"wahllokale", label:"🏛️ Wahllokale" },{ id:"wahlen", label:"📊 Alle Wahlen" },{ id:"flows", label:"⚙️ Flows" }];
 
   if (form!==null) return (
@@ -1557,6 +1618,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
       <div style={{ display:"flex", gap:8, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
         {tabs.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{ background:"none", border:"none", cursor:"pointer", padding:"10px 16px", fontSize:14, fontWeight:600, color:tab===t.id?C.primary:C.textLight, borderBottom:tab===t.id?`2px solid ${C.primary}`:"2px solid transparent", marginBottom:-2 }}>{t.label}</button>)}
       </div>
+      {dialog}
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       {tab==="wahllokale"&&(
         <div style={S.card}>
@@ -2079,7 +2141,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
       </div>
       {wahlen.length>0&&!VB&&(
         <div style={{ marginBottom:20 }}>
-          {/* Gruppenauswahl */}
+          {/* Gruppenauswahl — nur wenn mehrere Wahlgruppen */}
           {gruppen.length>1&&<div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
             {gruppen.map((g,idx)=>(
               <button key={g.hauptwahl.id} onClick={()=>{ setSelectedGruppeIdx(idx); setSelectedWahlID(g.hauptwahl.id); setAnsicht("kombiniert"); }}
@@ -2089,20 +2151,22 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
               </button>
             ))}
           </div>}
-          {/* Ansicht-Toggle wenn Stichwahlen vorhanden */}
+          {/* Ansicht-Toggle nur wenn Stichwahlen vorhanden */}
           {gruppen[selectedGruppeIdx]?.stichwahlen.length>0&&(
             <div style={{ display:"flex", gap:6, marginBottom:12 }}>
               <button onClick={()=>setAnsicht("kombiniert")} style={{ ...S.btn, fontSize:12, ...(ansicht==="kombiniert"?S.btnPrimary:S.btnGhost) }}>📊 Gesamtverlauf</button>
               <button onClick={()=>{ setAnsicht("einzeln"); setSelectedWahlID(gruppen[selectedGruppeIdx].hauptwahl.id); }} style={{ ...S.btn, fontSize:12, ...(ansicht==="einzeln"?S.btnPrimary:S.btnGhost) }}>Einzelansicht</button>
             </div>
           )}
-          {/* Einzelansicht-Dropdown */}
-          {ansicht==="einzeln"&&<select style={{ ...S.select, maxWidth:400 }} value={selectedWahlID} onChange={e=>setSelectedWahlID(e.target.value)}>
-            {wahlen.filter(w=>!w.geschlossen).length>0&&<optgroup label="Aktive & pausierte Wahlen">{wahlen.filter(w=>!w.geschlossen).map(w=><option key={w.id} value={w.id}>{w.aktiv?"● ":"⏸ "}{w.titel}</option>)}</optgroup>}
-            {wahlen.filter(w=>w.geschlossen).length>0&&<optgroup label="🗄️ Archiv (geschlossen)">{wahlen.filter(w=>w.geschlossen).map(w=><option key={w.id} value={w.id}>🔒 {w.titel}</option>)}</optgroup>}
-          </select>}
-          {/* Kombinierte Ansicht */}
-          {ansicht==="kombiniert"&&gruppen[selectedGruppeIdx]&&(
+          {/* Einzelansicht-Dropdown — nur wenn explizit gewählt */}
+          {ansicht==="einzeln"&&gruppen[selectedGruppeIdx]?.stichwahlen.length>0&&(
+            <select style={{ ...S.select, maxWidth:400 }} value={selectedWahlID} onChange={e=>setSelectedWahlID(e.target.value)}>
+              {wahlen.filter(w=>!w.geschlossen).length>0&&<optgroup label="Aktive & pausierte Wahlen">{wahlen.filter(w=>!w.geschlossen).map(w=><option key={w.id} value={w.id}>{w.aktiv?"● ":"⏸ "}{w.titel}</option>)}</optgroup>}
+              {wahlen.filter(w=>w.geschlossen).length>0&&<optgroup label="🗄️ Archiv (geschlossen)">{wahlen.filter(w=>w.geschlossen).map(w=><option key={w.id} value={w.id}>🔒 {w.titel}</option>)}</optgroup>}
+            </select>
+          )}
+          {/* Kombinierte Ansicht — immer wenn nicht explizit Einzelansicht */}
+          {ansicht!=="einzeln"&&gruppen[selectedGruppeIdx]&&(
             <KombinierteGruppenAnsicht
               gruppe={gruppen[selectedGruppeIdx]}
               wahllokalID={wahllokalID}
@@ -2115,7 +2179,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
         </div>
       )}
       {wahlen.length>1&&VB&&<div style={{ display:"flex", gap:12, marginBottom:32, flexWrap:"wrap" }}>{wahlen.map(w=><button key={w.id} onClick={()=>setSelectedWahlID(w.id)} style={{ padding:"8px 20px", borderRadius:8, border:"none", cursor:"pointer", fontSize:14, fontWeight:600, background:w.id===selectedWahlID?C.accent:"rgba(255,255,255,0.15)", color:"#fff" }}>{w.titel}</button>)}</div>}
-      {wahl&&ergebnisse!==null&&(
+      {(ansicht==="einzeln"||VB)&&wahl&&ergebnisse!==null&&(
         <>
           <div style={{ marginBottom:VB?40:24 }}>
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:VB?20:12, flexWrap:"wrap" }}>
