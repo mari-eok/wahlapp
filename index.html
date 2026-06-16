@@ -66,7 +66,7 @@ function updateURL(wahllokalID, ansicht) {
 // leitungPIN wird bewusst NICHT gemappt — PIN-Vergleich läuft serverseitig via checkPin-Flow
 function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, modus: item.Modus?.Value || item.Modus || "beides" }; }
 function mapWahl(item) {
-  return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), archiviert: !!(item.Archiviert === true || item.Archiviert === "true" || item.Archiviert === 1), optionen: [] };
+  return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), archiviert: !!(item.Archiviert === true || item.Archiviert === "true" || item.Archiviert === 1), endzeit: item.Endzeit||null, optionen: [] };
 }
 function mapOption(item) { return { id: String(item.ID), wahlID: String(item.WahlID), eventID: item.EventID, name: item.Title, istEnthaltung: item.IstEnthaltung }; }
 
@@ -896,6 +896,11 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
       await onDataChange();
     } catch(e) { setFehler(e.message); }
   }
+  async function schliesseWahl(wahl) {
+    const ok = await confirm({ titel:"Wahl schließen", nachricht:`Wahl "${wahl.titel}" endgültig schließen?\n\nNach dem Schließen können keine weiteren Stimmen abgegeben werden.`, bestaetigen:"Schließen", typ:"warn" });
+    if (!ok) return;
+    try { await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:true }); await onDataChange(); } catch(e){ setFehler(e.message); }
+  }
   async function archiviereWahl(wahl) {
     const ok = await confirm({ titel:"Wahl archivieren", nachricht:`Wahl "${wahl.titel}" archivieren?
 
@@ -958,7 +963,7 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
                 {!w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>openForm(w)}>Bearbeiten</button>}
                 {!w.geschlossen&&w.aktiv&&<button style={{ ...S.btn, ...S.btnWarning, fontSize:12, padding:"5px 11px" }} onClick={()=>pauseWahl&&pauseWahl(w)}>⏸ Pause</button>}
                 {!w.geschlossen&&!w.aktiv&&<button style={{ ...S.btn, ...S.btnSuccess, fontSize:12, padding:"5px 11px" }} onClick={()=>starteWahl&&starteWahl(w)}>▶ Starten</button>}
-                {!w.geschlossen&&<button style={{ ...S.btn, fontSize:12, padding:"5px 11px", background:"transparent", color:"#d97706", border:"1px solid #d97706" }} onClick={()=>{ const closeWahl = async()=>{ const ok=await confirm({ titel:"Wahl schließen", nachricht:`Wahl "${w.titel}" endgültig schließen?`, bestaetigen:"Schließen", typ:"warn" }); if(!ok) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(w.id), aktiv:false, geschlossen:true }); await onDataChange(); }catch(e){ setFehler(e.message); } }; closeWahl(); }}>🔒 Schließen</button>}
+                {!w.geschlossen&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12, padding:"5px 11px" }} onClick={()=>schliesseWahl(w)}>🔒 Schließen</button>}
                 {w.geschlossen&&<button style={{ ...S.btn, ...S.btnPrimary, fontSize:12, padding:"5px 11px" }} onClick={()=>onErgebnisse&&onErgebnisse(w.id)}>📊 Ergebnisse</button>}
                 {w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>archiviereWahl(w)}>📦 Archivieren</button>}
                 <button style={{ ...S.btn, fontSize:12, padding:"5px 11px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={()=>deleteWahl(w)}>Löschen</button>
@@ -1143,8 +1148,9 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
   return (
     <div style={{ ...S.card, marginTop:16 }}>
       {dialog}
+      {loesching&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Tokens werden gelöscht…</p></div></div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <div style={S.sectionLabel}>Ausgegebene Tokens</div>
+        <div style={S.sectionLabel}>Token-Übersicht</div>
         <div style={{ display:"flex", gap:6 }}>
           {tokens.filter(t=>t.aktiv&&!t.verwendet).length>0&&(
             <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
@@ -1365,15 +1371,18 @@ Diese Wähler können danach nicht mehr abstimmen.`, bestaetigen:"Sperren", typ:
   async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; const ok = await confirm({ titel:`${zu.length} Tokens reaktivieren`, nachricht:`Token für ${zu.length} Wähler reaktivieren?
 
 Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ:"warn" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  function offlinePDF() {
+    const previewTokens = Array.from({ length: Math.min(offlineAnzahl, 12) }, (_,i) => `XXXX-YY${String(i+1).padStart(2,"0")}`);
+    generiereTokenPDF(previewTokens, wahllokal?.name||eventID, eventID);
+  }
   async function offlineGenerieren() {
     setSaving(true); setFehler(null);
     try {
       const tokens = Array.from({ length:offlineAnzahl }, ()=>generateToken());
       await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) });
       // PDF generieren: 2x6 Token pro Seite, zum Ausschneiden
-      generiereTokenPDF(tokens, wahllokal?.name||eventID, eventID);
       setTokenReloadTrigger(t=>t+1);
-      setErfolg(`${offlineAnzahl} Tokens generiert und als PDF exportiert.`);
+      setErfolg(`${offlineAnzahl} Tokens generiert. Jetzt PDF drucken über den Button in der Token-Liste.`);
       setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setSaving(false);
@@ -1481,10 +1490,16 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
           </div>
           <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
         </div>
-        <button style={{ ...S.btn, ...S.btnPrimary, padding:"10px 24px" }} onClick={offlineGenerieren} disabled={saving}>
-          {saving ? "Wird generiert…" : "Generieren & PDF drucken"}
-        </button>
-        <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>Tokens werden in der Datenbank gespeichert und als druckfertiges PDF geöffnet (2×6 Token pro A4-Seite, zum Ausschneiden).</p>
+        {saving&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Tokens werden generiert…</p></div></div>}
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <button style={{ ...S.btn, ...S.btnPrimary, padding:"10px 24px" }} onClick={offlineGenerieren} disabled={saving}>
+            {saving ? "Wird generiert…" : "🎟️ Tokens generieren"}
+          </button>
+          <button style={{ ...S.btn, ...S.btnGhost, padding:"10px 24px" }} onClick={offlinePDF} disabled={saving||offlineAnzahl===0}>
+            🖨️ Nur PDF drucken (ohne neue Tokens)
+          </button>
+        </div>
+        <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>„Tokens generieren" speichert neue Tokens und öffnet das PDF. „Nur PDF drucken" druckt einen Entwurf ohne Speicherung — nützlich zum Testen des Layouts.</p>
       </div>
       <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger} wahllokalName={wahllokal?.name}/>
     </div>
@@ -2055,11 +2070,13 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
           : "Gem. Grundordnung § Abs. 1 Nr. 4: Im zweiten Wahlgang gilt einfache Mehrheit mit mindestens 1/3 der abgegebenen Stimmen."}
       </div>
       <button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>{
+        const jetzt = new Date();
+        const startzeitJetzt = `${jetzt.getFullYear()}-${String(jetzt.getMonth()+1).padStart(2,"0")}-${String(jetzt.getDate()).padStart(2,"0")}T${String(jetzt.getHours()).padStart(2,"0")}:${String(jetzt.getMinutes()).padStart(2,"0")}`;
         window._stichwahl = {
           id: null,
           titel: naechsterTitel,
           istStichwahl: true,
-          startzeit: "",
+          startzeit: startzeitJetzt,
           mehrfach: false,
           exakt: false,
           maxAuswahl: 1,
@@ -2345,6 +2362,18 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
           {f.istStichwahl&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Titel einer Stichwahl kann nicht geändert werden.</p>}
         </div>
         <DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ)."/>
+        <div style={S.formGroup}>
+          <label style={S.label}>Endzeit (optional)</label>
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+            <input type="date" style={{ ...S.input, flex:1, minWidth:140 }} value={f.endzeitDatum||""} onChange={e=>setF(x=>({...x,endzeitDatum:e.target.value}))}/>
+            <input type="number" style={{ ...S.input, width:72 }} value={f.endzeitStunde||""} onChange={e=>setF(x=>({...x,endzeitStunde:e.target.value}))} min={0} max={23} placeholder="HH"/>
+            <span style={{ color:C.textLight }}>:</span>
+            <input type="number" style={{ ...S.input, width:72 }} value={f.endzeitMinute||""} onChange={e=>setF(x=>({...x,endzeitMinute:e.target.value}))} min={0} max={59} placeholder="MM"/>
+            <span style={{ color:C.textLight, fontSize:13 }}>Uhr</span>
+            {(f.endzeitDatum||f.endzeitStunde)&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>setF(x=>({...x,endzeitDatum:"",endzeitStunde:"",endzeitMinute:""}))}>&#x2715;</button>}
+          </div>
+          <p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Wenn gesetzt, wird die Wahl automatisch zu diesem Zeitpunkt geschlossen.</p>
+        </div>
         <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap", opacity:f.hatStimmen?0.5:1, pointerEvents:f.hatStimmen?"none":"auto" }}>
           <label style={{ display:"flex", alignItems:"center", gap:8, cursor:f.hatStimmen?"not-allowed":"pointer", fontSize:14 }}><input type="checkbox" checked={f.mehrfach} disabled={!!f.hatStimmen} onChange={e=>setField("mehrfach",e.target.checked)}/>Mehrfachauswahl</label>
           {f.mehrfach&&<><label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}><input type="checkbox" checked={f.exakt} disabled={!!f.hatStimmen} onChange={e=>setField("exakt",e.target.checked)}/>Exakte Anzahl</label><label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>Max: <input style={{ ...S.input, width:60 }} type="number" min={1} value={f.maxAuswahl} disabled={!!f.hatStimmen} onChange={e=>setField("maxAuswahl",parseInt(e.target.value))}/></label></>}
