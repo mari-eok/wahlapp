@@ -572,7 +572,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
           <div style={S.sectionLabel}>{selectedWahl.mehrfach?`Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen.`:"Bitte wählen Sie genau 1 Person."}</div>
           {[...selectedWahl.optionen].sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }).map(opt => {
             const isSel = selected.find(s=>s.id===opt.id);
-            return (<div key={opt.id} style={{ ...S.optionRow, ...(isSel?S.optionRowSelected:{}), ...(opt.istEnthaltung?{ background:C.bg }:{}) }} onClick={()=>toggleOption(opt)}><div style={{ ...S.checkbox, ...(isSel?S.checkboxChecked:{}) }}>{isSel&&<span style={{ color:"#fff", fontSize:13, fontWeight:700 }}>✓</span>}</div><span style={{ fontSize:15, fontWeight:500, color:opt.istEnthaltung?C.textLight:C.text }}>{opt.name}</span></div>);
+            return (<div key={opt.id} style={{ ...S.optionRow, ...(isSel?S.optionRowSelected:{ borderColor:C.border }), ...(opt.istEnthaltung?{ background:C.bg }:{}), outline:"none", userSelect:"none", WebkitTapHighlightColor:"transparent" }} onClick={()=>toggleOption(opt)} onMouseDown={e=>e.preventDefault()}><div style={{ ...S.checkbox, ...(isSel?S.checkboxChecked:{ borderColor:C.border, background:"transparent" }) }}>{isSel&&<span style={{ color:"#fff", fontSize:13, fontWeight:700 }}>✓</span>}</div><span style={{ fontSize:15, fontWeight:500, color:opt.istEnthaltung?C.textLight:C.text }}>{opt.name}</span></div>);
           })}
           <div style={{ ...S.counter, ...(counterOk?S.counterOk:{}) }}>{selected.length} von {maxCount} gewählt {counterOk?"✅":""}</div>
         </div>
