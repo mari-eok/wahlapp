@@ -563,6 +563,8 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   }, [aktiveWahlIDs]);
   useEffect(() => {
     if (status && status!=="pruefen") {
+      // Bei ungueltig: sofort frische Daten laden damit Optionen korrekt sind
+      if (status==="ungueltig") onDataChange();
       setCountdown(5);
       const t = setInterval(()=>{
         setCountdown(c=>{ if(c<=1){ clearInterval(t); setStatus(null); setStatusMsg(""); setTokenRaw(""); setSelected([]); setFlowFehler(null); return 5; } return c-1; });
