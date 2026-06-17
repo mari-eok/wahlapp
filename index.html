@@ -49,7 +49,7 @@ async function callFlow(flowName, body) {
   if (url.startsWith("PLATZHALTER")) throw new Error(`Flow '${flowName}' noch nicht konfiguriert.`);
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: API.key, ...body }) });
   // 502 bei deleteToken/saveTokens/deleteWahllokal = Flow-Timeout, SharePoint hat aber trotzdem ausgeführt
-  if (res.status === 502 && ["deleteToken","saveTokens","deleteWahllokal"].includes(flowName)) return { status:"ok", timeout:true };
+  if (res.status === 502 && ["deleteToken","saveTokens","deleteWahllokal","saveWahl","saveWahllokal"].includes(flowName)) return { status:"ok", timeout:true };
   if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
   return res.json();
 }
