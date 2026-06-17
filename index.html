@@ -545,7 +545,22 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   const [flowFehler, setFlowFehler] = useState(null);
 
   useEffect(() => { const t = setInterval(()=>setNowTime(new Date()),1000); return ()=>clearInterval(t); },[]);
-  useEffect(() => { if (aktiveWahlen.length>0 && !selectedWahlID) setSelectedWahlID(aktiveWahlen[0].id); },[aktiveWahlen.length]);
+  // Wenn sich die aktive Wahl ändert: Auswahl zurücksetzen und neue Wahl setzen
+  const aktiveWahlIDs = aktiveWahlen.map(w=>w.id).sort().join(",");
+  useEffect(() => {
+    if (aktiveWahlen.length === 0) return;
+    if (!selectedWahlID) {
+      setSelectedWahlID(aktiveWahlen[0].id);
+      return;
+    }
+    // Prüfen ob aktuelle Wahl noch aktiv ist
+    const nochAktiv = aktiveWahlen.find(w=>w.id===selectedWahlID);
+    if (!nochAktiv) {
+      // Aktuelle Wahl nicht mehr aktiv — auf neue wechseln und Auswahl leeren
+      setSelectedWahlID(aktiveWahlen[0].id);
+      setSelected([]);
+    }
+  }, [aktiveWahlIDs]);
   useEffect(() => {
     if (status && status!=="pruefen") {
       setCountdown(5);
@@ -561,8 +576,13 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   const tokenFormatted = tokenClean.length===8 ? tokenClean.slice(0,4)+"-"+tokenClean.slice(4) : tokenClean;
   const selectedWahl = appData.wahlen.find(w => w.id===selectedWahlID);
 
+  // Wenn Wahl wechselt: Auswahl zurücksetzen
+  useEffect(()=>{ setSelected([]); },[selectedWahlID]);
+
   function toggleOption(opt) {
     if (!selectedWahl) return;
+    // Sicherheitscheck: Option muss zur aktuellen Wahl gehören
+    if (!selectedWahl.optionen.find(o=>o.id===opt.id)) return;
     const isSel = selected.find(s=>s.id===opt.id);
     if (isSel) { setSelected(selected.filter(s=>s.id!==opt.id)); return; }
     if (opt.istEnthaltung) { setSelected([opt]); return; }
@@ -581,9 +601,29 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
 
   async function submitStimme() {
     if (!isValid()) return;
+
+    // SICHERHEITSCHECK: Alle Optionen müssen zur selectedWahl gehören
+    const wahlZumAbstimmen = appData.wahlen.find(w => w.id===selectedWahlID);
+    if (!wahlZumAbstimmen) { setFlowFehler("Fehler: Wahl nicht gefunden. Bitte Seite neu laden."); return; }
+    if (!wahlZumAbstimmen.aktiv || wahlZumAbstimmen.geschlossen) { setFlowFehler("Fehler: Diese Wahl ist nicht mehr aktiv."); return; }
+    const gueltigeOptionIDs = new Set(wahlZumAbstimmen.optionen.map(o=>o.id));
+    const alleOptionenGueltig = selected.every(s => gueltigeOptionIDs.has(s.id));
+    if (!alleOptionenGueltig) {
+      setFlowFehler("FEHLER: Inkonsistenz zwischen Wahl und Optionen erkannt. Bitte Seite neu laden und erneut versuchen.");
+      setSubmitting(false);
+      return;
+    }
+
     setSubmitting(true); setStatus("pruefen"); setFlowFehler(null);
     try {
-      const result = await callFlow("submitStimme", { tokenCode:tokenFormatted, eventID:wahllokalID, wahlID:parseInt(selectedWahlID), wahlTitel:selectedWahl.titel, positionen:selected.map(s=>({ optionID:parseInt(s.id), name:s.name })), maxAuswahl:selectedWahl.maxAuswahl||1 });
+      const result = await callFlow("submitStimme", {
+        tokenCode: tokenFormatted,
+        eventID: wahllokalID,
+        wahlID: parseInt(wahlZumAbstimmen.id),
+        wahlTitel: wahlZumAbstimmen.titel,
+        positionen: selected.map(s=>({ optionID:parseInt(s.id), name:s.name })),
+        maxAuswahl: wahlZumAbstimmen.maxAuswahl||1
+      });
       if (result.status==="gueltig") { setStatus("gueltig"); setStatusMsg(`Ihre Stimme wurde für die Wahl '${selectedWahl.titel}' gezählt.`); onDataChange(); }
       else if (result.status==="doppelt") { setStatus("doppelt"); setStatusMsg("Dieser Token wurde für diese Wahl bereits verwendet."); }
       else { setStatus("ungueltig"); setStatusMsg(`Ungültiger Token. Bitte prüfen Sie Ihre Eingabe.`); }
