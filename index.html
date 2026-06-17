@@ -1248,7 +1248,7 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
                 <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.08em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{formatCode(t.code)}</td>
                 <td style={S.td}><span style={{ ...S.badge, background:gs.bg, color:gs.color, fontSize:11 }}>{gs.label}</span></td>
                 <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{formatDatum(t.erstellt)}</td>
-                <td style={{ ...S.td, fontSize:12, color:t.gueltigBis&&parseGueltigBis(t.gueltigBis)<now?C.warning:C.textLight }}>{t.gueltigBis ? (t.gueltigBis.includes("T") ? new Date(t.gueltigBis).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : t.gueltigBis) : "—"}</td>
+                <td style={{ ...S.td, fontSize:12, color:t.gueltigBis&&parseGueltigBis(t.gueltigBis)<now?C.warning:C.textLight }}>{t.gueltigBis ? (t.gueltigBis.includes("T") ? new Date(t.gueltigBis).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Berlin"}) : t.gueltigBis) : "—"}</td>
                 <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{t.verwendetAm ? new Date(t.verwendetAm).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
                 <td style={S.td}>
                   <div style={{ display:"flex", gap:4 }}>
