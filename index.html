@@ -94,6 +94,17 @@ function useOfflineStatus() {
   return offline;
 }
 
+// Hook: true wenn Viewport <= 600px (Mobile)
+function useIsMobile() {
+  const [mobile, setMobile] = useState(window.innerWidth <= 600);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth <= 600);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return mobile;
+}
+
 function mapWaehler(item) {
   return { id: String(item.ID), email: item.Email || item.Title, eventID: item.EventID, tokenCode: item.TokenCode || "", status: item.Status || "angelegt", versendet: item.Versendet || false, tokenAktiv: item.TokenAktiv === false ? false : true };
 }
@@ -926,7 +937,13 @@ function TokenInput({ value, onChange }) {
 function LeitungView({ appData, eventID, onExit, onDataChange }) {
   const [tab, setTab] = useState("dashboard");
   const wahllokal = appData.wahllokale.find(w => w.eventID===eventID);
-  const tabs = [{ id:"dashboard", label:"Dashboard" },{ id:"wahlen", label:"Wahlen" },{ id:"waehler", label:"Wahlcodes" },{ id:"ergebnisse", label:"Ergebnisse" }];
+  const isMobile = useIsMobile();
+  const tabs = [
+    { id:"dashboard", label:"Dashboard", icon:"ti-layout-dashboard" },
+    { id:"wahlen",    label:"Wahlen",    icon:"ti-box-multiple" },
+    { id:"waehler",   label:"Wahlcodes", icon:"ti-ticket" },
+    { id:"ergebnisse",label:"Ergebnisse",icon:"ti-chart-bar" },
+  ];
   // Session-Timeout: nach 30 Minuten Inaktivität automatisch abmelden
   const TIMEOUT_MS = 30 * 60 * 1000;
   const timeoutRef = useRef(null);
@@ -947,20 +964,60 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
     };
   }, []);
   return (
-    <div style={{ background:C.bg, minHeight:"100vh" }}>
+    <div style={{ background:C.bg, minHeight:"100vh", paddingBottom:isMobile?72:0 }}>
       <div style={{ background:C.primary }}>
-        <div style={{ maxWidth:960, margin:"0 auto", ...S.navbar }}>
-          <div><span style={S.navTitle}><i className="ti ti-clipboard-list" aria-hidden="true"/> Wahlleitung</span><span style={{ color:"rgba(255,255,255,0.6)", fontSize:13, marginLeft:12 }}>{wahllokal?.name} ({eventID})</span></div>
-          <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:12 }}>← Abmelden</button>
+        <div style={{ maxWidth:960, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", minHeight:isMobile?52:56, padding:isMobile?"0 12px":"0 24px" }}>
+          <div style={{ overflow:"hidden" }}>
+            <span style={{ ...S.navTitle, fontSize:isMobile?14:16 }}>
+              <i className="ti ti-clipboard-list" aria-hidden="true"/> Wahlleitung
+            </span>
+            {!isMobile && <span style={{ color:"rgba(255,255,255,0.6)", fontSize:13, marginLeft:12 }}>{wahllokal?.name} ({eventID})</span>}
+            {isMobile && <div style={{ color:"rgba(255,255,255,0.65)", fontSize:11, marginTop:1 }}>{wahllokal?.name}</div>}
+          </div>
+          <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:12, padding:isMobile?"6px 10px":"7px 14px" }}>
+            <i className="ti ti-logout" aria-hidden="true"/>{!isMobile && " Abmelden"}
+          </button>
         </div>
+        {/* Desktop: Tabs in der Navbar */}
+        {!isMobile && (
+          <div style={{ maxWidth:960, margin:"0 auto", padding:"0 16px", display:"flex", gap:4, paddingBottom:0 }}>
+            {tabs.map(t=>(
+              <button key={t.id}
+                style={{ padding:"10px 16px", border:"none", background:tab===t.id?"rgba(255,255,255,0.15)":"transparent",
+                  color:tab===t.id?"#fff":"rgba(255,255,255,0.65)", fontSize:13, fontWeight:600, cursor:"pointer",
+                  borderRadius:"8px 8px 0 0", borderBottom:tab===t.id?"3px solid #fff":"3px solid transparent" }}
+                onClick={()=>setTab(t.id)}>
+                <i className={`ti ${t.icon}`} aria-hidden="true" style={{marginRight:6}}/>{t.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      <div style={{ maxWidth:960, margin:"0 auto", padding:"24px 16px" }}>
-        <div style={S.navTabs}>{tabs.map(t=><button key={t.id} style={{ ...S.navTab, ...(tab===t.id?S.navTabActive:{}) }} onClick={()=>setTab(t.id)}>{t.label}</button>)}</div>
-        {tab==="dashboard" && <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange}/>}
-        {tab==="wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} initialStichwahl={window._stichwahl} onStichwahl={()=>{ window._stichwahl=null; }} onErgebnisse={(wahlId)=>{ window._ergebnisWahlId=wahlId; setTab("ergebnisse"); }}/>}
-        {tab==="waehler" && <LeitungWaehler appData={appData} eventID={eventID} onDataChange={onDataChange}/>}
-        {tab==="ergebnisse" && <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setTab}/>}
+
+      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"16px 12px":"24px 16px" }}>
+        {tab==="dashboard" && <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>}
+        {tab==="wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile} initialStichwahl={window._stichwahl} onStichwahl={()=>{ window._stichwahl=null; }} onErgebnisse={(wahlId)=>{ window._ergebnisWahlId=wahlId; setTab("ergebnisse"); }}/>}
+        {tab==="waehler" && <LeitungWaehler appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>}
+        {tab==="ergebnisse" && <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setTab} isMobile={isMobile}/>}
       </div>
+
+      {/* Mobile: Bottom Tab Bar */}
+      {isMobile && (
+        <div style={{ position:"fixed", bottom:0, left:0, right:0, background:C.bgWhite,
+          borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100,
+          boxShadow:"0 -2px 12px rgba(0,0,0,0.08)" }}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)}
+              style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                gap:3, padding:"8px 4px", border:"none", background:"transparent", cursor:"pointer",
+                color:tab===t.id?C.primary:C.textLight, fontSize:10, fontWeight:tab===t.id?700:400,
+                borderTop:tab===t.id?`2px solid ${C.primary}`:"2px solid transparent" }}>
+              <i className={`ti ${t.icon}`} aria-hidden="true" style={{fontSize:20}}/>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1100,9 +1157,9 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
         <div style={{ ...S.card, border:`2px solid ${C.accent}`, marginBottom:16 }}>
           <div style={{ ...S.sectionLabel, color:C.accent, marginBottom:12 }}>● Laufende Wahlen</div>
           {aktiveWahlen.map(w=>(
-            <div key={w.id} style={{ padding:"12px 0", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div><div style={{ fontWeight:700, fontSize:16 }}>{w.titel}</div><div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>{w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"} · {w.optionen.length} Kandidaten</div></div>
-              <button style={{ ...S.btn, ...S.btnDanger, fontSize:13 }} onClick={()=>schliesseWahl(w)} disabled={toggling===w.id}>{toggling===w.id?"…":<><i className="ti ti-lock" aria-hidden="true"/> Wahl schließen</>}</button>
+            <div key={w.id} style={{ padding:"12px 0", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
+              <div style={{ flex:1, minWidth:160 }}><div style={{ fontWeight:700, fontSize:16 }}>{w.titel}</div><div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>{w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"} · {w.optionen.length} Kandidaten</div></div>
+              <button style={{ ...S.btn, ...S.btnDanger, fontSize:13, width:"100%", justifyContent:"center", maxWidth:220 }} onClick={()=>schliesseWahl(w)} disabled={toggling===w.id}>{toggling===w.id?"…":<><i className="ti ti-lock" aria-hidden="true"/> Wahl schließen</>}</button>
             </div>
           ))}
         </div>
@@ -1149,7 +1206,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   );
 }
 
-function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl, onErgebnisse }) {
+function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl, onErgebnisse, isMobile=false }) {
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
   const { confirm, dialog } = useConfirm();
   // Alle Wahlen — aktive, geschlossene und archivierte
@@ -1270,11 +1327,27 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
     setSaving(false);
   }
   if (form) return <WahlForm form={form} onSave={saveWahl} onCancel={()=>setForm(null)} saving={saving} fehler={fehler}/>;
+  // Wiederverwendbare Aktionsbuttons für eine Wahl
+  function WahlAktionen({ w, size=12 }) {
+    const p = `5px ${size>12?"14px":"11px"}`;
+    return (
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        {!w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:size, padding:p }} onClick={()=>openForm(w)}><i className="ti ti-edit" aria-hidden="true"/> Bearbeiten</button>}
+        {!w.geschlossen&&w.aktiv&&<button style={{ ...S.btn, ...S.btnWarning, fontSize:size, padding:p }} onClick={()=>pauseWahl&&pauseWahl(w)}><i className="ti ti-player-pause" aria-hidden="true"/> Pause</button>}
+        {!w.geschlossen&&!w.aktiv&&<button style={{ ...S.btn, ...S.btnPrimary, fontSize:size, padding:p }} onClick={()=>starteWahl&&starteWahl(w)}><i className="ti ti-player-play" aria-hidden="true"/> Starten</button>}
+        {!w.geschlossen&&w.aktiv&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:size, padding:p }} onClick={()=>schliesseWahl(w)}><i className="ti ti-lock" aria-hidden="true"/> Schließen</button>}
+        {w.geschlossen&&<button style={{ ...S.btn, ...S.btnPrimary, fontSize:size, padding:p }} onClick={()=>onErgebnisse&&onErgebnisse(w.id)}><i className="ti ti-chart-bar" aria-hidden="true"/> Ergebnisse</button>}
+        {w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:size, padding:p }} onClick={()=>archiviereWahl(w)}><i className="ti ti-archive" aria-hidden="true"/> Archivieren</button>}
+        <button style={{ ...S.btn, ...S.btnGhostDanger, fontSize:size, padding:p }} onClick={()=>deleteWahl(w)}><i className="ti ti-trash" aria-hidden="true"/> Löschen</button>
+      </div>
+    );
+  }
+
   return (
     <div>
       {dialog}
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
         <h3 style={{ margin:0, color:C.primary }}>Wahlen</h3>
         <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), hatEndzeit:false, endzeit:"", mehrfach:false, exakt:false, maxAuswahl:1, mehrheitsregel:"absolut", optionen:[{ id:null, _tempKey:"tmp_1", name:"", istEnthaltung:false },{ id:null, _tempKey:"tmp_enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
       </div>
@@ -1282,33 +1355,48 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
       {/* Aktive & geschlossene Wahlen */}
       <div style={S.card}>
         {wahlen.length===0 ? <p style={{ color:C.textLight, fontSize:14 }}>Noch keine Wahlen angelegt.</p> :
-          <table style={S.table}><thead><tr><th style={S.th}>Titel</th><th style={S.th}>Typ</th><th style={S.th}>Status</th><th style={S.th}>Aktionen</th></tr></thead>
-          <tbody>{wahlen.map(w=>(
-            <tr key={w.id} style={{ opacity:w.geschlossen?0.85:1 }}>
-              <td style={S.td}><strong>{w.titel}</strong></td>
-              <td style={{ ...S.td, fontSize:12, color:C.textLight }}>
-                {w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"} · {w.optionen.length} Opt.
-                <div style={{ marginTop:3 }}>Start: {formatDatum(w.startzeit)}{w.endzeit ? ` · Ende: ${formatDatum(w.endzeit)}` : ""}</div>
-              </td>
-              <td style={S.td}>
-                {(()=>{ const st = getWahlZeitStatus(w, new Date()); return (
-                  <>
-                    <span style={{ ...S.badge, ...st.badge }}>{st.icon} {st.label}</span>
-                    {st.hint&&<div style={{ marginTop:6, fontSize:12, color:C.textLight, lineHeight:1.4 }}>{st.hint}</div>}
-                  </>
-                ); })()}
-              </td>
-              <td style={S.td}><div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {!w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>openForm(w)}><i className="ti ti-edit" aria-hidden="true"/> Bearbeiten</button>}
-                {!w.geschlossen&&w.aktiv&&<button style={{ ...S.btn, ...S.btnWarning, fontSize:12, padding:"5px 11px" }} onClick={()=>pauseWahl&&pauseWahl(w)}><i className="ti ti-player-pause" aria-hidden="true"/> Pause</button>}
-                {!w.geschlossen&&!w.aktiv&&<button style={{ ...S.btn, ...S.btnPrimary, fontSize:12, padding:"5px 11px" }} onClick={()=>starteWahl&&starteWahl(w)}><i className="ti ti-player-play" aria-hidden="true"/> Starten</button>}
-                {!w.geschlossen&&w.aktiv&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12, padding:"5px 11px" }} onClick={()=>schliesseWahl(w)}><i className="ti ti-lock" aria-hidden="true" style={{fontSize:"inherit"}}/> Schließen</button>}
-                {w.geschlossen&&<button style={{ ...S.btn, ...S.btnPrimary, fontSize:12, padding:"5px 11px" }} onClick={()=>onErgebnisse&&onErgebnisse(w.id)}><i className="ti ti-chart-bar" aria-hidden="true"/> Ergebnisse</button>}
-                {w.geschlossen&&<button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>archiviereWahl(w)}><i className="ti ti-archive" aria-hidden="true"/> Archivieren</button>}
-                <button style={{ ...S.btn, ...S.btnGhostDanger, fontSize:12, padding:"5px 11px" }} onClick={()=>deleteWahl(w)}><i className="ti ti-trash" aria-hidden="true"/> Löschen</button>
-              </div></td>
-            </tr>
-          ))}</tbody></table>
+          isMobile ? (
+            /* Mobile: Karten-Layout statt Tabelle */
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {wahlen.map(w=>{
+                const st = getWahlZeitStatus(w, new Date());
+                return (
+                  <div key={w.id} style={{ borderRadius:10, border:`1px solid ${C.border}`, padding:14, opacity:w.geschlossen?0.85:1, background:C.bgWhite }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8, gap:8 }}>
+                      <div style={{ fontWeight:700, fontSize:15, color:C.text, flex:1 }}>{w.titel}</div>
+                      <span style={{ ...S.badge, ...st.badge, flexShrink:0 }}>{st.label}</span>
+                    </div>
+                    <div style={{ fontSize:12, color:C.textLight, marginBottom:10 }}>
+                      {w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"} · {w.optionen.length} Optionen
+                      <br/>Start: {formatDatum(w.startzeit)}{w.endzeit?` · Ende: ${formatDatum(w.endzeit)}`:""}
+                    </div>
+                    <WahlAktionen w={w} size={13}/>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Desktop: Tabelle */
+            <table style={S.table}><thead><tr><th style={S.th}>Titel</th><th style={S.th}>Typ</th><th style={S.th}>Status</th><th style={S.th}>Aktionen</th></tr></thead>
+            <tbody>{wahlen.map(w=>(
+              <tr key={w.id} style={{ opacity:w.geschlossen?0.85:1 }}>
+                <td style={S.td}><strong>{w.titel}</strong></td>
+                <td style={{ ...S.td, fontSize:12, color:C.textLight }}>
+                  {w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"} · {w.optionen.length} Opt.
+                  <div style={{ marginTop:3 }}>Start: {formatDatum(w.startzeit)}{w.endzeit ? ` · Ende: ${formatDatum(w.endzeit)}` : ""}</div>
+                </td>
+                <td style={S.td}>
+                  {(()=>{ const st = getWahlZeitStatus(w, new Date()); return (
+                    <>
+                      <span style={{ ...S.badge, ...st.badge }}>{st.icon} {st.label}</span>
+                      {st.hint&&<div style={{ marginTop:6, fontSize:12, color:C.textLight, lineHeight:1.4 }}>{st.hint}</div>}
+                    </>
+                  ); })()}
+                </td>
+                <td style={S.td}><WahlAktionen w={w}/></td>
+              </tr>
+            ))}</tbody></table>
+          )
         }
       </div>
 
@@ -1341,7 +1429,7 @@ function ArchivWahlen({ wahlen, onDelete }) {
 }
 
 // FIX: OfflineTokenListe liest tokenList aus getDaten und mappt korrekt via mapToken
-function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
+function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=false }) {
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null); const [ausgewaehlt, setAusgewaehlt] = useState([]); const [loesching, setLoesching] = useState(false);
   const { confirm, dialog } = useConfirm();
@@ -1510,59 +1598,97 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
       {fehler&&<p style={{ color:C.error, fontSize:13, marginBottom:8 }}>{fehler}</p>}
       <input style={{ ...S.input, marginBottom:12 }} placeholder="Wahlcode suchen..." value={suche} onChange={e=>setSuche(e.target.value)}/>
       {loading?<p style={{ color:C.textLight, fontSize:14 }}>Wird geladen…</p>:gefiltert.length===0?<p style={{ color:C.textLight, fontSize:14 }}>{suche?"Kein Wahlcode gefunden.":"Noch keine Wahlcodes generiert."}</p>:(
-        <table style={{ width:"100%", borderCollapse:"collapse" }}>
-          <thead><tr>
-            <th style={{ ...S.th, width:36 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th>
-            <SortThT col="code" label="Wahlcode"/>
-            <SortThT col="status" label="Status"/>
-            <SortThT col="erstellt" label="Erstellt"/>
-            <SortThT col="gueltigBis" label="Gültig bis"/>
-                  <SortThT col="verwendetAm" label="Verwendet am"/>
-            <th style={S.th}>Aktion</th>
-          </tr></thead>
-          <tbody>{gefiltert.map(t=>{
-            const gs = gueltigkeitStatus(t);
-            async function einzelLoeschen() {
-              const msg = t.verwendet
-                ? "Dieser Wahlcode wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nWahlcode trotzdem löschen?"
-                : "Wahlcode löschen?";
-              const okEl = await confirm({ titel:"Wahlcode löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!okEl) return;
-              setLoesching(true);
-              callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
-                .then(async ()=>{ setFilter("alle"); await laden(); setErfolg("Wahlcode gelöscht."); setTimeout(()=>setErfolg(null),2000); })
-                .catch(e=>{ if(!e.message.includes("502")){ setFehler(e.message); } else { setFilter("alle"); laden(); setErfolg("Wahlcode gelöscht."); setTimeout(()=>setErfolg(null),2000); } })
-                .finally(()=>setLoesching(false));
-            }
-            return (
-              <tr key={t.id} style={{ background:ausgewaehlt.includes(t.id)?"#f0f4ff":"transparent" }}>
-                <td style={S.td}><input type="checkbox" checked={ausgewaehlt.includes(t.id)} onChange={()=>toggleAuswahl(t.id)}/></td>
-                <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.08em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{formatCode(t.code)}</td>
-                <td style={S.td}><span style={{ ...S.badge, background:gs.bg, color:gs.color, fontSize:11 }}>{gs.label}</span></td>
-                <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{formatDatum(t.erstellt)}</td>
-                <td style={{ ...S.td, fontSize:12, color:t.gueltigBis&&parseGueltigBis(t.gueltigBis)<now?C.warning:C.textLight }}>{t.gueltigBis ? (/^\d{9,12}$/.test(t.gueltigBis.trim()) ? new Date(parseInt(t.gueltigBis)*1000).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Berlin"}) : t.gueltigBis) : "—"}</td>
-                <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{t.verwendetAm ? new Date(t.verwendetAm).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
-                <td style={S.td}>
-                  <div style={{ display:"flex", gap:4 }}>
-                    <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:t.aktiv?C.error:C.success, border:`1px solid ${t.aktiv?C.error:C.success}` }} onClick={()=>toggleToken(t)} disabled={toggling===t.id||t.verwendet} title={t.verwendet?"Bereits verwendet":""}>
+        isMobile ? (
+          /* Mobile: Karten pro Wahlcode */
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {gefiltert.map(t=>{
+              const gs = gueltigkeitStatus(t);
+              async function einzelLoeschen() {
+                const msg = t.verwendet ? "Dieser Wahlcode wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nWahlcode trotzdem löschen?" : "Wahlcode löschen?";
+                const okEl = await confirm({ titel:"Wahlcode löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!okEl) return;
+                setLoesching(true);
+                callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
+                  .then(async ()=>{ setFilter("alle"); await laden(); setErfolg("Wahlcode gelöscht."); setTimeout(()=>setErfolg(null),2000); })
+                  .catch(e=>{ if(!e.message.includes("502")){ setFehler(e.message); } else { setFilter("alle"); laden(); setErfolg("Wahlcode gelöscht."); setTimeout(()=>setErfolg(null),2000); } })
+                  .finally(()=>setLoesching(false));
+              }
+              return (
+                <div key={t.id} style={{ borderRadius:8, border:`1px solid ${ausgewaehlt.includes(t.id)?C.primary:C.border}`, padding:"10px 12px", background:ausgewaehlt.includes(t.id)?"#f0f4ff":C.bgWhite }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                    <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+                      <input type="checkbox" checked={ausgewaehlt.includes(t.id)} onChange={()=>toggleAuswahl(t.id)}/>
+                      <span style={{ fontFamily:"monospace", fontWeight:700, fontSize:16, letterSpacing:"0.08em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{formatCode(t.code)}</span>
+                    </label>
+                    <span style={{ ...S.badge, background:gs.bg, color:gs.color, fontSize:11 }}>{gs.label}</span>
+                  </div>
+                  <div style={{ fontSize:11, color:C.textLight, marginBottom:8, display:"flex", gap:12, flexWrap:"wrap" }}>
+                    {t.gueltigBis&&<span>Gültig bis: {/^\d{9,12}$/.test(t.gueltigBis.trim()) ? new Date(parseInt(t.gueltigBis)*1000).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Berlin"}) : t.gueltigBis}</span>}
+                    {t.verwendetAm&&<span>Abgestimmt: {new Date(t.verwendetAm).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</span>}
+                  </div>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button style={{ ...S.btn, fontSize:12, padding:"4px 10px", background:"transparent", color:t.aktiv?C.error:C.success, border:`1px solid ${t.aktiv?C.error:C.success}` }} onClick={()=>toggleToken(t)} disabled={toggling===t.id||t.verwendet}>
                       {toggling===t.id?"…":t.aktiv?"Sperren":"Aktivieren"}
                     </button>
-                    {deleteVerfuegbar&&(
-                      <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={einzelLoeschen} disabled={loesching}>
-                        <i className="ti ti-trash" aria-hidden="true"/>
-                      </button>
-                    )}
+                    {deleteVerfuegbar&&<button style={{ ...S.btn, ...S.btnGhostDanger, fontSize:12, padding:"4px 10px" }} onClick={einzelLoeschen} disabled={loesching}><i className="ti ti-trash" aria-hidden="true"/></button>}
                   </div>
-                </td>
-              </tr>
-            );
-          })}</tbody>
-        </table>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Desktop: Tabelle */
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead><tr>
+              <th style={{ ...S.th, width:36 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th>
+              <SortThT col="code" label="Wahlcode"/>
+              <SortThT col="status" label="Status"/>
+              <SortThT col="erstellt" label="Erstellt"/>
+              <SortThT col="gueltigBis" label="Gültig bis"/>
+              <SortThT col="verwendetAm" label="Verwendet am"/>
+              <th style={S.th}>Aktion</th>
+            </tr></thead>
+            <tbody>{gefiltert.map(t=>{
+              const gs = gueltigkeitStatus(t);
+              async function einzelLoeschen() {
+                const msg = t.verwendet ? "Dieser Wahlcode wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nWahlcode trotzdem löschen?" : "Wahlcode löschen?";
+                const okEl = await confirm({ titel:"Wahlcode löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!okEl) return;
+                setLoesching(true);
+                callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
+                  .then(async ()=>{ setFilter("alle"); await laden(); setErfolg("Wahlcode gelöscht."); setTimeout(()=>setErfolg(null),2000); })
+                  .catch(e=>{ if(!e.message.includes("502")){ setFehler(e.message); } else { setFilter("alle"); laden(); setErfolg("Wahlcode gelöscht."); setTimeout(()=>setErfolg(null),2000); } })
+                  .finally(()=>setLoesching(false));
+              }
+              return (
+                <tr key={t.id} style={{ background:ausgewaehlt.includes(t.id)?"#f0f4ff":"transparent" }}>
+                  <td style={S.td}><input type="checkbox" checked={ausgewaehlt.includes(t.id)} onChange={()=>toggleAuswahl(t.id)}/></td>
+                  <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.08em", textDecoration:!t.aktiv?"line-through":"none", opacity:!t.aktiv?0.5:1 }}>{formatCode(t.code)}</td>
+                  <td style={S.td}><span style={{ ...S.badge, background:gs.bg, color:gs.color, fontSize:11 }}>{gs.label}</span></td>
+                  <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{formatDatum(t.erstellt)}</td>
+                  <td style={{ ...S.td, fontSize:12, color:t.gueltigBis&&parseGueltigBis(t.gueltigBis)<now?C.warning:C.textLight }}>{t.gueltigBis ? (/^\d{9,12}$/.test(t.gueltigBis.trim()) ? new Date(parseInt(t.gueltigBis)*1000).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Berlin"}) : t.gueltigBis) : "—"}</td>
+                  <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{t.verwendetAm ? new Date(t.verwendetAm).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"}</td>
+                  <td style={S.td}>
+                    <div style={{ display:"flex", gap:4 }}>
+                      <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:t.aktiv?C.error:C.success, border:`1px solid ${t.aktiv?C.error:C.success}` }} onClick={()=>toggleToken(t)} disabled={toggling===t.id||t.verwendet} title={t.verwendet?"Bereits verwendet":""}>
+                        {toggling===t.id?"…":t.aktiv?"Sperren":"Aktivieren"}
+                      </button>
+                      {deleteVerfuegbar&&(
+                        <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={einzelLoeschen} disabled={loesching}>
+                          <i className="ti ti-trash" aria-hidden="true"/>
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        )
       )}
     </div>
   );
 }
 
-function LeitungWaehler({ appData, eventID }) {
+function LeitungWaehler({ appData, eventID, isMobile=false }) {
   const wahllokal = appData.wahllokale.find(w=>w.eventID===eventID);
   const { confirm, dialog } = useConfirm();
   const [szenario, setSzenario] = useState(null); const [waehler, setWaehler] = useState([]); const [loading, setLoading] = useState(false);
@@ -1838,7 +1964,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
         {saving&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Wahlcodes werden generiert…</p></div></div>}
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           <button style={{ ...S.btn, ...S.btnPrimary, padding:"10px 24px" }} onClick={offlineGenerierenMitPDF} disabled={saving}>
-            {saving ? "Wird generiert…" : <i className="ti ti-printer" aria-hidden="true" style={{fontSize:"inherit"}}/> Wahlcodes & PDF generieren}
+            {saving ? "Wird generiert…" : <><i className="ti ti-printer" aria-hidden="true"/> Wahlcodes & PDF generieren</>}
           </button>
           <button style={{ ...S.btn, ...S.btnGhost, padding:"10px 24px" }} onClick={offlineGenerieren} disabled={saving}>
             <i className="ti ti-ticket" aria-hidden="true"/> Nur Wahlcodes generieren (ohne PDF)
@@ -1846,7 +1972,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
         </div>
         <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>„Wahlcodes & PDF" speichert neue Wahlcodes und öffnet sofort das Druckfenster. „Nur Wahlcodes" speichert ohne PDF — drucken später über die Wahlcode-Übersicht.</p>
       </div>
-      <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger} wahllokalName={wahllokal?.name}/>
+      <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger} wahllokalName={wahllokal?.name} isMobile={isMobile}/>
     </div>
   );
 
@@ -1986,6 +2112,7 @@ function LeitungErgebnisse({ appData, eventID, onDataChange, onSwitchTab }) {
 }
 
 function SuperadminView({ appData, onExit, onDataChange }) {
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState("wahllokale"); const [wahllokale, setWahllokale] = useState(null); const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
   const [expanded, setExpanded] = useState(null); const [deleting, setDeleting] = useState(null);
@@ -2019,7 +2146,11 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   useEffect(()=>{ laden(); },[]);
   async function saveWahllokal(f) { setSaving(true); setFehler(null); try{ await callFlow("saveWahllokal",{ wahllokalID:f.id?parseInt(f.id):null, eventID:f.eventID, name:f.name, aktiv:f.aktiv!==false, leitungPIN:f.leitungPIN||"0000", modus:f.modus||"beides" }); await laden(); await onDataChange(); setForm(null); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function deleteWahllokal(wl) { const ok = await confirm({ titel:`Wahllokal löschen`, nachricht:`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen, Wahlcodes und Abstimmungen werden unwiderruflich gelöscht.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
-  const tabs = [{ id:"wahllokale", label:"Wahllokale" },{ id:"wahlen", label:"Alle Wahlen" },{ id:"flows", label:"Flows" }];
+  const tabs = [
+    { id:"wahllokale", label:"Wahllokale", icon:"ti-building" },
+    { id:"wahlen",     label:"Alle Wahlen", icon:"ti-chart-bar" },
+    { id:"flows",      label:"Flows", icon:"ti-settings" },
+  ];
 
   if (form!==null) return (
     <div style={{ maxWidth:600, margin:"0 auto", padding:"20px 16px" }}>
@@ -2053,20 +2184,33 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   );
 
   return (
-    <div style={{ maxWidth:900, margin:"0 auto", padding:"20px 16px" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-        <div><div style={{ fontSize:11, fontWeight:700, letterSpacing:"0.15em", color:C.superadmin, textTransform:"uppercase", marginBottom:2 }}>Systemzugang</div><h1 style={{ fontSize:22, fontWeight:900, color:C.primary, margin:0 }}>Superadmin</h1></div>
-        <button onClick={onExit} style={{ ...S.btn, ...S.btnGhost }}>← Abmelden</button>
+    <div style={{ maxWidth:900, margin:"0 auto", padding:isMobile?"12px 12px":"20px 16px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+        <div><div style={{ fontSize:11, fontWeight:700, letterSpacing:"0.15em", color:C.superadmin, textTransform:"uppercase", marginBottom:2 }}>Systemzugang</div><h1 style={{ fontSize:isMobile?18:22, fontWeight:900, color:C.primary, margin:0 }}>Superadmin</h1></div>
+        <button onClick={onExit} style={{ ...S.btn, ...S.btnGhost, fontSize:12 }}><i className="ti ti-logout" aria-hidden="true"/> Abmelden</button>
       </div>
       <div style={S.statGrid}><StatCard num={wahllokale?.length??"—"} label="Wahllokale" color={C.superadmin}/><StatCard num={alleWahlen.length} label="Wahlen gesamt" color={C.primary}/><StatCard num={alleWahlen.filter(w=>w.aktiv).length} label="Aktive Wahlen" color={C.success}/><StatCard num={alleWahlen.filter(w=>w.geschlossen).length} label="Geschlossen" color={C.error}/></div>
-      <div style={{ display:"flex", gap:8, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
-        {tabs.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{ background:"none", border:"none", cursor:"pointer", padding:"10px 16px", fontSize:14, fontWeight:600, color:tab===t.id?C.primary:C.textLight, borderBottom:tab===t.id?`2px solid ${C.primary}`:"2px solid transparent", marginBottom:-2 }}>{t.label}</button>)}
+      {/* Tabs: scrollbar auf Mobile, normal auf Desktop */}
+      <div style={{ display:"flex", gap:isMobile?0:8, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0, overflowX:"auto" }}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{ background:"none", border:"none", cursor:"pointer",
+              padding:isMobile?"10px 14px":"10px 16px",
+              fontSize:isMobile?13:14, fontWeight:600, whiteSpace:"nowrap",
+              display:"flex", alignItems:"center", gap:6,
+              color:tab===t.id?C.primary:C.textLight,
+              borderBottom:tab===t.id?`2px solid ${C.primary}`:"2px solid transparent",
+              marginBottom:-2 }}>
+            <i className={`ti ${t.icon}`} aria-hidden="true"/>
+            {t.label}
+          </button>
+        ))}
       </div>
       {dialog}
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       {tab==="wahllokale"&&(
         <div style={S.card}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}><div style={S.sectionLabel}>Wahllokale</div><button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>setForm({ name:"", eventID:"", leitungPIN:"", aktiv:true, modus:"beides" })}>+ Neues Wahllokal</button></div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}><div style={S.sectionLabel}>Wahllokale</div><button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>setForm({ name:"", eventID:"", leitungPIN:"", aktiv:true, modus:"beides" })}>+ Neues Wahllokal</button></div>
           {loading&&<p style={{ color:C.textLight, fontSize:14 }}>Wird geladen…</p>}
           {!loading&&wahllokale?.map(wl=>{
             const wahlenDieses=alleWahlen.filter(w=>w.eventID===wl.eventID); const isOpen=expanded===wl.id;
@@ -2080,11 +2224,11 @@ function SuperadminView({ appData, onExit, onDataChange }) {
                     · {wl.modus==="online"?"Online":wl.modus==="offline"?"Vor-Ort":"Online+Vor-Ort"}
                   </div>
                   </div>
-                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
                     {wl.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeGray }}>inaktiv</span>}
-                    <button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 11px" }} onClick={()=>setForm({...wl})}>Bearbeiten</button>
-                    <button style={{ ...S.btn, ...S.btnGhostDanger, fontSize:12, padding:"5px 11px" }} onClick={()=>deleteWahllokal(wl)} disabled={deleting===wl.id}>{deleting===wl.id?"…":"Löschen"}</button>
-                    <span style={{ color:C.textLight, cursor:"pointer", fontSize:16 }} onClick={()=>setExpanded(isOpen?null:wl.id)}>{isOpen?"▲":"▼"}</span>
+                    <button style={{ ...S.btn, ...S.btnGhost, fontSize:12, padding:"5px 10px" }} onClick={()=>setForm({...wl})}><i className="ti ti-edit" aria-hidden="true"/>{!isMobile&&" Bearbeiten"}</button>
+                    <button style={{ ...S.btn, ...S.btnGhostDanger, fontSize:12, padding:"5px 10px" }} onClick={()=>deleteWahllokal(wl)} disabled={deleting===wl.id}>{deleting===wl.id?"…":<><i className="ti ti-trash" aria-hidden="true"/>{!isMobile&&" Löschen"}</>}</button>
+                    <span style={{ color:C.textLight, cursor:"pointer", fontSize:16, padding:"4px" }} onClick={()=>setExpanded(isOpen?null:wl.id)}>{isOpen?"▲":"▼"}</span>
                   </div>
                 </div>
                 {isOpen&&(
@@ -2105,13 +2249,30 @@ function SuperadminView({ appData, onExit, onDataChange }) {
       {tab==="wahlen"&&(
         <div style={S.card}>
           <div style={S.sectionLabel}>Alle Wahlen</div>
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
-            <thead><tr><th style={{ ...S.th, textAlign:"left" }}>Titel</th><th style={{ ...S.th, textAlign:"left" }}>Wahllokal</th><th style={{ ...S.th, textAlign:"left" }}>Typ</th><th style={{ ...S.th, textAlign:"left" }}>Status</th></tr></thead>
-            <tbody>{alleWahlen.length===0?<tr><td colSpan={4} style={{ ...S.td, color:C.textLight }}>Keine Wahlen.</td></tr>:alleWahlen.map(w=>{
-              const wl=appData.wahllokale.find(l=>l.eventID===w.eventID);
-              return (<tr key={w.id}><td style={{ ...S.td, fontWeight:600 }}>{w.titel}</td><td style={{ ...S.td, color:C.textLight }}>{wl?.name||w.eventID}</td><td style={{ ...S.td, fontSize:12 }}>{w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"}</td><td style={S.td}>{w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}><i className="ti ti-lock" aria-hidden="true"/> geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}</td></tr>);
-            })}</tbody>
-          </table>
+          {isMobile ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {alleWahlen.length===0?<p style={{ color:C.textLight, fontSize:13 }}>Keine Wahlen.</p>:alleWahlen.map(w=>{
+                const wl=appData.wahllokale.find(l=>l.eventID===w.eventID);
+                return (
+                  <div key={w.id} style={{ borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                      <div style={{ fontWeight:600, fontSize:14 }}>{w.titel}</div>
+                      {w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}><i className="ti ti-lock" aria-hidden="true"/> geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>pausiert</span>}
+                    </div>
+                    <div style={{ fontSize:12, color:C.textLight, marginTop:4 }}>{wl?.name||w.eventID} · {w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead><tr><th style={{ ...S.th, textAlign:"left" }}>Titel</th><th style={{ ...S.th, textAlign:"left" }}>Wahllokal</th><th style={{ ...S.th, textAlign:"left" }}>Typ</th><th style={{ ...S.th, textAlign:"left" }}>Status</th></tr></thead>
+              <tbody>{alleWahlen.length===0?<tr><td colSpan={4} style={{ ...S.td, color:C.textLight }}>Keine Wahlen.</td></tr>:alleWahlen.map(w=>{
+                const wl=appData.wahllokale.find(l=>l.eventID===w.eventID);
+                return (<tr key={w.id}><td style={{ ...S.td, fontWeight:600 }}>{w.titel}</td><td style={{ ...S.td, color:C.textLight }}>{wl?.name||w.eventID}</td><td style={{ ...S.td, fontSize:12 }}>{w.mehrfach?`Mehrfach (max. ${w.maxAuswahl})`:"Einzelwahl"}</td><td style={S.td}>{w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}><i className="ti ti-lock" aria-hidden="true"/> geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}</td></tr>);
+              })}</tbody>
+            </table>
+          )}
         </div>
       )}
       {tab==="flows"&&(
