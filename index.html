@@ -128,7 +128,7 @@ function mapToken(item) {
     verwendeteWahlen: item.UsedForWahlID ? [String(item.UsedForWahlID)] : (() => { try { return JSON.parse(item.VerwendeteWahlen || "[]"); } catch { return []; } })(),
     gueltigBis: item.GueltigBis || null,
     erstellt: item.Zeitstempel || item.Created || null,
-    verwendetAm: item.VerwendetAm || item.VendedAt || item.UsedAt || item.AbgestimmtAm || null,
+    verwendetAm: item.VerwendetAm || null,
   };
 }
 
@@ -783,7 +783,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
         <WlHeader name={wahllokal?.name}/>
         <WahllokalGear wahllokalID={wahllokalID}/>
         <div style={S.closedScreen}>
-          <div style={{ fontSize:48 }}>{naechsteWahl?<i className="ti ti-clock" aria-hidden="true" style={{fontSize:48}}/>:endzeitErreicht?<i className="ti ti-hourglass" aria-hidden="true" style={{fontSize:48}}/>:<i className="ti ti-lock" aria-hidden="true" style={{fontSize:48}}/>}</div>
+          <div style={{ fontSize:48 }}>{naechsteWahl?<i className="ti ti-clock" aria-hidden="true" style={{fontSize:48}}/>:endzeitErreicht?<i className="ti ti-clock-off" aria-hidden="true" style={{fontSize:48}}/>:<i className="ti ti-lock" aria-hidden="true" style={{fontSize:48}}/>}</div>
           <h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>{naechsteWahl?"Abstimmung beginnt in Kürze":endzeitErreicht?"Diese Abstimmung ist beendet":"Keine aktive Abstimmung."}</h2>
           {naechsteWahl&&diff!==null&&<div style={{ fontSize:28, fontWeight:700, color:C.accent }}>{formatRestzeit(diff)}</div>}
           {endzeitErreicht&&<p style={{ fontSize:15, color:C.textLight, maxWidth:420, lineHeight:1.6, margin:0 }}>Die Endzeit wurde erreicht. Eine Stimmabgabe ist nicht mehr möglich. Die Wahlleitung schließt die Wahl anschließend offiziell und gibt das Ergebnis frei.</p>}
@@ -803,7 +803,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
       {flowFehler && <div style={{ ...S.alert, ...S.alertError }}><i className="ti ti-alert-triangle" aria-hidden="true"/> {flowFehler}</div>}
       {selectedWahl && showEndCountdown && (
         <div style={{ ...S.alert, ...(endCountdownSeconds<=60 ? S.alertError : S.alertWarning), marginBottom:16 }}>
-          {endCountdownSeconds<=60 ? <i className="ti ti-alert-triangle" aria-hidden="true"/> : <i className="ti ti-hourglass" aria-hidden="true"/>} Diese Wahl endet in <strong>{formatRestzeit(endCountdownSeconds)}</strong>. Bitte schließen Sie Ihre Stimmabgabe rechtzeitig ab.
+          {endCountdownSeconds<=60 ? <i className="ti ti-alert-triangle" aria-hidden="true"/> : <i className="ti ti-clock" aria-hidden="true"/>} Diese Wahl endet in <strong>{formatRestzeit(endCountdownSeconds)}</strong>. Bitte schließen Sie Ihre Stimmabgabe rechtzeitig ab.
         </div>
       )}
       {aktiveWahlen.length>1
