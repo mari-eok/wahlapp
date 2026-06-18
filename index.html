@@ -704,7 +704,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   if (!wahllokal||!wahllokal.aktiv) return <div style={S.wlContainer}><WlHeader/><WahllokalGear wahllokalID={wahllokalID}/><div style={S.closedScreen}><div style={{ fontSize:48 }}>🔒</div><h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>Das Wahllokal ist geschlossen.</h2></div></div>;
   if (aktiveWahlen.length===0) {
     const diff = naechsteWahl ? Math.max(0, Math.floor((parseSharePointDate(naechsteWahl.startzeit)-nowTime)/1000)) : null;
-    const endzeitErreicht = !!abgelaufeneWahl;
+    const endzeitErreicht = !naechsteWahl && !!abgelaufeneWahl;
     return (
       <div style={S.wlContainer}>
         <WlHeader name={wahllokal?.name}/>
