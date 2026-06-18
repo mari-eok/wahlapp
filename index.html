@@ -2190,7 +2190,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
         const fuehrend = nichtenthaltung[0];
         const mehrheitErreicht = fuehrend && pruefeMehrheit(fuehrend.stimmen, total, wahl);
         const gleichstand = nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen&&e.id!==fuehrend?.id).length>0;
-        const wahlGeschlossen = !wahl.aktiv||wahl.geschlossen;
+        const wahlGeschlossen = !!wahl.geschlossen;
         const istLetzte = idx===alleWahlen.length-1;
         const naechsteStichwahl = gruppe.stichwahlen[idx]; // nächste Stichwahl nach dieser Wahl
         const hatNaechsteStichwahl = !!naechsteStichwahl;
@@ -2213,7 +2213,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   <div style={{ fontWeight:800, fontSize:16, color:C.primary }}>{idx===0?"Hauptwahl":wahl.titel}</div>
                   <div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>
                     {getMehrheitsregelLabel(wahl)}
-                    {" · "}{total} Stimme{total!==1?"n":""}
+                    {wahlGeschlossen ? <>{" · "}{total} Stimme{total!==1?"n":""}</> : <> · Ergebnisse erst nach Schließen sichtbar</>}
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }}>
@@ -2228,8 +2228,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
               {total>0&&!wahlGeschlossen&&(
                 <div style={{ padding:"16px", textAlign:"center", background:C.bg, borderRadius:8, marginTop:8 }}>
                   <div style={{ fontSize:24, marginBottom:6 }}>🔒</div>
-                  <p style={{ margin:0, fontWeight:600, fontSize:13, color:C.textLight }}>Stimmverteilung erst nach Schließen sichtbar.</p>
-                  <p style={{ margin:"6px 0 0", fontSize:13 }}>Bisher: <strong style={{ color:C.primary }}>{total}</strong> Stimme{total!==1?"n":""}</p>
+                  <p style={{ margin:0, fontWeight:600, fontSize:13, color:C.textLight }}>Ergebnisse und Stimmverteilung werden erst nach dem Schließen der Wahl angezeigt.</p>
                 </div>
               )}
               {total>0&&wahlGeschlossen&&<div style={{ display:"flex", flexDirection:"column", gap:VB?"clamp(8px, 1.5vh, 20px)":"12px" }}>
@@ -2457,7 +2456,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
   const maxS = Math.max(...optErgebnisse.map(e=>e.stimmen),1);
   const nichtenthaltung = optErgebnisse.filter(e=>!e.istEnthaltung);
   const gewinner = (nichtenthaltung||[]).slice(0,maxAuswahl).filter(e=>e.stimmen>0);
-  const wahlGeschlossen = wahl&&(!wahl.aktiv||wahl.geschlossen);
+  const wahlGeschlossen = wahl&&!!wahl.geschlossen;
   const gewinnerSchwelle = gewinner.length>0?gewinner[gewinner.length-1].stimmen:0;
   const gleichstandKandidaten = nichtenthaltung.filter(e=>e.stimmen===gewinnerSchwelle&&!gewinner.find(g=>g.id===e.id));
   const hatGleichstand = gleichstandKandidaten.length>0&&gewinnerSchwelle>0;
@@ -2575,12 +2574,15 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
             {!wahl.geschlossen&&!wahl.aktiv&&<span style={{ ...S.badge, ...S.badgeOrange, fontSize:VB?15:12 }}>⏸ pausiert</span>}
           </div>
             <div style={{ display:"flex", gap:VB?48:24, flexWrap:"wrap", alignItems:"flex-end" }}>
-              <div><div style={{ fontSize:VB?64:40, fontWeight:900, color:col(C.primary,C.accent), lineHeight:1 }}>{total}</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>{maxAuswahl>1?`Wähler (je ${maxAuswahl} Stimmen)`:`Stimme${total!==1?"n":""} abgegeben`}</div></div>
-              {total>0&&<div style={{ paddingBottom:VB?12:6 }}>
-                {wahlGeschlossen&&gewaehlteKandidaten.length>0&&gewaehlteKandidaten.map(g=><div key={g.id} style={{ fontSize:VB?20:14, fontWeight:800, color:col(C.text,"#fff"), marginBottom:2 }}>🏆 Gewählt: {g.name} · {Math.round(g.stimmen/total*100)}%</div>)}
-                {wahlGeschlossen&&stichwahNötig&&!hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#92400e","#fbbf24") }}>⚠️ Absolute Mehrheit nicht erreicht — Stichwahl erforderlich</div>}
-                {wahlGeschlossen&&hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#f59e0b","#fbbf24") }}>⚠️ Gleichstand — Stichwahl erforderlich</div>}
-                {!wahlGeschlossen&&<div style={{ fontSize:VB?16:13, fontWeight:600, color:col(C.accent,"#4ade80") }}>● Abstimmung läuft</div>}
+              {wahlGeschlossen ? (
+                <div><div style={{ fontSize:VB?64:40, fontWeight:900, color:col(C.primary,C.accent), lineHeight:1 }}>{total}</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>{maxAuswahl>1?`Wähler (je ${maxAuswahl} Stimmen)`:`Stimme${total!==1?"n":""} abgegeben`}</div></div>
+              ) : (
+                <div><div style={{ fontSize:VB?48:32, fontWeight:900, color:col(C.textLight,"rgba(255,255,255,0.55)"), lineHeight:1 }}>🔒</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>Ergebnisse erst nach Schließen sichtbar</div></div>
+              )}
+              {wahlGeschlossen&&total>0&&<div style={{ paddingBottom:VB?12:6 }}>
+                {gewaehlteKandidaten.length>0&&gewaehlteKandidaten.map(g=><div key={g.id} style={{ fontSize:VB?20:14, fontWeight:800, color:col(C.text,"#fff"), marginBottom:2 }}>🏆 Gewählt: {g.name} · {Math.round(g.stimmen/total*100)}%</div>)}
+                {stichwahNötig&&!hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#92400e","#fbbf24") }}>⚠️ Absolute Mehrheit nicht erreicht — Stichwahl erforderlich</div>}
+                {hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#f59e0b","#fbbf24") }}>⚠️ Gleichstand — Stichwahl erforderlich</div>}
               </div>}
               {letzteAktualisierung&&<div style={{ paddingBottom:VB?12:6, marginLeft:"auto" }}><div style={{ fontSize:12, color:col(C.textLight,"rgba(255,255,255,0.4)") }}>Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}</div><div style={{ fontSize:11, color:col(C.textLight,"rgba(255,255,255,0.3)") }}>Auto-Refresh alle 30 Sekunden</div></div>}
             </div>
@@ -2589,8 +2591,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
             ? <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={gewaehlteKandidaten} gleichstandListe={hatGleichstand?[...gleichstandKandidaten,...(gewinner.slice(-1))]:[]}/>
             : <div style={{ padding:"20px 0", textAlign:"center", color:C.textLight, fontSize:14, background:C.bg, borderRadius:8 }}>
                 <div style={{ fontSize:32, marginBottom:8 }}>🔒</div>
-                <p style={{ margin:0, fontWeight:600 }}>Stimmverteilung wird erst nach Schließen der Wahl angezeigt.</p>
-                <p style={{ margin:"8px 0 0", fontSize:13 }}>Bisher abgegebene Stimmen: <strong style={{ color:C.primary }}>{total}</strong></p>
+                <p style={{ margin:0, fontWeight:600 }}>Ergebnisse und Stimmverteilung werden erst nach dem Schließen der Wahl angezeigt.</p>
               </div>
           }
           {wahlGeschlossen&&stichwahNötig&&!VB&&(
