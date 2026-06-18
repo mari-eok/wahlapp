@@ -545,6 +545,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   const [nowTime, setNowTime] = useState(new Date());
   const [submitting, setSubmitting] = useState(false);
   const [flowFehler, setFlowFehler] = useState(null);
+  const { confirm, dialog } = useConfirm();
 
   useEffect(() => { const t = setInterval(()=>setNowTime(new Date()),1000); return ()=>clearInterval(t); },[]);
   // Wenn sich die aktive Wahl ändert: Auswahl zurücksetzen und neue Wahl setzen
@@ -618,6 +619,16 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
       return;
     }
 
+    const auswahlText = selected.map(s => `• ${s.name}`).join("\n");
+    const ok = await confirm({
+      titel: "Stimme verbindlich abgeben",
+      nachricht: `Sie geben Ihre Stimme für die Wahl „${wahlZumAbstimmen.titel}“ ab für:\n\n${auswahlText}\n\nNach dem Absenden kann diese Stimme für diese Wahl nicht mehr geändert werden.`,
+      bestaetigen: "Stimme verbindlich abgeben",
+      abbrechen: "Zurück",
+      typ: "warn"
+    });
+    if (!ok) return;
+
     setSubmitting(true); setStatus("pruefen"); setFlowFehler(null);
     try {
       const result = await callFlow("submitStimme", {
@@ -650,6 +661,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   const counterOk = selectedWahl && (!selectedWahl.mehrfach ? selected.length===1 : selected.length>0 && selected.length<=maxCount);
   return (
     <div style={S.wlContainer}>
+      {dialog}
       <WlHeader name={wahllokal?.name}/>
       <WahllokalGear wahllokalID={wahllokalID}/>
       {flowFehler && <div style={{ ...S.alert, ...S.alertError }}>⚠️ {flowFehler}</div>}
@@ -806,6 +818,89 @@ function QRCode({ url, size=200 }) {
   return <img src={`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&color=1a2744&bgcolor=ffffff&margin=10`} width={size} height={size} alt="QR-Code" style={{ display:"block" }}/>;
 }
 
+
+function AblaufCheckliste({ appData, eventID }) {
+  const storageKey = `wahlleitung_checkliste_${eventID}`;
+  const wahllokal = appData.wahllokale.find(w => w.eventID===eventID);
+  const wahlen = appData.wahlen.filter(w=>w.eventID===eventID&&!w.archiviert);
+  const aktiveWahlen = wahlen.filter(w=>w.aktiv&&!w.geschlossen);
+  const geschlosseneWahlen = wahlen.filter(w=>w.geschlossen);
+  const tokenCount = appData.tokenCount || 0;
+
+  const items = [
+    { id:"beschlussfaehigkeit", phase:"Vor der Wahl", text:"Beschlussfähigkeit festgestellt und im Protokoll vermerkt." },
+    { id:"verfahren_erlaeutert", phase:"Vor der Wahl", text:"Wahlverfahren erläutert: geheime Token-Wahl, einmalige Stimmabgabe, Enthaltung und ggf. bewusst ungültige Stimme." },
+    { id:"tokens_verteilt", phase:"Vor der Wahl", text:"Tokens ausgezählt, in anonyme Umschläge gelegt und zufällig verteilt — keine Zuordnung zu Personen." },
+    { id:"zugang_geprueft", phase:"Vor der Wahl", text:"Wahlseite/QR-Code bereitgestellt; mindestens ein Gerät bzw. WLAN/Zugang kurz geprüft." },
+    { id:"wahl_vorgelesen", phase:"Vor jeder Wahl", text:"Wahltitel, Kandidat:innen/Optionen und zulässige Auswahlzahl vorgelesen bzw. sichtbar geprüft." },
+    { id:"wahl_gestartet", phase:"Durchführung", text:"Wahl gestartet und Beginn der Stimmabgabe angesagt." },
+    { id:"fortschritt_beobachtet", phase:"Durchführung", text:"Während der laufenden Wahl nur die Gesamtzahl der eingegangenen Stimmen beobachtet — keine Ergebnisstände." },
+    { id:"wahl_geschlossen", phase:"Abschluss", text:"Wahl erst geschlossen, nachdem keine weiteren Stimmabgaben erwartet werden." },
+    { id:"ergebnis_geprueft", phase:"Abschluss", text:"Ergebnis, Gesamtstimmen und Mehrheitsschwelle geprüft; Enthaltungen/ungültige Stimmen in der Gesamtzahl berücksichtigt." },
+    { id:"protokolliert", phase:"Abschluss", text:"Ergebnis verkündet und im Sitzungsprotokoll dokumentiert; ggf. Stichwahl vorbereitet." }
+  ];
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); }
+    catch { return {}; }
+  }
+  const [checked, setChecked] = useState(loadState);
+  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(checked)); }, [checked, storageKey]);
+
+  function toggle(id) { setChecked(x => ({ ...x, [id]: !x[id] })); }
+  function reset() {
+    if (!confirm("Checkliste für dieses Wahllokal zurücksetzen?")) return;
+    setChecked({});
+  }
+
+  const done = items.filter(i=>checked[i.id]).length;
+  const grouped = items.reduce((acc,item)=>{ (acc[item.phase]=acc[item.phase]||[]).push(item); return acc; },{});
+  const systemHinweise = [
+    { label:"Wahllokal", value: wahllokal?.aktiv ? "aktiv" : "nicht aktiv", ok: !!wahllokal?.aktiv },
+    { label:"Angelegte Wahlen", value: String(wahlen.length), ok: wahlen.length>0 },
+    { label:"Aktive Wahl", value: aktiveWahlen.length>0 ? `${aktiveWahlen.length} aktiv` : "keine aktiv", ok: true },
+    { label:"Geschlossene Wahlen", value: String(geschlosseneWahlen.length), ok: true },
+    { label:"Tokens im System", value: String(tokenCount), ok: tokenCount>0 }
+  ];
+
+  return (
+    <div style={{ ...S.card, borderLeft:`4px solid ${C.primary}`, marginBottom:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", gap:12, alignItems:"flex-start", flexWrap:"wrap", marginBottom:12 }}>
+        <div>
+          <div style={S.sectionLabel}>Ablaufprotokoll Wahlleitung</div>
+          <h3 style={{ margin:"0 0 6px", color:C.primary, fontSize:18 }}>Checkliste für die Durchführung</h3>
+          <p style={{ margin:0, color:C.textLight, fontSize:13, lineHeight:1.5 }}>
+            Diese Checkliste unterstützt die Wahlleitung organisatorisch. Technische Systemprüfungen wie eindeutiger StimmabgabeKey oder Pagination werden vorab in der Systemabnahme geprüft und sind hier bewusst nicht als Aufgabe der Wahlleitung enthalten.
+          </p>
+        </div>
+        <div style={{ textAlign:"right" }}>
+          <div style={{ fontWeight:800, color:C.primary, fontSize:20 }}>{done}/{items.length}</div>
+          <div style={{ fontSize:12, color:C.textLight }}>erledigt</div>
+          <button onClick={reset} style={{ ...S.btn, ...S.btnGhost, fontSize:11, padding:"5px 10px", marginTop:6 }}>Zurücksetzen</button>
+        </div>
+      </div>
+
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
+        {systemHinweise.map(h => (
+          <span key={h.label} style={{ ...S.badge, ...(h.ok?S.badgeGreen:S.badgeOrange) }}>{h.ok?"✓":"!"} {h.label}: {h.value}</span>
+        ))}
+      </div>
+
+      {Object.entries(grouped).map(([phase,phaseItems]) => (
+        <div key={phase} style={{ marginTop:12 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:C.textLight, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>{phase}</div>
+          {phaseItems.map(item => (
+            <label key={item.id} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"8px 0", cursor:"pointer", borderBottom:`1px solid ${C.border}` }}>
+              <input type="checkbox" checked={!!checked[item.id]} onChange={()=>toggle(item.id)} style={{ marginTop:3, width:16, height:16 }}/>
+              <span style={{ fontSize:13, color:checked[item.id]?C.textLight:C.text, textDecoration:checked[item.id]?"line-through":"none", lineHeight:1.45 }}>{item.text}</span>
+            </label>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LeitungDashboard({ appData, eventID, onDataChange }) {
   const wahlen = appData.wahlen.filter(w=>w.eventID===eventID&&!w.geschlossen);
   const tokenCount = appData.tokenCount||0;
@@ -831,6 +926,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   return (
     <div>
       {dialog}
+      <AblaufCheckliste appData={appData} eventID={eventID}/>
       <div style={S.statGrid}>
         <StatCard num={wahlen.filter(w=>w.aktiv).length} label="Aktive Wahlen" color={C.accent}/>
         <StatCard num={wahlen.length} label="Wahlen gesamt" color={C.primary}/>
