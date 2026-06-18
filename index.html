@@ -2744,7 +2744,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
         </div>
         <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
           <button style={{ ...S.btn, fontSize:12, ...(VB?{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none" }:S.btnGhost) }} onClick={laden} disabled={loading}>{loading?"…":<i className="ti ti-refresh" aria-hidden="true"/>}</button>
-          <button style={{ ...S.btn, fontSize:12, ...(VB?{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none" }:S.btnPrimary) }} onClick={()=>setVollbild(!VB)}>{VB?<><i className="ti ti-x" aria-hidden="true"/> Beenden</>:<i className="ti ti-arrows-maximize" aria-hidden="true" style={{fontSize:"inherit"}}/> Vollbild}</button>
+          <button style={{ ...S.btn, fontSize:12, ...(VB?{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none" }:S.btnPrimary) }} onClick={()=>setVollbild(!VB)}>{VB?<><i className="ti ti-x" aria-hidden="true"/> Beenden</>:<><i className="ti ti-arrows-maximize" aria-hidden="true"/> Vollbild</>}</button>
         </div>
       </div>
       {wahlen.length>0&&!VB&&(
