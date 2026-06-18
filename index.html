@@ -150,7 +150,7 @@ function toLocalInputValue(date, withSeconds = false) {
   return withSeconds ? `${base}:${pad(d.getSeconds())}` : base;
 }
 
-// Zentrale Datumsformatierung für Anzeige in Wahlleitung/Tokenliste
+// Zentrale Datumsformatierung für Anzeige in Wahlleitung/Wahlcodeliste
 function formatDatum(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -299,7 +299,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID) {
     pages.push(tokens.slice(i, i + PER_PAGE));
   }
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Tokens ${wahllokalName}</title>
+  <title>Wahlcodes ${wahllokalName}</title>
   <style>
     @page { size: A4; margin: 10mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -737,7 +737,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
         ? <div style={S.card}><div style={S.sectionLabel}>Abstimmung</div><select style={S.select} value={selectedWahlID} onChange={e=>{ setSelectedWahlID(e.target.value); setSelected([]); }}>{aktiveWahlen.map(w=><option key={w.id} value={w.id}>{w.titel}</option>)}</select></div>
         : <div style={{ ...S.card, padding:"16px 24px" }}><div style={S.sectionLabel}>Abstimmung</div><div style={{ fontSize:17, fontWeight:700, color:C.primary }}>{aktiveWahlen[0].titel}</div></div>
       }
-      <div style={S.card}><div style={S.sectionLabel}>Persönlicher Wahlcode (Token)</div><TokenInput value={tokenRaw} onChange={setTokenRaw}/></div>
+      <div style={S.card}><div style={S.sectionLabel}>Persönlicher Wahlcode</div><TokenInput value={tokenRaw} onChange={setTokenRaw}/></div>
       {selectedWahl && (
         <div style={S.card}>
           <div style={S.sectionLabel}>{selectedWahl.mehrfach?`Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen.`:"Bitte wählen Sie genau 1 Person."}</div>
@@ -865,7 +865,7 @@ function TokenInput({ value, onChange }) {
 function LeitungView({ appData, eventID, onExit, onDataChange }) {
   const [tab, setTab] = useState("dashboard");
   const wahllokal = appData.wahllokale.find(w => w.eventID===eventID);
-  const tabs = [{ id:"dashboard", label:"📊 Dashboard" },{ id:"wahlen", label:"🗳️ Wahlen" },{ id:"waehler", label:"👥 Wähler & Tokens" },{ id:"ergebnisse", label:"📈 Ergebnisse" }];
+  const tabs = [{ id:"dashboard", label:"📊 Dashboard" },{ id:"wahlen", label:"🗳️ Wahlen" },{ id:"waehler", label:"🎟️ Wahlcodes" },{ id:"ergebnisse", label:"📈 Ergebnisse" }];
   // Session-Timeout: nach 30 Minuten Inaktivität automatisch abmelden
   const TIMEOUT_MS = 30 * 60 * 1000;
   const timeoutRef = useRef(null);
@@ -914,9 +914,9 @@ function WahlleitungAblaufCheckliste({ appData, eventID }) {
     { id:"optionen_angelegt", phase:"Vorbereitung in der App", text:"Kandidat:innen, Enthaltung und ggf. weitere Stimmoptionen angelegt" },
     { id:"auswahl_zeit_eingestellt", phase:"Vorbereitung in der App", text:"Auswahlregel, Startzeit und ggf. Endzeit eingestellt" },
     { id:"wahl_pausiert", phase:"Vorbereitung in der App", text:"Wahl bleibt bis zur Freigabe pausiert" },
-    { id:"tokens_vorbereitet", phase:"Tokens und Zugang", text:"Tokens erstellt, gedruckt und verdeckt vorbereitet" },
-    { id:"qr_getestet", phase:"Tokens und Zugang", text:"Wahlseite / QR-Code getestet" },
-    { id:"tokens_ausgegeben", phase:"Tokens und Zugang", text:"Tokens anonym an Stimmberechtigte ausgegeben" },
+    { id:"tokens_vorbereitet", phase:"Wahlcodes und Zugang", text:"Wahlcodes erstellt, gedruckt und verdeckt vorbereitet" },
+    { id:"qr_getestet", phase:"Wahlcodes und Zugang", text:"Wahlseite / QR-Code getestet" },
+    { id:"tokens_ausgegeben", phase:"Wahlcodes und Zugang", text:"Wahlcodes anonym an Stimmberechtigte ausgegeben" },
     { id:"verfahren_erlaeutert", phase:"Durchführung", text:"Wahlverfahren kurz erläutert" },
     { id:"wahl_gestartet", phase:"Durchführung", text:"Wahl gestartet / freigegeben; vor der Startzeit läuft der Countdown" },
     { id:"stimmen_beobachtet", phase:"Durchführung", text:"Eingegangene Stimmen beobachtet" },
@@ -1013,7 +1013,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
   const { confirm, dialog } = useConfirm();
 
   async function schliesseWahl(wahl) {
-    const msg = `Wahl "${wahl.titel}" jetzt endgültig schließen?\n\nNach dem Schließen:\n✓ Das Ergebnis wird für alle sichtbar\n✓ Keine weiteren Stimmabgaben möglich\n✗ Kann nicht rückgängig gemacht werden\n\nWichtig bei Gleichstand oder nicht erreichter Mehrheit:\nFür eine Stichwahl bleiben alle bisherigen Zugangscodes (Tokens) automatisch gültig — sie müssen nicht neu vergeben werden. Deaktivieren Sie die Tokens erst, wenn der gesamte Wahltag abgeschlossen ist.\n\nWahl jetzt schließen?`;
+    const msg = `Wahl "${wahl.titel}" jetzt endgültig schließen?\n\nNach dem Schließen:\n✓ Das Ergebnis wird für alle sichtbar\n✓ Keine weiteren Stimmabgaben möglich\n✗ Kann nicht rückgängig gemacht werden\n\nWichtig bei Gleichstand oder nicht erreichter Mehrheit:\nFür eine Stichwahl bleiben alle bisherigen Zugangscodes/Wahlcodes automatisch gültig — sie müssen nicht neu vergeben werden. Deaktivieren Sie die Wahlcodes erst, wenn der gesamte Wahltag abgeschlossen ist.\n\nWahl jetzt schließen?`;
     const ok = await confirm({ titel:`Wahl schließen`, nachricht:msg, bestaetigen:"Jetzt schließen", typ:"warn" }); if (!ok) return;
     setToggling(wahl.id);
     try { await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:true }); await onDataChange(); } catch(e){ console.error(e); }
@@ -1031,7 +1031,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
       <div style={S.statGrid}>
         <StatCard num={wahlen.filter(w=>w.aktiv).length} label="Aktive Wahlen" color={C.accent}/>
         <StatCard num={wahlen.length} label="Wahlen gesamt" color={C.primary}/>
-        <StatCard num={tokenCount} label="Tokens ausgegeben" color={C.warning}/>
+        <StatCard num={tokenCount} label="Wahlcodes erstellt" color={C.warning}/>
       </div>
       <WahlleitungAblaufCheckliste appData={appData} eventID={eventID}/>
       {aktiveWahlen.length>0 && (
@@ -1064,7 +1064,7 @@ function LeitungDashboard({ appData, eventID, onDataChange }) {
           <div style={S.sectionLabel}>QR-Code Wahllokal</div>
           <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>setQrVollbild(!qrVollbild)}>{qrVollbild?"✕ Schließen":"⛶ Vollbild"}</button>
         </div>
-        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Zeigen Sie diesen QR-Code auf dem Beamer — Wähler scannen ihn und gelangen direkt zum Wahlformular.</p>
+        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Zeigen Sie diesen QR-Code auf dem Beamer — Stimmberechtigte scannen ihn und gelangen direkt zum Wahlformular.</p>
         <div style={{ display:"flex", gap:24, alignItems:"flex-start", flexWrap:"wrap" }}>
           <div style={{ background:"#fff", padding:16, borderRadius:12, border:`1px solid ${C.border}` }}><QRCode url={wahllokalURL} size={160}/></div>
           <div style={{ flex:1, minWidth:200 }}>
@@ -1118,7 +1118,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   async function toggleAktiv(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:!wahl.aktiv, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function pauseWahl(wahl) { const ok = await confirm({ titel:"Wahl pausieren", nachricht:`Wahl "${wahl.titel}" pausieren?
 
-Die Abstimmung wird unterbrochen — Wähler können keine Stimmen mehr abgeben.`, bestaetigen:"Pausieren", typ:"warn" }); if(!ok) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
+Die Abstimmung wird unterbrochen — Stimmberechtigte können keine Stimmen mehr abgeben.`, bestaetigen:"Pausieren", typ:"warn" }); if(!ok) return; try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:false, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function starteWahl(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:true, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function deleteWahl(wahl) {
     // Erst prüfen ob Stimmen vorhanden
@@ -1296,7 +1296,7 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
         return db - da;
       });
       setTokens(mapped);
-      if (rawTokens.length===0 && (result.tokenCount||0)>0) setFehler("tokenList fehlt im Flow-Antwort-Body.");
+      if (rawTokens.length===0 && (result.tokenCount||0)>0) setFehler("Wahlcode-Liste fehlt im Flow-Antwort-Body.");
       else setFehler(null);
     }catch(e){ setFehler(e.message); }
     setLoading(false);
@@ -1311,22 +1311,22 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
   async function loescheAusgewaehlt() {
     const zu = tokens.filter(t=>ausgewaehlt.includes(t.id));
     if(zu.length===0) return;
-    const ok = await confirm({ titel:`${zu.length} Token(s) löschen`, nachricht:`${zu.length} Token(s) wirklich unwiderruflich löschen?`, bestaetigen:`${zu.length} Token(s) löschen`, typ:"danger" }); if(!ok) return;
+    const ok = await confirm({ titel:`${zu.length} Wahlcode(s) löschen`, nachricht:`${zu.length} Wahlcode(s) wirklich unwiderruflich löschen?`, bestaetigen:`${zu.length} Wahlcode(s) löschen`, typ:"danger" }); if(!ok) return;
     setLoesching(true); setFehler(null);
     try { await callFlow("deleteToken",{ eventID, tokenIDs:zu.map(t=>parseInt(t.id)), tokenCodes:zu.map(t=>t.code) }); }
     catch(e){ if(!e.message.includes("502")){ setFehler(e.message); setLoesching(false); return; } }
     setAusgewaehlt([]); setFilter("alle"); await laden();
-    setErfolg(`${zu.length} Token(s) gelöscht.`); setTimeout(()=>setErfolg(null),3000);
+    setErfolg(`${zu.length} Wahlcode(s) gelöscht.`); setTimeout(()=>setErfolg(null),3000);
     setLoesching(false);
   }
   async function loescheAlle() {
     if(tokens.length===0) return;
-    const ok = await confirm({ titel:`Alle ${tokens.length} Tokens löschen`, nachricht:`ALLE ${tokens.length} Tokens unwiderruflich löschen?\n\nDies sollte nur nach vollständigem Abschluss des Wahltags gemacht werden.`, bestaetigen:"Alle löschen", typ:"danger" }); if(!ok) return;
+    const ok = await confirm({ titel:`Alle ${tokens.length} Wahlcodes löschen`, nachricht:`ALLE ${tokens.length} Wahlcodes unwiderruflich löschen?\n\nDies sollte nur nach vollständigem Abschluss des Wahltags gemacht werden.`, bestaetigen:"Alle löschen", typ:"danger" }); if(!ok) return;
     setLoesching(true); setFehler(null);
     try { await callFlow("deleteToken",{ eventID, tokenIDs:tokens.map(t=>parseInt(t.id)), tokenCodes:tokens.map(t=>t.code) }); }
     catch(e){ if(!e.message.includes("502")){ setFehler(e.message); setLoesching(false); return; } }
     setAusgewaehlt([]); setFilter("alle"); await laden();
-    setErfolg("Alle Tokens gelöscht."); setTimeout(()=>setErfolg(null),3000);
+    setErfolg("Alle Wahlcodes gelöscht."); setTimeout(()=>setErfolg(null),3000);
     setLoesching(false);
   }
   const [filter, setFilter] = useState("alle");
@@ -1387,16 +1387,16 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
     if(zu.length===0) return;
     const mitStimme = zu.filter(t=>t.verwendet).length;
     const ohneStimme = zu.filter(t=>!t.verwendet).length;
-    let msg = `${zu.length} Token(s) löschen?\n\n`;
-    if(mitStimme > 0) msg += `⚠️ ${mitStimme} Token(s) haben bereits eine Stimme abgegeben.\nDie Stimmen bleiben erhalten — nur der Token-Eintrag wird gelöscht.\n\n`;
-    if(ohneStimme > 0) msg += `${ohneStimme} Token(s) wurden noch nicht verwendet.\n\n`;
+    let msg = `${zu.length} Wahlcode(s) löschen?\n\n`;
+    if(mitStimme > 0) msg += `⚠️ ${mitStimme} Wahlcode(s) haben bereits eine Stimme abgegeben.\nDie Stimmen bleiben erhalten — nur der Wahlcode-Eintrag wird gelöscht.\n\n`;
+    if(ohneStimme > 0) msg += `${ohneStimme} Wahlcode(s) wurden noch nicht verwendet.\n\n`;
     msg += mitStimme > 0 ? "Löschen empfiehlt sich erst nach vollständigem Abschluss des Wahltags.\n\nTrotzdem fortfahren?" : "Fortfahren?";
     const ok = await confirm({ titel:"Wähler löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return;
     setLoesching(true); setFehler(null);
     try {
       await callFlow("deleteToken",{ eventID, tokenIDs:zu.map(t=>parseInt(t.id)), tokenCodes:zu.map(t=>t.code) });
       setAusgewaehlt([]); setFilter("alle"); await laden();
-      setErfolg(`${zu.length} Token(s) gelöscht.`); setTimeout(()=>setErfolg(null),3000);
+      setErfolg(`${zu.length} Wahlcode(s) gelöscht.`); setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setLoesching(false);
   }
@@ -1404,15 +1404,15 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
   async function loescheAlle() {
     if(tokens.length===0) return;
     const mitStimme = tokens.filter(t=>t.verwendet).length;
-    let msg = `ALLE ${tokens.length} Tokens löschen?\n\n`;
-    if(mitStimme > 0) msg += `${mitStimme} Token(s) haben bereits eine Stimme abgegeben.\nDie Stimmen bleiben erhalten.\n\n`;
+    let msg = `ALLE ${tokens.length} Wahlcodes löschen?\n\n`;
+    if(mitStimme > 0) msg += `${mitStimme} Wahlcode(s) haben bereits eine Stimme abgegeben.\nDie Stimmen bleiben erhalten.\n\n`;
     msg += "Dies sollte nur nach vollständigem Abschluss des Wahltags gemacht werden.\n\nWirklich alle löschen?";
     const ok2 = await confirm({ titel:"Wähler löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!ok2) return;
     setLoesching(true); setFehler(null);
     try {
       await callFlow("deleteToken",{ eventID, tokenIDs:tokens.map(t=>parseInt(t.id)), tokenCodes:tokens.map(t=>t.code) });
       setAusgewaehlt([]); setFilter("alle"); await laden();
-      setErfolg("Alle Tokens gelöscht."); setTimeout(()=>setErfolg(null),3000);
+      setErfolg("Alle Wahlcodes gelöscht."); setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setLoesching(false);
   }
@@ -1420,16 +1420,16 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
   return (
     <div style={{ ...S.card, marginTop:16 }}>
       {dialog}
-      {loesching&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Tokens werden gelöscht…</p></div></div>}
+      {loesching&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Wahlcodes werden gelöscht…</p></div></div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <div style={S.sectionLabel}>Token-Übersicht</div>
+        <div style={S.sectionLabel}>Wahlcode-Übersicht</div>
         <div style={{ display:"flex", gap:6 }}>
           {tokens.filter(t=>t.aktiv&&!t.verwendet).length>0&&(
             <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
-              const druckTokens = gefiltert.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
-              if (druckTokens.length===0) return;
-              generiereTokenPDF(druckTokens, wahllokalName||eventID, eventID);
-            }} disabled={loading} title="Aktive, unverwendete Tokens als PDF drucken">
+              const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
+              if (druckWahlcodes.length===0) return;
+              generiereTokenPDF(druckWahlcodes, wahllokalName||eventID, eventID);
+            }} disabled={loading} title="Aktive, unverwendete Wahlcodes als PDF drucken">
               🖨️ PDF drucken ({tokens.filter(t=>t.aktiv&&!t.verwendet).length})
             </button>
           )}
@@ -1439,19 +1439,19 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
       <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
         {filterBtns.map(b=><button key={b.id} style={{ ...S.btn, fontSize:12, padding:"5px 12px", ...(filter===b.id?S.btnPrimary:S.btnGhost), ...(b.warn&&filter!==b.id?{ borderColor:C.warning, color:C.warning }:{}) }} onClick={()=>setFilter(b.id)}>{b.label}</button>)}
       </div>
-      {abgelaufenCount > 0 && <div style={{ ...S.alert, ...S.alertWarning, marginBottom:8 }}>⚠️ {abgelaufenCount} Token(s) abgelaufen — können gelöscht oder ignoriert werden.</div>}
+      {abgelaufenCount > 0 && <div style={{ ...S.alert, ...S.alertWarning, marginBottom:8 }}>⚠️ {abgelaufenCount} Wahlcode(s) abgelaufen — können gelöscht oder ignoriert werden.</div>}
       <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
         {ausgewaehlt.length>0&&deleteVerfuegbar&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12 }} onClick={loescheAusgewaehlt} disabled={loesching}>🗑️ Auswahl löschen ({ausgewaehlt.length})</button>}
         {tokens.length>0&&deleteVerfuegbar&&<button style={{ ...S.btn, fontSize:12, background:"transparent", color:C.error, border:`1px solid ${C.error}` }} onClick={loescheAlle} disabled={loesching}>🗑️ Alle löschen ({tokens.length})</button>}
       </div>
       {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess, marginBottom:8 }}>✅ {erfolg}</div>}
       {fehler&&<p style={{ color:C.error, fontSize:13, marginBottom:8 }}>{fehler}</p>}
-      <input style={{ ...S.input, marginBottom:12 }} placeholder="🔍 Token-Code suchen..." value={suche} onChange={e=>setSuche(e.target.value)}/>
-      {loading?<p style={{ color:C.textLight, fontSize:14 }}>Wird geladen…</p>:gefiltert.length===0?<p style={{ color:C.textLight, fontSize:14 }}>{suche?"Kein Token gefunden.":"Noch keine Tokens generiert."}</p>:(
+      <input style={{ ...S.input, marginBottom:12 }} placeholder="🔍 Wahlcode suchen..." value={suche} onChange={e=>setSuche(e.target.value)}/>
+      {loading?<p style={{ color:C.textLight, fontSize:14 }}>Wird geladen…</p>:gefiltert.length===0?<p style={{ color:C.textLight, fontSize:14 }}>{suche?"Kein Wahlcode gefunden.":"Noch keine Wahlcodes generiert."}</p>:(
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr>
             <th style={{ ...S.th, width:36 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th>
-            <SortThT col="code" label="Token"/>
+            <SortThT col="code" label="Wahlcode"/>
             <SortThT col="status" label="Status"/>
             <SortThT col="erstellt" label="Erstellt"/>
             <SortThT col="gueltigBis" label="Gültig bis"/>
@@ -1462,13 +1462,13 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
             const gs = gueltigkeitStatus(t);
             async function einzelLoeschen() {
               const msg = t.verwendet
-                ? "Dieser Token wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nToken trotzdem löschen?"
-                : "Token löschen?";
-              const okEl = await confirm({ titel:"Token löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!okEl) return;
+                ? "Dieser Wahlcode wurde bereits zur Abstimmung verwendet.\nDie Stimme bleibt erhalten.\n\nWahlcode trotzdem löschen?"
+                : "Wahlcode löschen?";
+              const okEl = await confirm({ titel:"Wahlcode löschen", nachricht:msg, bestaetigen:"Löschen", typ:"danger" }); if(!okEl) return;
               setLoesching(true);
               callFlow("deleteToken",{ eventID, tokenIDs:[parseInt(t.id)], tokenCodes:[t.code] })
-                .then(async ()=>{ setFilter("alle"); await laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); })
-                .catch(e=>{ if(!e.message.includes("502")){ setFehler(e.message); } else { setFilter("alle"); laden(); setErfolg("Token gelöscht."); setTimeout(()=>setErfolg(null),2000); } })
+                .then(async ()=>{ setFilter("alle"); await laden(); setErfolg("Wahlcode gelöscht."); setTimeout(()=>setErfolg(null),2000); })
+                .catch(e=>{ if(!e.message.includes("502")){ setFehler(e.message); } else { setFilter("alle"); laden(); setErfolg("Wahlcode gelöscht."); setTimeout(()=>setErfolg(null),2000); } })
                 .finally(()=>setLoesching(false));
             }
             return (
@@ -1526,7 +1526,7 @@ function LeitungWaehler({ appData, eventID }) {
       const neuerWaehler = alleWaehler.find(w=>w.email===email&&!w.tokenCode);
       if (neuerWaehler) await callFlow("updateWaehler", { updates:[{ id:parseInt(neuerWaehler.id), tokenCode:token, status:"zugewiesen", tokenAktiv:true }] });
       setEmailInput(""); await loadWaehler();
-      setErfolg(`Wähler angelegt, Token ${token} zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+      setErfolg(`Wähler angelegt, Wahlcode ${token} zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -1568,7 +1568,7 @@ function LeitungWaehler({ appData, eventID }) {
         await callFlow("updateWaehler", { updates });
       }
       setCsvInput(""); await loadWaehler();
-      setErfolg(`${lines.length} Wähler importiert und Tokens zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+      setErfolg(`${lines.length} Wähler importiert und Wahlcodes zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -1596,10 +1596,10 @@ function LeitungWaehler({ appData, eventID }) {
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
-  async function tokensZuweisen() { const ohneToken=waehler.filter(w=>w.status==="angelegt"); if(ohneToken.length===0){ setErfolg("Alle Wähler haben bereits einen Token."); return; } setSaving(true); setFehler(null); try{ const tokenListe=ohneToken.map(w=>({ id:parseInt(w.id), email:w.email, token:generateToken() })); await callFlow("saveTokens",{ eventID, tokens:tokenListe.map(t=>t.token), typ:"online", gueltigBis:new Date(gueltigBis).toISOString() }); await callFlow("updateWaehler",{ updates:tokenListe.map(t=>({ id:t.id, tokenCode:t.token, status:"zugewiesen" })) }); await loadWaehler(); setErfolg(`${ohneToken.length} Tokens zugewiesen (gültig bis ${new Date(gueltigBis).toLocaleString("de-DE")}).`); setTimeout(()=>setErfolg(null),4000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function tokensZuweisen() { const ohneToken=waehler.filter(w=>w.status==="angelegt"); if(ohneToken.length===0){ setErfolg("Alle Wähler haben bereits einen Wahlcode."); return; } setSaving(true); setFehler(null); try{ const tokenListe=ohneToken.map(w=>({ id:parseInt(w.id), email:w.email, token:generateToken() })); await callFlow("saveTokens",{ eventID, tokens:tokenListe.map(t=>t.token), typ:"online", gueltigBis:new Date(gueltigBis).toISOString() }); await callFlow("updateWaehler",{ updates:tokenListe.map(t=>({ id:t.id, tokenCode:t.token, status:"zugewiesen" })) }); await loadWaehler(); setErfolg(`${ohneToken.length} Wahlcodes zugewiesen (gültig bis ${new Date(gueltigBis).toLocaleString("de-DE")}).`); setTimeout(()=>setErfolg(null),4000); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function emailsVersenden() {
     const zuSenden = waehler.filter(w=>w.status==="zugewiesen"&&w.tokenCode);
-    if(zuSenden.length===0){ setFehler("Keine Wähler mit zugewiesenem Token."); return; }
+    if(zuSenden.length===0){ setFehler("Keine Wähler mit zugewiesenem Wahlcode."); return; }
     setSending(true); setFehler(null);
     try {
       await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:zuSenden.map(w=>parseInt(w.id)) });
@@ -1621,15 +1621,15 @@ function LeitungWaehler({ appData, eventID }) {
     } catch(e){ setFehler(e.message); }
     setSaving(false);
   }
-  async function einzelTokenToggle(w) { const aktiv=w.tokenAktiv===false; const ok = await confirm({ titel:`Token ${aktiv?"reaktivieren":"sperren"}`, nachricht:`Token ${w.tokenCode} für ${w.email} wirklich ${aktiv?"reaktivieren":"sperren"}?`, bestaetigen:aktiv?"Reaktivieren":"Sperren", typ:aktiv?"warn":"danger" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:[w.tokenCode], waehlerIDs:[parseInt(w.id)], aktiv }); await loadWaehler(); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function einzelTokenToggle(w) { const aktiv=w.tokenAktiv===false; const ok = await confirm({ titel:`Wahlcode ${aktiv?"reaktivieren":"sperren"}`, nachricht:`Wahlcode ${w.tokenCode} für ${w.email} wirklich ${aktiv?"reaktivieren":"sperren"}?`, bestaetigen:aktiv?"Reaktivieren":"Sperren", typ:aktiv?"warn":"danger" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:[w.tokenCode], waehlerIDs:[parseInt(w.id)], aktiv }); await loadWaehler(); }catch(e){ setFehler(e.message); } setSaving(false); }
   async function ausgewaehlteLoschen() {
     const zu = waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.status!=="versendet");
     if(zu.length===0) return;
-    const ok = await confirm({ titel:`${zu.length} Wähler löschen`, nachricht:`${zu.length} Wähler wirklich löschen?\n\nZugehörige Tokens werden ebenfalls entfernt.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return;
+    const ok = await confirm({ titel:`${zu.length} Wähler löschen`, nachricht:`${zu.length} Wähler wirklich löschen?\n\nZugehörige Wahlcodes werden ebenfalls entfernt.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return;
     setSaving(true); setFehler(null);
     try {
       await callFlow("deleteWaehler",{ waehlerIDs:zu.map(w=>parseInt(w.id)) });
-      // Zugehörige Tokens ebenfalls löschen
+      // Zugehörige Wahlcodes ebenfalls löschen
       const mitToken = zu.filter(w=>w.tokenCode);
       if(mitToken.length>0 && !API.flows.deleteToken.startsWith("PLATZHALTER")) {
         await callFlow("deleteToken",{ eventID, tokenIDs:[], tokenCodes:mitToken.map(w=>w.tokenCode) });
@@ -1639,21 +1639,21 @@ function LeitungWaehler({ appData, eventID }) {
     } catch(e){ setFehler(e.message); }
     setSaving(false);
   }
-  async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; const ok = await confirm({ titel:`${zu.length} Tokens sperren`, nachricht:`Token für ${zu.length} Wähler sperren?
+  async function ausgewaehltDeaktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv!==false); if(zu.length===0) return; const ok = await confirm({ titel:`${zu.length} Wahlcodes sperren`, nachricht:`Wahlcode für ${zu.length} Wähler sperren?
 
-Diese Wähler können danach nicht mehr abstimmen.`, bestaetigen:"Sperren", typ:"danger" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Tokens gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; const ok = await confirm({ titel:`${zu.length} Tokens reaktivieren`, nachricht:`Token für ${zu.length} Wähler reaktivieren?
+Diese Wähler können danach nicht mehr abstimmen.`, bestaetigen:"Sperren", typ:"danger" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:false }); await loadWaehler(); setErfolg(`${zu.length} Wahlcodes gesperrt.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function ausgewaehltAktivieren() { const zu=waehler.filter(w=>ausgewaehlt.includes(w.id)&&w.tokenCode&&w.tokenAktiv===false); if(zu.length===0) return; const ok = await confirm({ titel:`${zu.length} Wahlcodes reaktivieren`, nachricht:`Wahlcode für ${zu.length} Wähler reaktivieren?
 
-Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ:"warn" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Tokens reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
+Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ:"warn" }); if(!ok) return; setSaving(true); setFehler(null); try{ await callFlow("deactivateToken",{ eventID, tokenCodes:zu.map(w=>w.tokenCode), waehlerIDs:zu.map(w=>parseInt(w.id)), aktiv:true }); await loadWaehler(); setErfolg(`${zu.length} Wahlcodes reaktiviert.`); setTimeout(()=>setErfolg(null),3000); }catch(e){ setFehler(e.message); } setSaving(false); }
 
   async function offlineGenerieren() {
     setSaving(true); setFehler(null);
     try {
       const tokens = Array.from({ length:offlineAnzahl }, ()=>generateToken());
       await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) });
-      // PDF generieren: 2x6 Token pro Seite, zum Ausschneiden
+      // PDF generieren: 2x6 Wahlcodes pro Seite, zum Ausschneiden
       setTokenReloadTrigger(t=>t+1);
-      setErfolg(`${offlineAnzahl} Tokens generiert. Jetzt PDF drucken über den Button in der Token-Liste.`);
+      setErfolg(`${offlineAnzahl} Wahlcodes generiert. Jetzt PDF drucken über den Button in der Wahlcode-Übersicht.`);
       setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setSaving(false);
@@ -1665,7 +1665,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
       await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) });
       generiereTokenPDF(tokens, wahllokal?.name||eventID, eventID);
       setTokenReloadTrigger(t=>t+1);
-      setErfolg(`${offlineAnzahl} Tokens generiert und PDF geöffnet.`);
+      setErfolg(`${offlineAnzahl} Wahlcodes generiert und PDF geöffnet.`);
       setTimeout(()=>setErfolg(null),3000);
     } catch(e){ setFehler(e.message); }
     setSaving(false);
@@ -1691,7 +1691,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
     { id:"alle", label:`Alle (${waehler.length})` },
     { id:"zugewiesen", label:`Bereit (${waehler.filter(w=>w.status==="zugewiesen").length})` },
     { id:"versendet", label:`Versendet (${waehler.filter(w=>w.status==="versendet").length})` },
-    { id:"angelegt", label:`Ohne Token (${waehler.filter(w=>w.status==="angelegt").length})` },
+    { id:"angelegt", label:`Ohne Wahlcode (${waehler.filter(w=>w.status==="angelegt").length})` },
   ];
 
   const gefilterteWaehler = waehler
@@ -1717,9 +1717,9 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
 
   const GueltigBisInput = ()=>(
     <div style={{ ...S.card, marginBottom:16 }}>
-      <div style={S.sectionLabel}>Token-Gültigkeit</div>
+      <div style={S.sectionLabel}>Wahlcode-Gültigkeit</div>
       <div style={{ display:"flex", gap:12, alignItems:"flex-end", flexWrap:"wrap" }}>
-        <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
+        <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Wahlcodes sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
       </div>
     </div>
   );
@@ -1737,18 +1737,18 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
 
     return (
       <div>
-        <h3 style={{ margin:"0 0 24px", color:C.primary }}>Wähler & Tokens</h3>
+        <h3 style={{ margin:"0 0 24px", color:C.primary }}>Wahlcodes</h3>
         {!zeigeOnline&&!zeigeOffline&&<div style={{ ...S.alert, ...S.alertWarning }}>Keine Methode für dieses Wahllokal aktiviert. Bitte im Superadmin konfigurieren.</div>}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
           {zeigeOnline&&<div style={{ ...S.card, cursor:"pointer", border:`2px solid ${C.border}`, textAlign:"center", padding:32 }} onClick={()=>{ setSzenario("online"); loadWaehler(); }}>
             <div style={{ fontSize:48, marginBottom:16 }}>📧</div>
             <h3 style={{ color:C.primary, margin:"0 0 8px" }}>Online-Versand</h3>
-            <p style={{ color:C.textLight, fontSize:14, lineHeight:1.6 }}>Wähler per E-Mail einladen. Token wird automatisch generiert und versendet.</p>
+            <p style={{ color:C.textLight, fontSize:14, lineHeight:1.6 }}>Wähler per E-Mail einladen. Wahlcode wird automatisch generiert und versendet.</p>
           </div>}
           {zeigeOffline&&<div style={{ ...S.card, cursor:"pointer", border:`2px solid ${C.border}`, textAlign:"center", padding:32 }} onClick={()=>setSzenario("offline")}>
             <div style={{ fontSize:48, marginBottom:16 }}>📋</div>
             <h3 style={{ color:C.primary, margin:"0 0 8px" }}>Vor-Ort-Ausgabe</h3>
-            <p style={{ color:C.textLight, fontSize:14, lineHeight:1.6 }}>Anonyme Tokens generieren und ausdrucken. Verteilung erfolgt vor Ort.</p>
+            <p style={{ color:C.textLight, fontSize:14, lineHeight:1.6 }}>Anonyme Wahlcodes generieren und ausdrucken. Verteilung erfolgt vor Ort.</p>
           </div>}
         </div>
       </div>
@@ -1764,25 +1764,25 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess }}>✅ {erfolg}</div>}
       <div style={S.card}>
-        <div style={S.sectionLabel}>Tokens generieren</div>
-        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie Anzahl und Gültigkeit fest, dann exportieren Sie die Tokens als Liste zum Ausdrucken.</p>
+        <div style={S.sectionLabel}>Wahlcodes generieren</div>
+        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie Anzahl und Gültigkeit fest, dann exportieren Sie die Wahlcodes als Liste zum Ausdrucken.</p>
         <div style={{ display:"flex", gap:32, flexWrap:"wrap", alignItems:"flex-start", marginBottom:20 }}>
           <div>
             <label style={S.label}>Anzahl</label>
             <input style={{ ...S.input, width:80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/>
           </div>
-          <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
+          <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Wahlcodes sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
         </div>
-        {saving&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Tokens werden generiert…</p></div></div>}
+        {saving&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Wahlcodes werden generiert…</p></div></div>}
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           <button style={{ ...S.btn, ...S.btnPrimary, padding:"10px 24px" }} onClick={offlineGenerierenMitPDF} disabled={saving}>
-            {saving ? "Wird generiert…" : "🎟️ Tokens & PDF generieren"}
+            {saving ? "Wird generiert…" : "🎟️ Wahlcodes & PDF generieren"}
           </button>
           <button style={{ ...S.btn, ...S.btnGhost, padding:"10px 24px" }} onClick={offlineGenerieren} disabled={saving}>
-            🎟️ Nur Tokens generieren (ohne PDF)
+            🎟️ Nur Wahlcodes generieren (ohne PDF)
           </button>
         </div>
-        <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>„Tokens & PDF" speichert neue Tokens und öffnet sofort das Druckfenster. „Nur Tokens" speichert ohne PDF — drucken später über die Token-Übersicht.</p>
+        <p style={{ color:C.textLight, fontSize:12, marginTop:8 }}>„Wahlcodes & PDF" speichert neue Wahlcodes und öffnet sofort das Druckfenster. „Nur Wahlcodes" speichert ohne PDF — drucken später über die Wahlcode-Übersicht.</p>
       </div>
       <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger} wahllokalName={wahllokal?.name}/>
     </div>
@@ -1804,9 +1804,9 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
 
       {/* SCHRITT 1: Gültigkeit */}
       <div style={{ ...S.card, border:`2px solid ${C.primary}` }}>
-        <div style={{ ...S.sectionLabel, color:C.primary }}>1 · Token-Gültigkeit festlegen</div>
+        <div style={{ ...S.sectionLabel, color:C.primary }}>1 · Wahlcode-Gültigkeit festlegen</div>
         <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie zuerst fest wie lange die Zugangscodes gültig sein sollen. Gilt für alle Wähler die Sie anlegen.</p>
-        <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Tokens sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
+        <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Wahlcodes sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
       </div>
 
       {/* SCHRITT 2: Wähler anlegen */}
@@ -1881,7 +1881,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
             <thead><tr>
               <th style={{ ...S.th, width:40 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th>
               <SortTh col="email" label="E-Mail"/>
-              <SortTh col="token" label="Token"/>
+              <SortTh col="token" label="Wahlcode"/>
               <SortTh col="status" label="Status"/>
               <th style={S.th}>Aktion</th>
             </tr></thead>
@@ -1956,7 +1956,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   }
   useEffect(()=>{ laden(); },[]);
   async function saveWahllokal(f) { setSaving(true); setFehler(null); try{ await callFlow("saveWahllokal",{ wahllokalID:f.id?parseInt(f.id):null, eventID:f.eventID, name:f.name, aktiv:f.aktiv!==false, leitungPIN:f.leitungPIN||"0000", modus:f.modus||"beides" }); await laden(); await onDataChange(); setForm(null); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function deleteWahllokal(wl) { const ok = await confirm({ titel:`Wahllokal löschen`, nachricht:`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen, Tokens und Abstimmungen werden unwiderruflich gelöscht.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
+  async function deleteWahllokal(wl) { const ok = await confirm({ titel:`Wahllokal löschen`, nachricht:`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen, Wahlcodes und Abstimmungen werden unwiderruflich gelöscht.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
   const tabs = [{ id:"wahllokale", label:"🏛️ Wahllokale" },{ id:"wahlen", label:"📊 Alle Wahlen" },{ id:"flows", label:"⚙️ Flows" }];
 
   if (form!==null) return (
@@ -1971,8 +1971,8 @@ function SuperadminView({ appData, onExit, onDataChange }) {
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {[
               { val:"beides", label:"📧 Online-Versand & 📋 Vor-Ort-Ausgabe", hint:"Beide Methoden stehen der Wahlleitung zur Verfügung" },
-              { val:"online", label:"📧 Nur Online-Versand", hint:"Tokens werden per E-Mail verschickt" },
-              { val:"offline", label:"📋 Nur Vor-Ort-Ausgabe", hint:"Tokens werden vor Ort ausgedruckt und verteilt" },
+              { val:"online", label:"📧 Nur Online-Versand", hint:"Wahlcodes werden per E-Mail verschickt" },
+              { val:"offline", label:"📋 Nur Vor-Ort-Ausgabe", hint:"Wahlcodes werden vor Ort ausgedruckt und verteilt" },
             ].map(opt=>(
               <label key={opt.val} style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer", padding:"10px 12px", borderRadius:8, border:`1.5px solid ${(form.modus||"beides")===opt.val?C.primary:C.border}`, background:(form.modus||"beides")===opt.val?"#eef4fb":"transparent" }}>
                 <input type="radio" name="modus" value={opt.val} checked={(form.modus||"beides")===opt.val} onChange={()=>setForm(x=>({...x,modus:opt.val}))} style={{ marginTop:2 }}/>
@@ -2575,7 +2575,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
           </div>
             <div style={{ display:"flex", gap:VB?48:24, flexWrap:"wrap", alignItems:"flex-end" }}>
               {wahlGeschlossen ? (
-                <div><div style={{ fontSize:VB?64:40, fontWeight:900, color:col(C.primary,C.accent), lineHeight:1 }}>{total}</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>{maxAuswahl>1?`Wähler (je ${maxAuswahl} Stimmen)`:`Stimme${total!==1?"n":""} abgegeben`}</div></div>
+                <div><div style={{ fontSize:VB?64:40, fontWeight:900, color:col(C.primary,C.accent), lineHeight:1 }}>{total}</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>{maxAuswahl>1?`Stimmberechtigte (je ${maxAuswahl} Stimmen)`:`Stimme${total!==1?"n":""} abgegeben`}</div></div>
               ) : (
                 <div><div style={{ fontSize:VB?48:32, fontWeight:900, color:col(C.textLight,"rgba(255,255,255,0.55)"), lineHeight:1 }}>🔒</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>Ergebnisse erst nach Schließen sichtbar</div></div>
               )}
