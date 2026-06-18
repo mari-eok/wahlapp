@@ -176,23 +176,23 @@ function formatRestzeit(seconds) {
   return `${m}m ${String(sec).padStart(2,"0")}s`;
 }
 function getWahlZeitStatus(wahl, refDate = new Date()) {
-  if (!wahl) return { status:"unbekannt", label:"unbekannt", icon:"?", badge:S.badgeGray, hint:"" };
-  if (wahl.geschlossen) return { status:"geschlossen", label:"geschlossen", icon:"lock", badge:S.badgeRed, hint:"Die Wahl ist offiziell geschlossen; Ergebnisse können angezeigt werden." };
-  if (!wahl.aktiv) return { status:"pausiert", label:"pausiert", icon:"⏸", badge:S.badgeOrange, hint:"Die Wahl ist angelegt, aber noch nicht freigegeben." };
+  if (!wahl) return { status:"unbekannt", label:"unbekannt", icon:<i className="ti ti-question-mark" aria-hidden="true"/>, badge:S.badgeGray, hint:"" };
+  if (wahl.geschlossen) return { status:"geschlossen", label:"geschlossen", icon:<i className="ti ti-lock" aria-hidden="true"/>, badge:S.badgeRed, hint:"Die Wahl ist offiziell geschlossen; Ergebnisse können angezeigt werden." };
+  if (!wahl.aktiv) return { status:"pausiert", label:"pausiert", icon:<i className="ti ti-player-pause" aria-hidden="true"/>, badge:S.badgeOrange, hint:"Die Wahl ist angelegt, aber noch nicht freigegeben." };
 
   const start = parseSharePointDate(wahl.startzeit);
   if (start && !isNaN(start.getTime()) && start > refDate) {
-    return { status:"wartet", label:"wartet auf Startzeit", icon:"⏰", badge:S.badgeGray, hint:`Start in ${formatRestzeit(Math.floor((start - refDate) / 1000))}` };
+    return { status:"wartet", label:"wartet auf Startzeit", icon:<i className="ti ti-clock" aria-hidden="true"/>, badge:S.badgeGray, hint:`Start in ${formatRestzeit(Math.floor((start - refDate) / 1000))}` };
   }
 
   const rest = secondsUntilEndzeit(wahl, refDate);
   if (rest !== null && rest <= 0) {
-    return { status:"endzeit_erreicht", label:"Endzeit erreicht", icon:"⏳", badge:S.badgeOrange, hint:"Stimmabgabe ist gesperrt. Die Wahl kann nun offiziell geschlossen werden." };
+    return { status:"endzeit_erreicht", label:"Endzeit erreicht", icon:<i className="ti ti-clock-off" aria-hidden="true"/>, badge:S.badgeOrange, hint:"Stimmabgabe ist gesperrt. Die Wahl kann nun offiziell geschlossen werden." };
   }
   if (rest !== null && rest <= 300) {
-    return { status:"endet_bald", label:"endet bald", icon:"alert-triangle", badge:S.badgeOrange, hint:`Endet in ${formatRestzeit(rest)}` };
+    return { status:"endet_bald", label:"endet bald", icon:<i className="ti ti-alert-triangle" aria-hidden="true"/>, badge:S.badgeOrange, hint:`Endet in ${formatRestzeit(rest)}` };
   }
-  return { status:"laeuft", label:"läuft", icon:"●", badge:S.badgeGreen, hint: rest !== null ? `Endet um ${formatDatum(wahl.endzeit)}.` : "Keine Endzeit gesetzt." };
+  return { status:"laeuft", label:"läuft", icon:<span style={{color:"#22c55e", fontSize:10}}>●</span>, badge:S.badgeGreen, hint: rest !== null ? `Endet um ${formatDatum(wahl.endzeit)}.` : "Keine Endzeit gesetzt." };
 }
 function toLocalInputValue(date, withSeconds = false) {
   if (!date) return "";
