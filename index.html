@@ -266,7 +266,7 @@ const S = {
 };
 
 // Nutzerfreundlicher Datum/Uhrzeit-Picker
-function DateTimePicker({ value, onChange, label, hint, minDate }) {
+function DateTimePicker({ value, onChange, label, hint, minDate, inline=false }) {
   const parts = (value||"").split("T");
   const datePart = parts[0]||"";
   const timePart = parts[1]||"00:00";
@@ -277,7 +277,7 @@ function DateTimePicker({ value, onChange, label, hint, minDate }) {
 
   function update(newDate, newH, newM) { onChange(`${newDate}T${newH}:${newM}`); }
 
-  const inputStyle = { ...S.input, fontSize:14, padding:"10px 12px" };
+  const inputStyle = { ...S.input, fontSize:14, padding:"10px 12px", height:42, boxSizing:"border-box" };
 
   return (
     <div style={S.formGroup}>
@@ -1572,9 +1572,9 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
     <div style={{ ...S.card, marginTop:16 }}>
       {dialog}
       {loesching&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Wahlcodes werden gelöscht…</p></div></div>}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <div style={S.sectionLabel}>Wahlcode-Übersicht</div>
-        <div style={{ display:"flex", gap:6 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, gap:8, flexWrap:"wrap" }}>
+        <div style={{ ...S.sectionLabel, minWidth:0, flex:1 }}>Wahlcode-Übersicht</div>
+        <div style={{ display:"flex", gap:6, flexShrink:0 }}>
           {tokens.filter(t=>t.aktiv&&!t.verwendet).length>0&&(
             <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
               const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
@@ -1955,12 +1955,19 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
       <div style={S.card}>
         <div style={S.sectionLabel}>Wahlcodes generieren</div>
         <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie Anzahl und Gültigkeit fest, dann exportieren Sie die Wahlcodes als Liste zum Ausdrucken.</p>
-        <div style={{ display:"flex", gap:32, flexWrap:"wrap", alignItems:"flex-end", marginBottom:20 }}>
-          <div>
-            <label style={S.label}>Anzahl</label>
-            <input style={{ ...S.input, width:88, height:42 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/>
+        <div style={{ marginBottom:20 }}>
+          {/* Einzeilige Label-Reihe */}
+          <div style={{ display:"flex", gap:32, flexWrap:"wrap", marginBottom:6 }}>
+            <label style={{ ...S.label, margin:0, width:88 }}>Anzahl</label>
+            <label style={{ ...S.label, margin:0 }}>Gültig bis</label>
           </div>
-          <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Wahlcodes sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
+          {/* Einzeilige Input-Reihe */}
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+            <input style={{ ...S.input, width:88, height:42, boxSizing:"border-box" }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/>
+            <div style={{ width:24 }}/>
+            <DateTimePicker label="" value={gueltigBis} onChange={setGueltigBis} hint="" inline={true}/>
+          </div>
+          <p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Wahlcodes sind nach diesem Zeitpunkt nicht mehr verwendbar.</p>
         </div>
         {saving&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Wahlcodes werden generiert…</p></div></div>}
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
