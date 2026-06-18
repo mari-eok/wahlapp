@@ -115,6 +115,15 @@ function toLocalInputValue(date, withSeconds = false) {
   return withSeconds ? `${base}:${pad(d.getSeconds())}` : base;
 }
 
+// Zentrale Datumsformatierung für Anzeige in Wahlleitung/Tokenliste
+function formatDatum(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }) + " " +
+    d.toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
+}
+
 const C = { primary:"#1a3a5c", primaryLight:"#2a5a8c", accent:"#4a9b6f", bg:"#f5f7fa", bgWhite:"#ffffff", border:"#dde3ea", text:"#1a2733", textLight:"#5a6a7a", error:"#c0392b", errorBg:"#fde8e8", success:"#27ae60", successBg:"#e8f8ee", warning:"#d4a017", warningBg:"#fef9e7", disabled:"#b0bec5", superadmin:"#2d1b4e" };
 
 const S = {
@@ -1248,11 +1257,6 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName }) {
     if (t.verwendet) return { label:"✓ abgestimmt", color:"#166534", bg:"#dcfce7" };
     if (t.gueltigBis && parseGueltigBis(t.gueltigBis) < now) return { label:"⏱ abgelaufen", color:"#92400e", bg:"#fff8e1" };
     return { label:"● gültig", color:"#166534", bg:"#dcfce7" };
-  }
-  function formatDatum(iso) {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    return d.toLocaleDateString("de-DE",{ day:"2-digit", month:"2-digit", year:"numeric" }) + " " + d.toLocaleTimeString("de-DE",{ hour:"2-digit", minute:"2-digit" });
   }
   const gefiltert = tokens.filter(t=>{
     if(suche && !t.code.toLowerCase().includes(suche.toLowerCase().replace("-",""))) return false;
