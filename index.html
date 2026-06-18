@@ -834,7 +834,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
                 {selected.map(s => <li key={s.id} style={{ fontWeight:700, marginBottom:4 }}>{s.name}</li>)}
               </ul>
             </div>
-            {showEndCountdown&&<div style={{ ...S.alert, ...(endCountdownSeconds<=60 ? S.alertError : S.alertWarning), marginBottom:14 }}>Diese Wahl endet in <strong>{formatRestzeit(endCountdownSeconds)}</strong>.</div>}
+            {showEndCountdown&&<div style={{ ...S.alert, ...(endCountdownSeconds<=60 ? S.alertError : S.alertWarning), marginBottom:14 }}>{endCountdownSeconds<=60 ? <i className="ti ti-alert-triangle" aria-hidden="true"/> : <i className="ti ti-clock" aria-hidden="true"/>} Diese Wahl endet in <strong>{formatRestzeit(endCountdownSeconds)}</strong>.</div>}
             <p style={{ fontSize:13, color:C.textLight, lineHeight:1.5, margin:"0 0 18px" }}>Nach dem Absenden kann diese Stimmabgabe für diese Wahl nicht mehr geändert oder wiederholt werden.</p>
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", flexWrap:"wrap" }}>
               <button onClick={()=>setShowConfirm(false)} disabled={submitting} style={{ ...S.btn, ...S.btnGhost }}>Zurück</button>
@@ -2588,7 +2588,7 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
           id: null,
           titel: naechsterTitel,
           istStichwahl: true,
-          startzeit: "",
+          startzeit: toLocalInputValue(new Date()),
           mehrfach: false,
           exakt: false,
           maxAuswahl: 1,
@@ -2887,8 +2887,8 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
             placeholder="z.B. Diakoniepfarrer*in"/>
           {f.istStichwahl&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Titel einer Stichwahl kann nicht geändert werden.</p>}
         </div>
-        {f.istStichwahl&&<div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:13, marginBottom:16 }}><i className="ti ti-clock" aria-hidden="true"/> Die Stichwahl wird vorbereitet und bleibt nach dem Speichern pausiert. Sie wird erst über den ▶ Starten-Button freigegeben. Liegt die Startzeit noch in der Zukunft, erscheint vorab ein Countdown.</div>}
-        <DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ). Die Wahl bleibt zunächst pausiert; nach dem Start/Freigeben erscheint vor Erreichen der Startzeit ein Countdown."/>
+        {f.istStichwahl&&<div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:13, marginBottom:16 }}><i className="ti ti-info-circle" aria-hidden="true"/> Die Stichwahl ist nach dem Speichern sofort startbereit — einfach auf ▶ Starten klicken.</div>}
+        {!f.istStichwahl && <DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ). Die Wahl bleibt zunächst pausiert; nach dem Start/Freigeben erscheint vor Erreichen der Startzeit ein Countdown."/>}
         <div style={S.formGroup}>
           <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:f.hatEndzeit?10:0 }}>
             <input type="checkbox" checked={!!f.hatEndzeit} onChange={e=>setF(x=>({...x, hatEndzeit:e.target.checked, endzeit:e.target.checked ? (x.endzeit || "") : ""}))}/>
