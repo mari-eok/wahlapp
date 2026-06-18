@@ -97,6 +97,16 @@ function parseSharePointDate(val) {
   if (val.includes("Z") || val.includes("+")) return new Date(val);
   return new Date(val + "Z");
 }
+function isAfterEndzeit(wahl, refDate = new Date()) {
+  if (!wahl || !wahl.endzeit) return false;
+  const end = parseSharePointDate(wahl.endzeit);
+  return !!end && !isNaN(end.getTime()) && end <= refDate;
+}
+function isWithinWahlZeitfenster(wahl, refDate = new Date()) {
+  const start = parseSharePointDate(wahl?.startzeit);
+  if (!start || isNaN(start.getTime())) return false;
+  return start <= refDate && !isAfterEndzeit(wahl, refDate);
+}
 function toLocalInputValue(date, withSeconds = false) {
   if (!date) return "";
   const d = new Date(date);
@@ -533,9 +543,11 @@ function LeitungLoginScreen({ onAuth, onBack, fixedEventID }) {
 function WahllokalView({ appData, wahllokalID, onDataChange }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === wahllokalID);
   const now = new Date();
-  // FIX Zeitzone: SharePoint UTC korrekt parsen
-  const aktiveWahlen = appData.wahlen.filter(w => w.eventID===wahllokalID && w.aktiv && parseSharePointDate(w.startzeit)<=now);
-  const naechsteWahl = appData.wahlen.filter(w => w.eventID===wahllokalID && w.aktiv && parseSharePointDate(w.startzeit)>now).sort((a,b)=>parseSharePointDate(a.startzeit)-parseSharePointDate(b.startzeit))[0];
+  // FIX Zeitzone + Endzeit: Wahl ist erst ab Startzeit und nur bis zur optionalen Endzeit abstimmbar
+  const aktiveWahlen = appData.wahlen.filter(w => w.eventID===wahllokalID && w.aktiv && !w.geschlossen && isWithinWahlZeitfenster(w, now));
+  const naechsteWahl = appData.wahlen
+    .filter(w => w.eventID===wahllokalID && w.aktiv && !w.geschlossen && !isAfterEndzeit(w, now) && parseSharePointDate(w.startzeit)>now)
+    .sort((a,b)=>parseSharePointDate(a.startzeit)-parseSharePointDate(b.startzeit))[0];
   const [selectedWahlID, setSelectedWahlID] = useState("");
   const [tokenRaw, setTokenRaw] = useState("");
   const [selected, setSelected] = useState([]);
@@ -612,6 +624,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
     const wahlZumAbstimmen = appData.wahlen.find(w => w.id===selectedWahlID);
     if (!wahlZumAbstimmen) { setFlowFehler("Fehler: Wahl nicht gefunden. Bitte Seite neu laden."); return; }
     if (!wahlZumAbstimmen.aktiv || wahlZumAbstimmen.geschlossen) { setFlowFehler("Fehler: Diese Wahl ist nicht mehr aktiv."); return; }
+    if (!isWithinWahlZeitfenster(wahlZumAbstimmen, new Date())) { setFlowFehler(isAfterEndzeit(wahlZumAbstimmen) ? "Diese Wahl ist beendet. Eine Stimmabgabe ist nicht mehr möglich." : "Diese Wahl ist noch nicht freigegeben. Bitte warten Sie bis zur Startzeit."); return; }
     const gueltigeOptionIDs = new Set(wahlZumAbstimmen.optionen.map(o=>o.id));
     const alleOptionenGueltig = selected.every(s => gueltigeOptionIDs.has(s.id));
     if (!alleOptionenGueltig) {
@@ -831,16 +844,20 @@ function WahlleitungAblaufCheckliste({ appData, eventID }) {
   const storageKey = `wahlleitung_durchfuehrungscheck_${eventID}`;
   const [offen, setOffen] = useState(false);
   const CHECKS = [
-    { id:"wahl_optionen", phase:"Vorbereitung", text:"Wahl und Optionen geprüft" },
-    { id:"tokens_vorbereitet", phase:"Vorbereitung", text:"Tokens erstellt, gedruckt und verdeckt vorbereitet" },
-    { id:"qr_getestet", phase:"Vorbereitung", text:"Wahlseite / QR-Code getestet" },
-    { id:"tokens_ausgegeben", phase:"Ausgabe und Start", text:"Tokens anonym an Stimmberechtigte ausgegeben" },
-    { id:"verfahren_erlaeutert", phase:"Ausgabe und Start", text:"Wahlverfahren kurz erläutert" },
-    { id:"wahl_gestartet", phase:"Ausgabe und Start", text:"Wahl gestartet" },
-    { id:"stimmen_beobachtet", phase:"Durchführung und Abschluss", text:"Eingegangene Stimmen beobachtet" },
-    { id:"wahl_geschlossen", phase:"Durchführung und Abschluss", text:"Wahl geschlossen" },
-    { id:"ergebnis_geprueft", phase:"Durchführung und Abschluss", text:"Ergebnis geprüft und protokolliert" },
-    { id:"stichwahl", phase:"Durchführung und Abschluss", text:"Ggf. Stichwahl vorbereitet" },
+    { id:"wahl_angelegt", phase:"Vorbereitung in der App", text:"Wahl angelegt" },
+    { id:"optionen_angelegt", phase:"Vorbereitung in der App", text:"Kandidat:innen, Enthaltung und ggf. weitere Stimmoptionen angelegt" },
+    { id:"auswahl_zeit_eingestellt", phase:"Vorbereitung in der App", text:"Auswahlregel, Startzeit und ggf. Endzeit eingestellt" },
+    { id:"wahl_pausiert", phase:"Vorbereitung in der App", text:"Wahl bleibt bis zur Freigabe pausiert" },
+    { id:"tokens_vorbereitet", phase:"Tokens und Zugang", text:"Tokens erstellt, gedruckt und verdeckt vorbereitet" },
+    { id:"qr_getestet", phase:"Tokens und Zugang", text:"Wahlseite / QR-Code getestet" },
+    { id:"tokens_ausgegeben", phase:"Tokens und Zugang", text:"Tokens anonym an Stimmberechtigte ausgegeben" },
+    { id:"verfahren_erlaeutert", phase:"Durchführung", text:"Wahlverfahren kurz erläutert" },
+    { id:"wahl_gestartet", phase:"Durchführung", text:"Wahl gestartet / freigegeben; vor der Startzeit läuft der Countdown" },
+    { id:"stimmen_beobachtet", phase:"Durchführung", text:"Eingegangene Stimmen beobachtet" },
+    { id:"wahl_geschlossen", phase:"Abschluss", text:"Wahl geschlossen" },
+    { id:"stimmen_plausibilisiert", phase:"Abschluss", text:"Stimmenanzahl plausibilisiert" },
+    { id:"ergebnis_geprueft", phase:"Abschluss", text:"Ergebnis geprüft und protokolliert" },
+    { id:"stichwahl", phase:"Abschluss", text:"Ggf. Stichwahl vorbereitet" },
   ];
   const [checked, setChecked] = useState(()=>{
     try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { return {}; }
@@ -1015,7 +1032,8 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   async function openForm(wahl) {
     let hatStimmen = false;
     try { const r=await callFlow("getErgebnisse",{ wahlID:parseInt(wahl.id), eventID }); hatStimmen=(Array.isArray(r)?r.length:(r.value?.length||0))>0; } catch(e) {}
-    setForm({ ...wahl, optionen:[...wahl.optionen], hatStimmen });
+    const endzeitLocal = wahl.endzeit ? toLocalInputValue(parseSharePointDate(wahl.endzeit)) : "";
+    setForm({ ...wahl, optionen:[...wahl.optionen], hatStimmen, hatEndzeit: !!wahl.endzeit, endzeit: endzeitLocal });
   }
   async function toggleAktiv(wahl) { try{ await callFlow("toggleWahl",{ wahlID:parseInt(wahl.id), aktiv:!wahl.aktiv, geschlossen:false }); onDataChange(); }catch(e){ setFehler(e.message); } }
   async function pauseWahl(wahl) { const ok = await confirm({ titel:"Wahl pausieren", nachricht:`Wahl "${wahl.titel}" pausieren?
@@ -1086,7 +1104,7 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
         mehrheitsregel: (typeof f.mehrheitsregel==="object" ? f.mehrheitsregel?.Value : f.mehrheitsregel)||"relativ",
         geschlossen: f.geschlossen||false,
         archiviert: f.archiviert||false,
-        endzeit: (f.hatEndzeit&&f.endzeit) ? new Date(f.endzeit).toISOString() : null,
+        endzeit: (f.hatEndzeit&&f.endzeit) ? parseLocalDatetime(f.endzeit).toISOString() : null,
         optionen: f.optionen.map(o => ({
           id: o.id && !isNaN(parseInt(o.id)) ? String(parseInt(o.id)) : null,
           name: o.name,
@@ -1105,7 +1123,7 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <h3 style={{ margin:0, color:C.primary }}>Wahlen</h3>
-        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), mehrfach:false, exakt:false, maxAuswahl:1, mehrheitsregel:"absolut", optionen:[{ id:null, _tempKey:"tmp_1", name:"", istEnthaltung:false },{ id:null, _tempKey:"tmp_enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), hatEndzeit:false, endzeit:"", mehrfach:false, exakt:false, maxAuswahl:1, mehrheitsregel:"absolut", optionen:[{ id:null, _tempKey:"tmp_1", name:"", istEnthaltung:false },{ id:null, _tempKey:"tmp_enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
       </div>
 
       {/* Aktive & geschlossene Wahlen */}
@@ -1115,7 +1133,10 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
           <tbody>{wahlen.map(w=>(
             <tr key={w.id} style={{ opacity:w.geschlossen?0.85:1 }}>
               <td style={S.td}><strong>{w.titel}</strong></td>
-              <td style={{ ...S.td, fontSize:12, color:C.textLight }}>{w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"} · {w.optionen.length} Opt.</td>
+              <td style={{ ...S.td, fontSize:12, color:C.textLight }}>
+                {w.mehrfach?`Mehrfach (${w.maxAuswahl})`:"Einzel"} · {w.optionen.length} Opt.
+                <div style={{ marginTop:3 }}>Start: {formatDatum(w.startzeit)}{w.endzeit ? ` · Ende: ${formatDatum(w.endzeit)}` : ""}</div>
+              </td>
               <td style={S.td}>
                 {w.geschlossen?<span style={{ ...S.badge, ...S.badgeRed }}>🔒 geschlossen</span>:w.aktiv?<span style={{ ...S.badge, ...S.badgeGreen }}>● aktiv</span>:<span style={{ ...S.badge, ...S.badgeOrange }}>⏸ pausiert</span>}
               </td>
@@ -2531,10 +2552,10 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
           {f.istStichwahl&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Titel einer Stichwahl kann nicht geändert werden.</p>}
         </div>
         {f.istStichwahl&&<div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:13, marginBottom:16 }}>⏱️ Die Stichwahl wird nach dem Speichern manuell gestartet — über den ▶ Starten-Button in der Wahlenübersicht.</div>}
-        {!f.istStichwahl&&<DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ)."/>}
+        {!f.istStichwahl&&<DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ). Die Wahl bleibt zunächst pausiert; nach dem Start/Freigeben erscheint vor Erreichen der Startzeit ein Countdown."/>}
         <div style={S.formGroup}>
           {!f.istStichwahl&&<label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:f.hatEndzeit?10:0 }}>
-            <input type="checkbox" checked={!!f.hatEndzeit} onChange={e=>setF(x=>({...x, hatEndzeit:e.target.checked, endzeit:""}))}/>
+            <input type="checkbox" checked={!!f.hatEndzeit} onChange={e=>setF(x=>({...x, hatEndzeit:e.target.checked, endzeit:e.target.checked ? (x.endzeit || "") : ""}))}/>
             <span style={S.label}>Endzeit festlegen (optional)</span>
           </label>}
           {f.hatEndzeit&&(()=>{
