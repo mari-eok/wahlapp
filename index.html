@@ -128,6 +128,7 @@ function mapToken(item) {
     verwendeteWahlen: item.UsedForWahlID ? [String(item.UsedForWahlID)] : (() => { try { return JSON.parse(item.VerwendeteWahlen || "[]"); } catch { return []; } })(),
     gueltigBis: item.GueltigBis || null,
     erstellt: item.Zeitstempel || item.Created || null,
+    verwendetAm: item.VerwendetAm || item.VendedAt || item.UsedAt || item.AbgestimmtAm || null,
   };
 }
 
@@ -1954,10 +1955,10 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
       <div style={S.card}>
         <div style={S.sectionLabel}>Wahlcodes generieren</div>
         <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie Anzahl und Gültigkeit fest, dann exportieren Sie die Wahlcodes als Liste zum Ausdrucken.</p>
-        <div style={{ display:"flex", gap:32, flexWrap:"wrap", alignItems:"flex-start", marginBottom:20 }}>
+        <div style={{ display:"flex", gap:32, flexWrap:"wrap", alignItems:"flex-end", marginBottom:20 }}>
           <div>
             <label style={S.label}>Anzahl</label>
-            <input style={{ ...S.input, width:80 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/>
+            <input style={{ ...S.input, width:88, height:42 }} type="number" min={1} max={500} value={offlineAnzahl} onChange={e=>setOfflineAnzahl(parseInt(e.target.value))}/>
           </div>
           <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Wahlcodes sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
         </div>
