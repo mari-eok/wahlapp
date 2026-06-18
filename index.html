@@ -1094,7 +1094,21 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   const alleWahlen = appData.wahlen.filter(w=>w.eventID===eventID);
   const wahlen = alleWahlen.filter(w=>!w.archiviert); // aktiv + geschlossen (nicht archiviert)
   const archiviertWahlen = alleWahlen.filter(w=>w.archiviert);
-  useEffect(()=>{ if(initialStichwahl){ setForm({...initialStichwahl, startzeit:"", hatEndzeit:false, endzeit:"" }); if(onStichwahl) onStichwahl(); } },[]);
+  useEffect(()=>{
+    if(initialStichwahl){
+      // Stichwahl braucht trotzdem eine Startzeit, weil SharePoint die Spalte Startzeit erwartet.
+      // Die Wahl bleibt nach dem Speichern pausiert und wird erst über den Starten-Button freigegeben.
+      setForm({
+        ...initialStichwahl,
+        aktiv:false,
+        geschlossen:false,
+        startzeit: initialStichwahl.startzeit || naechsteViertelStunde(),
+        hatEndzeit: !!initialStichwahl.endzeit,
+        endzeit: initialStichwahl.endzeit || ""
+      });
+      if(onStichwahl) onStichwahl();
+    }
+  },[]);
   async function openForm(wahl) {
     let hatStimmen = false;
     try { const r=await callFlow("getErgebnisse",{ wahlID:parseInt(wahl.id), eventID }); hatStimmen=(Array.isArray(r)?r.length:(r.value?.length||0))>0; } catch(e) {}
@@ -1154,9 +1168,20 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
   async function saveWahl(f) {
     setSaving(true); setFehler(null);
     try {
+      if (!f.startzeit) {
+        setFehler("Bitte eine Startzeit setzen. Die Wahl bleibt trotzdem bis zur Freigabe pausiert.");
+        setSaving(false);
+        return;
+      }
       let startzeitISO = f.startzeit;
       if (startzeitISO && !startzeitISO.includes("Z") && !startzeitISO.includes("+")) {
-        startzeitISO = parseLocalDatetime(startzeitISO).toISOString();
+        const parsedStart = parseLocalDatetime(startzeitISO);
+        if (!parsedStart || isNaN(parsedStart.getTime())) {
+          setFehler("Die Startzeit ist ungültig. Bitte erneut setzen.");
+          setSaving(false);
+          return;
+        }
+        startzeitISO = parsedStart.toISOString();
       }
       await callFlow("saveWahl",{
         wahlID: (!f.id||f.isNew) ? null : parseInt(f.id),
@@ -2617,13 +2642,13 @@ function WahlForm({ form, onSave, onCancel, saving, fehler }) {
             placeholder="z.B. Diakoniepfarrer*in"/>
           {f.istStichwahl&&<p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Titel einer Stichwahl kann nicht geändert werden.</p>}
         </div>
-        {f.istStichwahl&&<div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:13, marginBottom:16 }}>⏱️ Die Stichwahl wird nach dem Speichern manuell gestartet — über den ▶ Starten-Button in der Wahlenübersicht.</div>}
-        {!f.istStichwahl&&<DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ). Die Wahl bleibt zunächst pausiert; nach dem Start/Freigeben erscheint vor Erreichen der Startzeit ein Countdown."/>}
+        {f.istStichwahl&&<div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:13, marginBottom:16 }}>⏱️ Die Stichwahl wird vorbereitet und bleibt nach dem Speichern pausiert. Sie wird erst über den ▶ Starten-Button freigegeben. Liegt die Startzeit noch in der Zukunft, erscheint vorab ein Countdown.</div>}
+        <DateTimePicker label="Startzeit (lokale Zeit)" value={f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):""} onChange={v=>setField("startzeit",v)} hint="Angabe in Ihrer lokalen Zeit (MEZ/MESZ). Die Wahl bleibt zunächst pausiert; nach dem Start/Freigeben erscheint vor Erreichen der Startzeit ein Countdown."/>
         <div style={S.formGroup}>
-          {!f.istStichwahl&&<label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:f.hatEndzeit?10:0 }}>
+          <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:f.hatEndzeit?10:0 }}>
             <input type="checkbox" checked={!!f.hatEndzeit} onChange={e=>setF(x=>({...x, hatEndzeit:e.target.checked, endzeit:e.target.checked ? (x.endzeit || "") : ""}))}/>
             <span style={S.label}>Endzeit festlegen (optional)</span>
-          </label>}
+          </label>
           {f.hatEndzeit&&(()=>{
             const startVal = f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):"";
             const startDatum = startVal.split("T")[0]||"";
