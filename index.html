@@ -12,7 +12,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+    const { useState, useEffect, useRef, useCallback } = React;
 
 const API = {
   key: "EKIBA_VOTING_2026!?",
@@ -44,14 +44,53 @@ const API = {
 
 };
 
-async function callFlow(flowName, body) {
+// Offline-Status: globales Event-basiertes System
+const offlineListeners = new Set();
+function subscribeOffline(fn) { offlineListeners.add(fn); return () => offlineListeners.delete(fn); }
+function notifyOffline(state) { offlineListeners.forEach(fn => fn(state)); }
+window.addEventListener("online",  () => notifyOffline(false));
+window.addEventListener("offline", () => notifyOffline(true));
+
+// Retry-fähiger Flow-Call: bei Netzwerkfehler bis zu 3× mit Backoff wiederholen
+// Stimmabgabe (submitStimme) wird idempotent behandelt — ein „doppelt"-Status
+// gilt als akzeptabler Retry-Ausgang (Token bereits verbraucht = Stimme war drin).
+async function callFlow(flowName, body, { retries = 3, retryDelay = 1500 } = {}) {
   const url = API.flows[flowName];
   if (url.startsWith("PLATZHALTER")) throw new Error(`Flow '${flowName}' noch nicht konfiguriert.`);
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey: API.key, ...body }) });
-  // 502 bei deleteToken/saveTokens/deleteWahllokal = Flow-Timeout, SharePoint hat aber trotzdem ausgeführt
-  if ((res.status === 502 || res.status === 504) && ["deleteToken","saveTokens","deleteWahllokal","saveWahl","saveWahllokal","deleteWahl"].includes(flowName)) return { status:"ok", timeout:true };
-  if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
-  return res.json();
+
+  let lastErr;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: API.key, ...body }),
+        signal: AbortSignal.timeout(20000), // 20s pro Versuch
+      });
+      // 502/504 bei bestimmten Flows = SharePoint hat trotzdem ausgeführt (Flow-Timeout)
+      if ((res.status === 502 || res.status === 504) &&
+          ["deleteToken","saveTokens","deleteWahllokal","saveWahl","saveWahllokal","deleteWahl"].includes(flowName)) {
+        return { status: "ok", timeout: true };
+      }
+      if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+      // Nur bei Netzwerkfehlern / Timeouts erneut versuchen, nicht bei HTTP 4xx
+      const isNetworkErr = (e instanceof TypeError) || e.name === "TimeoutError" || e.name === "AbortError";
+      if (!isNetworkErr || attempt === retries) break;
+      // Exponentieller Backoff: 1,5s → 3s → 4,5s
+      await new Promise(r => setTimeout(r, retryDelay * attempt));
+    }
+  }
+  throw lastErr;
+}
+
+// Hook: liefert true wenn offline, false wenn online
+function useOfflineStatus() {
+  const [offline, setOffline] = useState(!navigator.onLine);
+  useEffect(() => subscribeOffline(setOffline), []);
+  return offline;
 }
 
 function mapWaehler(item) {
@@ -397,6 +436,7 @@ function App() {
   const [superadminAuth, setSuperadminAuth] = useState(false);
   const [appData, setAppData] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const isOffline = useOfflineStatus();
 
   useEffect(() => { if (wahllokalID) loadAppData(); }, [wahllokalID]);
   useEffect(() => { if (!wahllokalID) return; const t = setInterval(loadAppData, 10000); return () => clearInterval(t); }, [wahllokalID]);
@@ -427,6 +467,19 @@ function App() {
 
   return (
     <div style={S.app}><style>{CSS}</style>
+      {/* Offline-Banner */}
+      {isOffline && (
+        <div style={{
+          position:"fixed", top:0, left:0, right:0, zIndex:9999,
+          background:"#b91c1c", color:"#fff",
+          fontSize:13, fontWeight:600, padding:"8px 16px",
+          textAlign:"center", display:"flex", alignItems:"center",
+          justifyContent:"center", gap:8, boxShadow:"0 2px 8px rgba(0,0,0,0.25)"
+        }}>
+          <span>📵</span>
+          <span>Keine Internetverbindung – Stimmabgabe wird automatisch wiederholt, sobald die Verbindung wiederhergestellt ist.</span>
+        </div>
+      )}
       {view === "startseite" && (
         <WahllokalAuswahl onSelect={(eventID) => {
           window.history.pushState({}, "", `?wahllokal=${eventID}`);
@@ -693,7 +746,14 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
       if (result.status==="gueltig") { setStatus("gueltig"); setStatusMsg(`Ihre Stimme für „${wahlZumAbstimmen.titel}" wurde anonym gespeichert und gezählt.`); onDataChange(); }
       else if (result.status==="doppelt") { setStatus("doppelt"); setStatusMsg(`Für die Wahl „${wahlZumAbstimmen.titel}" wurde mit diesem Wahlcode bereits eine Stimme abgegeben.`); }
       else { setStatus("ungueltig"); setStatusMsg(result.reason==="wahl_beendet" ? "Diese Wahl ist beendet. Eine Stimmabgabe ist nicht mehr möglich." : result.reason==="wahl_noch_nicht_gestartet" ? "Diese Wahl ist noch nicht freigegeben. Bitte warten Sie bis zur Startzeit." : result.reason==="abgelaufen" ? "Der Wahlcode ist abgelaufen und kann nicht mehr verwendet werden." : result.reason==="gesperrt" ? "Der Wahlcode wurde gesperrt. Bitte wenden Sie sich an die Wahlleitung." : "Der Wahlcode ist ungültig oder die Wahl ist nicht aktiv. Bitte prüfen Sie Ihre Eingabe."); }
-    } catch(e) { setStatus(null); setFlowFehler(e.message); }
+    } catch(e) {
+      setStatus(null);
+      // Netzwerkfehler nach allen Retry-Versuchen
+      const isNetErr = (e instanceof TypeError) || e.name === "TimeoutError" || e.name === "AbortError" || e.message?.includes("fetch");
+      setFlowFehler(isNetErr
+        ? "Verbindungsfehler: Ihre Stimme konnte nicht übermittelt werden. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut."
+        : e.message);
+    }
     finally { setSubmitting(false); }
   }
 
@@ -920,6 +980,7 @@ function WahlleitungAblaufCheckliste({ appData, eventID }) {
     { id:"verfahren_erlaeutert", phase:"Durchführung", text:"Wahlverfahren kurz erläutert" },
     { id:"wahl_gestartet", phase:"Durchführung", text:"Wahl gestartet / freigegeben; vor der Startzeit läuft der Countdown" },
     { id:"stimmen_beobachtet", phase:"Durchführung", text:"Eingegangene Stimmen beobachtet" },
+    { id:"wlan_notfall", phase:"Durchführung", text:"Bei WLAN-Ausfall: Wahl sofort pausieren — nach Wiederherstellung der Verbindung fortsetzen" },
     { id:"wahl_geschlossen", phase:"Abschluss", text:"Wahl geschlossen" },
     { id:"stimmen_plausibilisiert", phase:"Abschluss", text:"Stimmenanzahl plausibilisiert" },
     { id:"ergebnis_geprueft", phase:"Abschluss", text:"Ergebnis geprüft und protokolliert" },
@@ -2213,7 +2274,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   <div style={{ fontWeight:800, fontSize:16, color:C.primary }}>{idx===0?"Hauptwahl":wahl.titel}</div>
                   <div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>
                     {getMehrheitsregelLabel(wahl)}
-                    {wahlGeschlossen ? <>{" · "}{total} Stimme{total!==1?"n":""}</> : <> · Ergebnisse erst nach Schließen sichtbar</>}
+                    {" · "}{total} Stimme{total!==1?"n":""} eingegangen{wahlGeschlossen ? "" : " · 🔒 Stimmverteilung erst nach Schließen"}
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }}>
@@ -2227,8 +2288,9 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
               {total===0&&<p style={{ color:C.textLight, fontSize:13 }}>Noch keine Stimmen abgegeben.</p>}
               {total>0&&!wahlGeschlossen&&(
                 <div style={{ padding:"16px", textAlign:"center", background:C.bg, borderRadius:8, marginTop:8 }}>
-                  <div style={{ fontSize:24, marginBottom:6 }}>🔒</div>
-                  <p style={{ margin:0, fontWeight:600, fontSize:13, color:C.textLight }}>Ergebnisse und Stimmverteilung werden erst nach dem Schließen der Wahl angezeigt.</p>
+                  <div style={{ fontSize:28, fontWeight:900, color:C.primary, lineHeight:1, marginBottom:4 }}>{total}</div>
+                  <div style={{ fontSize:13, color:C.textLight, marginBottom:8 }}>Stimme{total!==1?"n":""} eingegangen</div>
+                  <div style={{ fontSize:12, color:C.textLight }}>🔒 Stimmverteilung wird erst nach dem Schließen der Wahl angezeigt.</div>
                 </div>
               )}
               {total>0&&wahlGeschlossen&&<div style={{ display:"flex", flexDirection:"column", gap:VB?"clamp(8px, 1.5vh, 20px)":"12px" }}>
@@ -2577,7 +2639,15 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
               {wahlGeschlossen ? (
                 <div><div style={{ fontSize:VB?64:40, fontWeight:900, color:col(C.primary,C.accent), lineHeight:1 }}>{total}</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>{maxAuswahl>1?`Stimmberechtigte (je ${maxAuswahl} Stimmen)`:`Stimme${total!==1?"n":""} abgegeben`}</div></div>
               ) : (
-                <div><div style={{ fontSize:VB?48:32, fontWeight:900, color:col(C.textLight,"rgba(255,255,255,0.55)"), lineHeight:1 }}>🔒</div><div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>Ergebnisse erst nach Schließen sichtbar</div></div>
+                <div>
+                  <div style={{ fontSize:VB?64:40, fontWeight:900, color:col(C.primary,C.accent), lineHeight:1 }}>{total}</div>
+                  <div style={{ fontSize:VB?16:13, color:col(C.textLight,"rgba(255,255,255,0.6)"), marginTop:4 }}>
+                    Stimme{total!==1?"n":""} eingegangen
+                  </div>
+                  <div style={{ fontSize:VB?13:11, color:col(C.textLight,"rgba(255,255,255,0.45)"), marginTop:3 }}>
+                    🔒 Stimmverteilung erst nach Schließen sichtbar
+                  </div>
+                </div>
               )}
               {wahlGeschlossen&&total>0&&<div style={{ paddingBottom:VB?12:6 }}>
                 {gewaehlteKandidaten.length>0&&gewaehlteKandidaten.map(g=><div key={g.id} style={{ fontSize:VB?20:14, fontWeight:800, color:col(C.text,"#fff"), marginBottom:2 }}>🏆 Gewählt: {g.name} · {Math.round(g.stimmen/total*100)}%</div>)}
