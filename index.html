@@ -369,7 +369,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
       '<div class="label">Persönlicher Wahlcode</div>' +
       '<div class="token">' + t + '</div>' +
       qrHTML +
-      (mitQR ? '<div class="hinweis">QR-Code scannen oder Code manuell eingeben</div>' : '<div class="hinweis">Diesen Code geheim halten</div>') +
+      (mitQR ? '<div class="hinweis">QR-Code scannen um direkt zur Wahlseite zu gelangen</div>' : '<div class="hinweis">Diesen Code geheim halten</div>') +
       '</div>';
   };
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -1824,7 +1824,8 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
         <div style={{ display:"flex", gap:6, flexShrink:0 }}>
           {tokens.filter(t=>t.aktiv&&!t.verwendet).length>0&&(
             <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
-                const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
+                const now = Math.floor(Date.now()/1000);
+                const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet&&(!t.gueltigBis||parseInt(t.gueltigBis)>now)).map(t=>t.code);
                 if (druckWahlcodes.length===0) return;
                 generiereTokenPDF(druckWahlcodes, wahllokalName||eventID, eventID, true);
               }} disabled={loading} title="Aktive, unverwendete Wahlcodes als PDF drucken">
@@ -2082,7 +2083,9 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
     try {
       const tokens = Array.from({ length:offlineAnzahl }, ()=>generateToken());
       await callFlow("saveTokens",{ eventID, tokens, typ:"offline", gueltigBis:formatGueltigBis(gueltigBis) });
-      generiereTokenPDF(tokens, wahllokal?.name||eventID, eventID);
+      const now2 = Math.floor(Date.now()/1000);
+      const druckTokens = tokens.filter(t=>t.aktiv&&!t.verwendet&&(!t.gueltigBis||parseInt(t.gueltigBis)>now2)).map(t=>t.code);
+      generiereTokenPDF(druckTokens, wahllokal?.name||eventID, eventID);
       setTokenReloadTrigger(t=>t+1);
       setErfolg(`${offlineAnzahl} Wahlcodes generiert und PDF geöffnet.`);
       setTimeout(()=>setErfolg(null),3000);
