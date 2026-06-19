@@ -349,56 +349,99 @@ function generateToken() {
 
 // ─── Token PDF Generierung (global) ─────────────────────────────────────────
 function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
-  const COLS = 2;
-  const ROWS = 6;
-  const PER_PAGE = COLS * ROWS;
+  const COLS = 2, ROWS = 6, PER_PAGE = COLS * ROWS;
   const baseURL = window.location.origin + window.location.pathname;
-  const pages = [];
-  for (let i = 0; i < tokens.length; i += PER_PAGE) {
-    pages.push(tokens.slice(i, i + PER_PAGE));
+  const total = tokens.length;
+  const now = new Date();
+  const druckDatum = now.toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" });
+  const druckZeit = now.toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
+  const druckDatumZeit = druckDatum + ", " + druckZeit + " Uhr";
+
+  function kontrollcode(n, evid, datum) {
+    let h = 0;
+    const s = n + "|" + evid + "|" + datum;
+    for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const pos = Math.abs(h);
+    return chars[pos%32] + chars[(pos>>5)%32] + chars[(pos>>10)%32] + chars[(pos>>15)%32] +
+           "-" + chars[(pos>>20)%32] + chars[(pos>>25)%32] + chars[(n*7+pos)%32] + chars[(n*13+pos)%32];
   }
-  const karteHTML = (t) => {
+  const kCode = kontrollcode(total, evID, druckDatumZeit);
+
+  const pages = [];
+  for (let i = 0; i < tokens.length; i += PER_PAGE) pages.push(tokens.slice(i, i + PER_PAGE));
+
+  function karteHTML(t, globalIdx) {
     if (!t) return '<div class="karte leer"></div>';
-    const wahlURL = `${baseURL}?wahllokal=${evID}`;
+    const wahlURL = baseURL + "?wahllokal=" + evID;
     const qrHTML = mitQR
-      ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(wahlURL)}&color=1a2744&bgcolor=ffffff&margin=4" width="80" height="80" alt="QR-Code" style="margin:1mm 0;"/>`
+      ? '<img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=' + encodeURIComponent(wahlURL) + '&color=1a2744&bgcolor=ffffff&margin=3" width="72" height="72" alt="QR-Code" style="margin:1mm 0;"/>'
       : '';
     return '<div class="karte">' +
       '<div class="logo">Evangelische Landeskirche in Baden</div>' +
       '<div class="wahllokal">' + wahllokalName + '</div>' +
+      '<div class="nummer">Nr. ' + (globalIdx + 1) + ' von ' + total + '</div>' +
       '<div class="label">Persönlicher Wahlcode</div>' +
       '<div class="token">' + t + '</div>' +
       qrHTML +
-      (mitQR ? '<div class="hinweis">QR-Code scannen um direkt zur Wahlseite zu gelangen</div>' : '<div class="hinweis">Diesen Code geheim halten</div>') +
+      '<div class="hinweis">' + (mitQR ? 'QR-Code scannen oder Code eingeben &middot; Geheim halten' : 'Diesen Code geheim halten') + '</div>' +
       '</div>';
-  };
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Wahlcodes ${wahllokalName}</title>
-  <style>
+  }
+
+  const deckblatt = '<div class="deckblatt">' +
+    '<div class="deck-logo">Evangelische Landeskirche in Baden</div>' +
+    '<div class="deck-title">Wahlcodes</div>' +
+    '<div class="deck-sub">' + wahllokalName + '</div>' +
+    '<table class="deck-table">' +
+      '<tr><td>Gedruckt am</td><td><strong>' + druckDatumZeit + '</strong></td></tr>' +
+      '<tr><td>Wahllokal</td><td><strong>' + evID + '</strong></td></tr>' +
+      '<tr><td>Anzahl Wahlcodes</td><td><strong>' + total + '</strong></td></tr>' +
+      '<tr><td>Kontrollcode</td><td><strong class="kcode">' + kCode + '</strong></td></tr>' +
+    '</table>' +
+    '<div class="deck-hinweis">Bitte vor Beginn der Wahl pr&uuml;fen:<br>' +
+    'Anzahl der Wahlcodes = Anzahl der Stimmberechtigten.<br>' +
+    'Den Kontrollcode zum Nachweis aufbewahren.</div>' +
+    '</div>';
+
+  const styles = `
     @page { size: A4; margin: 10mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', Arial, sans-serif; }
+    .deckblatt { width: 190mm; height: 277mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-after: always; gap: 6mm; }
+    .deck-logo { font-size: 8pt; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #1a3a5c; }
+    .deck-title { font-size: 28pt; font-weight: 900; color: #1a3a5c; margin: 2mm 0; }
+    .deck-sub { font-size: 14pt; color: #5a6a7a; margin-bottom: 8mm; }
+    .deck-table { border-collapse: collapse; width: 120mm; }
+    .deck-table td { padding: 3mm 4mm; border-bottom: 1px solid #eee; font-size: 11pt; color: #333; }
+    .deck-table td:first-child { color: #888; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.08em; width: 50mm; }
+    .kcode { font-family: 'Courier New', monospace; font-size: 16pt; color: #1a3a5c; letter-spacing: 0.15em; }
+    .deck-hinweis { margin-top: 8mm; width: 120mm; padding: 4mm 6mm; background: #f8f9fa; border-left: 3px solid #1a3a5c; font-size: 9pt; color: #555; line-height: 1.6; }
     .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
     .page:last-child { page-break-after: auto; }
-    .karte { border: 1px dashed #aaa; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6mm; text-align: center; }
-    .logo { font-size: 7pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 2mm; }
-    .wahllokal { font-size: 8pt; color: #5a6a7a; margin-bottom: 3mm; }
-    .label { font-size: 7pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5a6a7a; margin-bottom: 1mm; }
-    .token { font-size: 20pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.15em; color: #1a3a5c; margin-bottom: 2mm; }
-    .hinweis { font-size: 6pt; color: #aaa; }
-    .leer { border: 1px dashed #eee; }
-  </style>
-  </head><body>
-  ${pages.map(page => `
-    <div class="page">
-      ${Array.from({length: PER_PAGE}, (_, i) => karteHTML(page[i])).join('')}
-    </div>`).join('')}
-  </body></html>`;
+    .karte { border: 1px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4mm; text-align: center; gap: 0.5mm; }
+    .logo { font-size: 6pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; }
+    .wahllokal { font-size: 7pt; color: #5a6a7a; }
+    .nummer { font-size: 6pt; color: #aaa; letter-spacing: 0.05em; margin: 0.5mm 0; }
+    .label { font-size: 6pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5a6a7a; }
+    .token { font-size: 18pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.15em; color: #1a3a5c; margin: 1mm 0; }
+    .hinweis { font-size: 5.5pt; color: #bbb; }
+    .leer { border: 1px dashed #eee; }`;
+
+  const pageHTML = pages.map(function(page, pi) {
+    return '<div class="page">' +
+      Array.from({length: PER_PAGE}, function(_, i) {
+        return karteHTML(page[i], pi * PER_PAGE + i);
+      }).join('') +
+      '</div>';
+  }).join('');
+
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Wahlcodes ' + wahllokalName + '</title><style>' + styles + '</style></head><body>' + deckblatt + pageHTML + '</body></html>';
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const win = window.open(url, "_blank");
-  if (win) { win.onload = () => { win.print(); }; }
+  if (win) { win.onload = function() { win.print(); }; }
 }
+
 
 function WahllokalAuswahl({ onSelect }) {
   const [wahllokale, setWahllokale] = useState([]);
