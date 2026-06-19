@@ -33,6 +33,10 @@ const API = {
     deleteWahl:      "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/39fc8412e8d74f2b804ac9dc11b99b0f/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=yjHGJz8JSI28MJA21XCmIA3th2pFrNdrNfDD7HMUw_4",
     saveWaehler:     "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b7bfbab2747046819c38331a6a133832/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=f0mvJ21DhUCyWPSMQmhIAYCn1ZUq0UmLzeJKi8liPmk",
     sendTokenEmail:  "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e39aa42827e848779c9e43e1841c7ac9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=6GuETz2UvSpl7ARVaWVyy5W9UhJmYC65kd75WOuX_yw",
+    resolveHash:     "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8d03b25d1be5488d831500714222f5a8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=l8UAFi2UZSXX9t-oyYvdN-beYu5W6yd-4rdulrNhWQw",
+    generateHashes:  "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/917882caeeb94cee83db430b239df2a7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uRqtmmNlAFGUp_KeJPku7qur9SV9MWvCHytdNuYrpT8",
+    versendeLinks:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/0cea6b0ab3974d4691eaed7d6352bd5e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uQ9eR2wFlM9hdgNMVgCAffqgApxgOa0HHSRgyv9Jcq8",
+    deleteHashes:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c1616e6b803b4ed9aeaa7cb06fd7a47b/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2GGPktFiYGI3qVsjuLB-Um2ZYh33M2qXDTLWiNNu3ig",
     getWaehler:      "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/140675a2915542beb654587147996f24/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Q8uE7JhgKc5h2uh7WaxxtGDsRaLSG6pMBYI8xRSyzQQ",
     updateWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9bc3ceb7f0a74bb89c057bbb33bd68c8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=R984hgHmgR81MCSq7IrZiTodGenoVDoZAVr_OKYygwQ",
     deleteWaehler:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6fa995fcf2a548e48e9fe7d906f87a1d/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=GlBdpPF9RmzPItJWIbhSBWfOTYHBJoZYOQDcVz1q4uE",
@@ -441,10 +445,17 @@ function WahllokalAuswahl({ onSelect }) {
 
 function App() {
   const urlParams = new URL(window.location.href).searchParams;
+  const hashParam = urlParams.get("h");           // Online-Wahlcode-Ausgabe
   const ansicht = urlParams.get("ansicht") || "";
   const keinWahllokal = !urlParams.get("wahllokal");
   const [wahllokalID, setWahllokalID] = useState(urlParams.get("wahllokal") || "");
   const [view, setView] = useState(keinWahllokal && !ansicht ? "startseite" : ansicht === "ergebnisse" ? "ergebnisse" : ansicht === "leitung" ? "leitung" : ansicht === "superadmin" ? "superadmin" : ansicht === "praesentation" ? "praesentation" : "wahllokal");
+
+  // Hash-Link: Token-Ausgabe-Seite direkt rendern
+  if (hashParam) {
+    const evID = urlParams.get("wahl") || urlParams.get("eventID") || urlParams.get("wahllokal") || "";
+    return <TokenAusgabePage hash={hashParam} eventID={evID}/>;
+  }
   const [leitungAuth, setLeitungAuth] = useState(null);
   const [superadminAuth, setSuperadminAuth] = useState(false);
   const [appData, setAppData] = useState(null);
@@ -844,6 +855,233 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
         </div>
       )}
       <button style={{ ...S.btnSubmit, ...(isValid()?S.btnSubmitActive:S.btnSubmitDisabled) }} onClick={()=>setShowConfirm(true)} disabled={!isValid()}>{submitting?"Wird übermittelt…":"Stimme abgeben"}</button>
+    </div>
+  );
+}
+
+
+// ─── Token-Ausgabe-Seite (Hash-Link) ────────────────────────────────────────
+function TokenAusgabePage({ hash, eventID }) {
+  const [phase, setPhase] = useState("hinweis"); // hinweis | deck | result | fehler
+  const [code, setCode] = useState("");
+  const [fehler, setFehler] = useState("");
+  const [countdown, setCountdown] = useState(60);
+  const [codeHidden, setCodeHidden] = useState(false);
+  const countdownRef = useRef(null);
+  const isMobile = useIsMobile();
+
+  const offsets = [
+    { x:22, y:22, r:-7 }, { x:17, y:16, r:-4 }, { x:12, y:10, r:2 },
+    { x:8,  y:5,  r:-1.5 }, { x:4, y:2, r:1 }, { x:0, y:0, r:0 },
+  ];
+
+  function buildDeck() {
+    const d = document.getElementById("ta-deck");
+    if (!d) return;
+    d.innerHTML = "";
+    offsets.forEach((o, i) => {
+      const c = document.createElement("div");
+      c.id = `ta-card-${i}`;
+      c.style.cssText = `position:absolute;width:220px;height:138px;border-radius:18px 14px 20px 16px/16px 20px 14px 18px;border:0.5px solid #ddd;background:#f5f5f5;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:translateX(${o.x}px) translateY(${o.y}px) rotate(${o.r}deg);z-index:${i};transition:transform 0.45s cubic-bezier(.4,0,.2,1),opacity 0.4s;left:10px;top:10px;user-select:none;`;
+      c.innerHTML = `<span style="position:absolute;top:12px;font-size:8px;font-weight:500;letter-spacing:0.18em;color:#aaa;font-family:sans-serif;text-transform:uppercase;">Ev. Landeskirche in Baden</span><span style="position:absolute;bottom:12px;font-size:9px;color:#aaa;font-family:sans-serif;letter-spacing:0.1em;">Wahlcode</span>`;
+      // inner dashed border
+      const inner = document.createElement("div");
+      inner.style.cssText = "position:absolute;inset:14px;border-radius:10px 8px 12px 9px/9px 12px 8px 10px;border:1.5px dashed #ddd;";
+      c.appendChild(inner);
+      d.appendChild(c);
+    });
+  }
+
+  function startShuffle(afterFn) {
+    const cards = offsets.map((_, i) => document.getElementById(`ta-card-${i}`)).filter(Boolean);
+    let step = 0;
+    function cascade() {
+      if (step >= 6) { setTimeout(afterFn, 200); return; }
+      cards.forEach((c, i) => {
+        const o = offsets[i];
+        const dir = step % 2 === 0 ? 1 : -1;
+        setTimeout(() => {
+          c.style.transition = "transform 0.22s cubic-bezier(.4,0,.2,1)";
+          c.style.transform = `translateX(${o.x}px) translateY(${o.y + dir * 9}px) rotate(${o.r}deg)`;
+          setTimeout(() => { c.style.transform = `translateX(${o.x}px) translateY(${o.y}px) rotate(${o.r}deg)`; }, 200);
+        }, (cards.length - 1 - i) * 55);
+      });
+      step++;
+      setTimeout(cascade, 420);
+    }
+    cascade();
+  }
+
+  async function onZiehen() {
+    setPhase("deck");
+    setTimeout(() => { buildDeck(); setTimeout(() => startShuffle(doResolve), 300); }, 50);
+  }
+
+  async function doResolve() {
+    try {
+      const res = await callFlow("resolveHash", { hash, eventID });
+      if (res.status === "ok") {
+        setCode(res.tokenCode);
+        setPhase("result");
+        startCountdown();
+      } else if (res.status === "ungueltig") {
+        setFehler("Dieser Link ist bereits verwendet oder ungültig. Bitte wenden Sie sich an die Wahlleitung.");
+        setPhase("fehler");
+      } else if (res.status === "kein_token_verfuegbar") {
+        setFehler("Es sind keine Wahlcodes mehr verfügbar. Bitte wenden Sie sich an die Wahlleitung.");
+        setPhase("fehler");
+      } else {
+        setFehler("Unbekannter Fehler. Bitte wenden Sie sich an die Wahlleitung.");
+        setPhase("fehler");
+      }
+    } catch(e) {
+      setFehler("Verbindungsfehler. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.");
+      setPhase("fehler");
+    }
+  }
+
+  function startCountdown() {
+    let remaining = 60;
+    countdownRef.current = setInterval(() => {
+      remaining--;
+      setCountdown(remaining);
+      const bar = document.getElementById("ta-cd-bar");
+      if (bar) {
+        bar.style.width = Math.round(((60 - remaining) / 60) * 100) + "%";
+        if (remaining <= 15) bar.style.background = "#e24b4a";
+      }
+      if (remaining <= 0) {
+        clearInterval(countdownRef.current);
+        setCodeHidden(true);
+      }
+    }, 1000);
+  }
+
+  function copyCode() {
+    navigator.clipboard.writeText(code).catch(() => {});
+    const btn = document.getElementById("ta-copy-btn");
+    if (btn) { btn.textContent = "✓ Kopiert"; setTimeout(() => { btn.innerHTML = '<i class="ti ti-copy" aria-hidden="true"></i> Kopieren'; }, 2000); }
+  }
+
+  function printCode() {
+    const w = window.open("", "_blank", "width=420,height=280");
+    w.document.write(`<!DOCTYPE html><html><head><style>
+      body{font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;gap:10px;}
+      .org{font-family:sans-serif;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:#999;}
+      .code{font-size:30px;font-weight:bold;letter-spacing:0.18em;border:1px solid #ccc;padding:14px 28px;border-radius:8px;margin:6px 0;}
+      .sub{font-family:sans-serif;font-size:10px;color:#bbb;}
+    </style></head><body>
+      <div class="org">Evangelische Landeskirche in Baden</div>
+      <div class="org" style="margin-top:-6px;">Persönlicher Wahlcode</div>
+      <div class="code">${code}</div>
+      <div class="sub">Bitte aufbewahren — gilt für alle Abstimmungen des Wahltages.</div>
+      <script>window.onload=()=>window.print();<\/script>
+    </body></html>`);
+    w.document.close();
+  }
+
+  const cardStyle = { borderRadius:"18px 14px 20px 16px/16px 20px 14px 18px", border:`0.5px solid ${C.border}`, background:C.bgWhite, padding:"28px 28px 24px", maxWidth:320, margin:"0 auto", textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:14 };
+
+  return (
+    <div style={{ minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column" }}>
+      {/* Header */}
+      <div style={{ background:C.primary, padding:isMobile?"12px 16px":"16px 24px", textAlign:"center" }}>
+        <div style={{ fontSize:10, fontWeight:500, letterSpacing:"0.15em", color:"rgba(255,255,255,0.6)", textTransform:"uppercase", marginBottom:4 }}>Evangelische Landeskirche in Baden</div>
+        <div style={{ fontSize:isMobile?18:22, fontWeight:700, color:"#fff" }}>Wahlcode-Ausgabe</div>
+      </div>
+
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"32px 16px" }}>
+
+        {/* Phase 1: Hinweis + Button */}
+        {phase === "hinweis" && (
+          <div style={{ maxWidth:340, width:"100%" }}>
+            <div style={{ background:C.bgWhite, border:`0.5px solid ${C.border}`, borderRadius:12, padding:"14px 16px", fontSize:13, color:C.textLight, lineHeight:1.6, marginBottom:20 }}>
+              <div style={{ display:"flex", gap:10, alignItems:"flex-start", marginBottom:8 }}>
+                <i className="ti ti-ticket" aria-hidden="true" style={{ fontSize:16, marginTop:2, flexShrink:0 }}/>
+                <span>Ihr Wahlcode entspricht <strong style={{ color:C.text, fontWeight:500 }}>Ihrer persönlichen Stimmberechtigung</strong> — er ist vertraulich und darf nicht weitergegeben werden.</span>
+              </div>
+              <div style={{ display:"flex", gap:10, alignItems:"flex-start", marginBottom:8 }}>
+                <i className="ti ti-calendar-event" aria-hidden="true" style={{ fontSize:16, marginTop:2, flexShrink:0 }}/>
+                <span>Er gilt für <strong style={{ color:C.text, fontWeight:500 }}>alle Abstimmungen des Wahltages</strong>. Notieren oder drucken Sie ihn nach der Ausgabe.</span>
+              </div>
+              <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                <i className="ti ti-clock" aria-hidden="true" style={{ fontSize:16, marginTop:2, flexShrink:0 }}/>
+                <span>Der Code wird nach <strong style={{ color:C.text, fontWeight:500 }}>60 Sekunden ausgeblendet</strong> und kann nur einmal ausgegeben werden.</span>
+              </div>
+            </div>
+            <div style={{ display:"flex", justifyContent:"center" }}>
+              <button style={{ ...S.btn, ...S.btnPrimary, fontSize:15, padding:"12px 32px" }} onClick={onZiehen}>
+                <i className="ti ti-cards" aria-hidden="true"/> Wahlcode ziehen
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Phase 2: Deck */}
+        {phase === "deck" && (
+          <div style={{ textAlign:"center" }}>
+            <div style={{ width:240, height:200, margin:"0 auto", position:"relative", overflow:"visible" }}>
+              <div id="ta-deck"/>
+            </div>
+            <p style={{ fontSize:13, color:C.textLight, marginTop:32 }}>Karten werden gemischt…</p>
+          </div>
+        )}
+
+        {/* Phase 3: Code anzeigen */}
+        {phase === "result" && (
+          <div style={{ ...cardStyle, border:`0.5px solid ${C.border}` }}>
+            <div style={{ fontSize:10, fontWeight:500, letterSpacing:"0.15em", color:C.textLight, textTransform:"uppercase" }}>Ihr persönlicher Wahlcode</div>
+            <div style={{ fontFamily:"monospace", fontSize:26, fontWeight:500, letterSpacing:"0.14em", color:C.text, background:C.bg, borderRadius:"12px 10px 14px 11px/10px 14px 10px 12px", padding:"12px 24px", width:"100%", textAlign:"center", transition:"filter 1s, opacity 1s", filter:codeHidden?"blur(12px)":"none", opacity:codeHidden?0.1:1 }}>{code}</div>
+
+            {!codeHidden && (
+              <div style={{ width:"100%" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:C.textLight, marginBottom:4 }}>
+                  <span>Code wird ausgeblendet in</span>
+                  <span style={{ fontWeight:500 }}>{countdown}s</span>
+                </div>
+                <div style={{ width:"100%", height:4, background:C.border, borderRadius:2, overflow:"hidden" }}>
+                  <div id="ta-cd-bar" style={{ height:4, width:"0%", background:"#378add", borderRadius:2, transition:"width 1s linear, background 0.5s" }}/>
+                </div>
+              </div>
+            )}
+
+            {!codeHidden && <p style={{ fontSize:12, color:C.textLight, lineHeight:1.6, margin:0 }}>Notieren Sie diesen Code — er gilt für alle Abstimmungen des Wahltages.</p>}
+
+            {!codeHidden && (
+              <div style={{ display:"flex", gap:8, width:"100%" }}>
+                <button id="ta-copy-btn" style={{ ...S.btn, ...S.btnGhost, flex:1, justifyContent:"center" }} onClick={copyCode}>
+                  <i className="ti ti-copy" aria-hidden="true"/> Kopieren
+                </button>
+                <button style={{ ...S.btn, ...S.btnGhost, flex:1, justifyContent:"center" }} onClick={printCode}>
+                  <i className="ti ti-printer" aria-hidden="true"/> Drucken
+                </button>
+              </div>
+            )}
+
+            {codeHidden && (
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, fontSize:12, color:C.textLight }}>
+                <i className="ti ti-eye-off" aria-hidden="true" style={{ fontSize:22 }}/>
+                <span>Code wurde ausgeblendet.</span>
+                <span style={{ fontSize:11, color:C.textLight }}>Bei Problemen wenden Sie sich an die Wahlleitung.</span>
+              </div>
+            )}
+
+            <div style={{ fontSize:11, color:C.textLight, display:"flex", alignItems:"center", gap:5 }}>
+              <i className="ti ti-lock" aria-hidden="true" style={{ fontSize:12 }}/> Dieser Link ist nun ungültig
+            </div>
+          </div>
+        )}
+
+        {/* Phase 4: Fehler */}
+        {phase === "fehler" && (
+          <div style={{ ...cardStyle }}>
+            <i className="ti ti-circle-x" aria-hidden="true" style={{ fontSize:48, color:C.error }}/>
+            <div style={{ fontWeight:600, fontSize:16, color:C.error }}>Fehler</div>
+            <p style={{ fontSize:13, color:C.textLight, lineHeight:1.6, margin:0 }}>{fehler}</p>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
@@ -1724,20 +1962,14 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     if (!email || !email.includes("@")) return;
     setSaving(true); setFehler(null);
     try {
+      // 1. Wähler speichern
       await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
-      const token = generateToken();
-      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
-      const freshResult = await callFlow("getWaehler", { eventID });
-      const alleWaehler = (freshResult||[]).map(mapWaehler);
-      const neuerWaehler = alleWaehler.find(w=>w.email===email&&!w.tokenCode);
-      if (neuerWaehler) {
-        await callFlow("updateWaehler", { updates:[{ id:parseInt(neuerWaehler.id), tokenCode:token, status:"zugewiesen", tokenAktiv:true }] });
-        await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:[parseInt(neuerWaehler.id)] });
-        setWaehler(prev=>prev.map(w=>w.id===neuerWaehler.id?{...w,status:"versendet"}:w));
-        callFlow("updateWaehler",{ updates:[{ id:parseInt(neuerWaehler.id), tokenCode:token, status:"versendet", tokenAktiv:true }] }).catch(()=>{});
-      }
+      // 2. Hash generieren
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:[email] });
+      // 3. Link per Mail versenden
+      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
       setEmailInput(""); await loadWaehler();
-      setErfolg(`Wähler angelegt und E-Mail an ${email} versendet.`); setTimeout(()=>setErfolg(null),4000);
+      setErfolg(`Wähler angelegt und Wahlcode-Link an ${email} versendet.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -1746,18 +1978,11 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     if (lines.length===0) return;
     setSaving(true); setFehler(null);
     try {
+      // Wähler speichern + Hashes generieren (noch kein Versand)
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
-      const tokens = lines.map(()=>generateToken());
-      await callFlow("saveTokens", { eventID, tokens, typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
-      const freshResult = await callFlow("getWaehler", { eventID });
-      const alleWaehler = (freshResult||[]).map(mapWaehler);
-      const ohneToken = alleWaehler.filter(w=>w.status==="angelegt"||!w.tokenCode);
-      if (ohneToken.length > 0) {
-        const updates = ohneToken.slice(0, tokens.length).map((w,i)=>({ id:parseInt(w.id), tokenCode:tokens[i], status:"zugewiesen", tokenAktiv:true }));
-        await callFlow("updateWaehler", { updates });
-      }
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:lines });
       setCsvInput(""); await loadWaehler();
-      setErfolg(`${lines.length} Wähler importiert und Wahlcodes zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+      setErfolg(`${lines.length} Wähler importiert. Links können jetzt versendet werden.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -1767,46 +1992,46 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     setSaving(true); setFehler(null);
     try {
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
-      const tokens = lines.map(()=>generateToken());
-      await callFlow("saveTokens", { eventID, tokens, typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
-      const freshResult = await callFlow("getWaehler", { eventID });
-      const alleWaehler = (freshResult||[]).map(mapWaehler);
-      const ohneToken = alleWaehler.filter(w=>w.status==="angelegt"||!w.tokenCode);
-      if (ohneToken.length > 0) {
-        const updates = ohneToken.slice(0, tokens.length).map((w,i)=>({ id:parseInt(w.id), tokenCode:tokens[i], status:"zugewiesen", tokenAktiv:true }));
-        await callFlow("updateWaehler", { updates });
-        // E-Mails versenden
-        const zuSenden = ohneToken.slice(0, tokens.length);
-        await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:zuSenden.map(w=>parseInt(w.id)) });
-        callFlow("updateWaehler",{ updates:zuSenden.map((w,i)=>({ id:parseInt(w.id), tokenCode:tokens[i], status:"versendet", tokenAktiv:true })) }).catch(()=>{});
-      }
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:lines });
+      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
       setCsvInput(""); await loadWaehler();
-      setErfolg(`${lines.length} Wähler angelegt und E-Mails versendet.`); setTimeout(()=>setErfolg(null),4000);
+      setErfolg(`${lines.length} Wähler angelegt und Wahlcode-Links versendet.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
-  async function tokensZuweisen() { const ohneToken=waehler.filter(w=>w.status==="angelegt"); if(ohneToken.length===0){ setErfolg("Alle Wähler haben bereits einen Wahlcode."); return; } setSaving(true); setFehler(null); try{ const tokenListe=ohneToken.map(w=>({ id:parseInt(w.id), email:w.email, token:generateToken() })); await callFlow("saveTokens",{ eventID, tokens:tokenListe.map(t=>t.token), typ:"online", gueltigBis:new Date(gueltigBis).toISOString() }); await callFlow("updateWaehler",{ updates:tokenListe.map(t=>({ id:t.id, tokenCode:t.token, status:"zugewiesen" })) }); await loadWaehler(); setErfolg(`${ohneToken.length} Wahlcodes zugewiesen (gültig bis ${new Date(gueltigBis).toLocaleString("de-DE")}).`); setTimeout(()=>setErfolg(null),4000); }catch(e){ setFehler(e.message); } setSaving(false); }
+  async function tokensZuweisen() {
+    // Hashes für alle Wähler ohne Link generieren (ohne sofortigen Versand)
+    const ohneHash = waehler.filter(w=>w.status==="angelegt");
+    if(ohneHash.length===0){ setErfolg("Alle Wähler haben bereits einen Link erhalten."); return; }
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:ohneHash.map(w=>w.email) });
+      await loadWaehler();
+      setErfolg(`${ohneHash.length} Einmallinks generiert. Jetzt versenden.`); setTimeout(()=>setErfolg(null),4000);
+    } catch(e){ setFehler(e.message); }
+    setSaving(false);
+  }
   async function emailsVersenden() {
-    const zuSenden = waehler.filter(w=>w.status==="zugewiesen"&&w.tokenCode);
-    if(zuSenden.length===0){ setFehler("Keine Wähler mit zugewiesenem Wahlcode."); return; }
+    // Alle Wähler ohne versendeten Link
+    const zuSenden = waehler.filter(w=>w.status==="angelegt"||w.status==="zugewiesen");
+    if(zuSenden.length===0){ setFehler("Keine ausstehenden Wähler."); return; }
     setSending(true); setFehler(null);
     try {
-      await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:zuSenden.map(w=>parseInt(w.id)) });
-      // Lokal sofort aktualisieren — kein await um 502-Timeout zu vermeiden
-      setWaehler(prev=>prev.map(w=>zuSenden.find(s=>s.id===w.id)?{...w,status:"versendet"}:w));
-      // Im Hintergrund SharePoint aktualisieren (fire & forget)
-      callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet", tokenAktiv:true })) }).catch(()=>{});
-      setErfolg(`${zuSenden.length} E-Mails versendet.`); setTimeout(()=>setErfolg(null),3000);
+      const emails = zuSenden.map(w=>w.email);
+      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
+      setErfolg(`${zuSenden.length} Wahlcode-Links versendet.`); setTimeout(()=>setErfolg(null),3000);
+      await loadWaehler();
     } catch(e){ setFehler(e.message); }
     setSending(false);
   }
   async function einzelVersenden(w) {
     setSaving(true); setFehler(null);
     try {
-      await callFlow("sendTokenEmail",{ eventID, wahllokalName:wahllokal?.name||eventID, wahllokalURL:window.location.origin+window.location.pathname+"?wahllokal="+eventID, waehlerIDs:[parseInt(w.id)] });
-      setWaehler(prev=>prev.map(x=>x.id===w.id?{...x,status:"versendet"}:x));
-      callFlow("updateWaehler",{ updates:[{ id:parseInt(w.id), tokenCode:w.tokenCode, status:"versendet", tokenAktiv:true }] }).catch(()=>{});
-      setErfolg(`E-Mail an ${w.email} versendet.`); setTimeout(()=>setErfolg(null),3000);
+      // Neuen Hash generieren und Link versenden
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:[w.email] });
+      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
+      setErfolg(`Wahlcode-Link an ${w.email} versendet.`); setTimeout(()=>setErfolg(null),3000);
+      await loadWaehler();
     } catch(e){ setFehler(e.message); }
     setSaving(false);
   }
