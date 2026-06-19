@@ -1965,7 +1965,7 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
       // 1. Wähler speichern
       await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
       // 2. Hash generieren
-      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:[email] });
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:[email], gueltigBis:formatGueltigBis(gueltigBis) });
       // 3. Link per Mail versenden
       await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
       setEmailInput(""); await loadWaehler();
@@ -1980,7 +1980,7 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     try {
       // Wähler speichern + Hashes generieren (noch kein Versand)
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
-      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:lines });
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:lines, gueltigBis:formatGueltigBis(gueltigBis) });
       setCsvInput(""); await loadWaehler();
       setErfolg(`${lines.length} Wähler importiert. Links können jetzt versendet werden.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
@@ -1992,7 +1992,7 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     setSaving(true); setFehler(null);
     try {
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
-      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:lines });
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:lines, gueltigBis:formatGueltigBis(gueltigBis) });
       await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
       setCsvInput(""); await loadWaehler();
       setErfolg(`${lines.length} Wähler angelegt und Wahlcode-Links versendet.`); setTimeout(()=>setErfolg(null),4000);
@@ -2005,7 +2005,7 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     if(ohneHash.length===0){ setErfolg("Alle Wähler haben bereits einen Link erhalten."); return; }
     setSaving(true); setFehler(null);
     try {
-      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:ohneHash.map(w=>w.email) });
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:ohneHash.map(w=>w.email), gueltigBis:formatGueltigBis(gueltigBis) });
       await loadWaehler();
       setErfolg(`${ohneHash.length} Einmallinks generiert. Jetzt versenden.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e){ setFehler(e.message); }
@@ -2229,6 +2229,9 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
       <div style={S.card}>
         <div style={S.sectionLabel}>2 · E-Mail-Adressen importieren</div>
         <p style={{ color:C.textLight, fontSize:13, marginBottom:12 }}>Eine oder mehrere E-Mail-Adressen eingeben — komma- oder zeilengetrennt. Für jede Adresse wird automatisch ein Wahlcode und ein Einmallink generiert.</p>
+        <div style={{ marginBottom:16 }}>
+          <DateTimePicker label="Wahlcodes gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Wahlcodes sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
+        </div>
         <textarea
           style={{ ...S.input, height:90, resize:"vertical", marginBottom:10 }}
           value={emailInput}
