@@ -363,8 +363,9 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
     for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     const pos = Math.abs(h);
-    return chars[pos%32] + chars[(pos>>5)%32] + chars[(pos>>10)%32] + chars[(pos>>15)%32] +
-           "-" + chars[(pos>>20)%32] + chars[(pos>>25)%32] + chars[(n*7+pos)%32] + chars[(n*13+pos)%32];
+    return "KP-" + now.getFullYear() + "-" +
+           chars[pos%32] + chars[(pos>>5)%32] + chars[(pos>>10)%32] +
+           chars[(pos>>15)%32] + chars[(n*7+pos)%32] + chars[(n*13+pos)%32];
   }
   const kCode = kontrollcode(total, evID, druckDatumZeit);
 
@@ -375,16 +376,16 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
     if (!t) return '<div class="karte leer"></div>';
     const wahlURL = baseURL + "?wahllokal=" + evID;
     const qrHTML = mitQR
-      ? '<img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=' + encodeURIComponent(wahlURL) + '&color=1a2744&bgcolor=ffffff&margin=3" width="72" height="72" alt="QR-Code" style="margin:1mm 0;"/>'
+      ? '<img src="https://api.qrserver.com/v1/create-qr-code/?size=44x44&data=' + encodeURIComponent(wahlURL) + '&color=1a2744&bgcolor=ffffff&margin=2" width="44" height="44" alt="QR" style="display:block;margin:1.5mm auto 0;"/>'
       : '';
     return '<div class="karte">' +
       '<div class="logo">Evangelische Landeskirche in Baden</div>' +
       '<div class="wahllokal">' + wahllokalName + '</div>' +
-      '<div class="nummer">Nr. ' + (globalIdx + 1) + ' von ' + total + '</div>' +
       '<div class="label">Persönlicher Wahlcode</div>' +
       '<div class="token">' + t + '</div>' +
       qrHTML +
-      '<div class="hinweis">' + (mitQR ? 'QR-Code scannen oder Code eingeben &middot; Geheim halten' : 'Diesen Code geheim halten') + '</div>' +
+      '<div class="hinweis">' + (mitQR ? 'QR-Code scannen oder Code eingeben' : 'Diesen Code geheim halten') + '</div>' +
+      '<div class="nummer">Nr. ' + (globalIdx + 1) + ' von ' + total + '</div>' +
       '</div>';
   }
 
@@ -400,32 +401,32 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
     '</table>' +
     '<div class="deck-hinweis">Bitte vor Beginn der Wahl pr&uuml;fen:<br>' +
     'Anzahl der Wahlcodes = Anzahl der Stimmberechtigten.<br>' +
-    'Den Kontrollcode zum Nachweis aufbewahren.</div>' +
+    'Kontrollcode in der App unter Wahlcodes &rarr; Kontrollcode pr&uuml;fen vergleichen.</div>' +
     '</div>';
 
   const styles = `
-    @page { size: A4; margin: 10mm; }
+    @page { size: A4; margin: 8mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', Arial, sans-serif; }
-    .deckblatt { width: 190mm; height: 277mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-after: always; gap: 6mm; }
+    .deckblatt { width: 194mm; height: 281mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-after: always; gap: 5mm; }
     .deck-logo { font-size: 8pt; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #1a3a5c; }
-    .deck-title { font-size: 28pt; font-weight: 900; color: #1a3a5c; margin: 2mm 0; }
-    .deck-sub { font-size: 14pt; color: #5a6a7a; margin-bottom: 8mm; }
+    .deck-title { font-size: 26pt; font-weight: 900; color: #1a3a5c; margin: 2mm 0; }
+    .deck-sub { font-size: 13pt; color: #5a6a7a; margin-bottom: 7mm; }
     .deck-table { border-collapse: collapse; width: 120mm; }
-    .deck-table td { padding: 3mm 4mm; border-bottom: 1px solid #eee; font-size: 11pt; color: #333; }
-    .deck-table td:first-child { color: #888; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.08em; width: 50mm; }
-    .kcode { font-family: 'Courier New', monospace; font-size: 16pt; color: #1a3a5c; letter-spacing: 0.15em; }
-    .deck-hinweis { margin-top: 8mm; width: 120mm; padding: 4mm 6mm; background: #f8f9fa; border-left: 3px solid #1a3a5c; font-size: 9pt; color: #555; line-height: 1.6; }
-    .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
+    .deck-table td { padding: 2.5mm 4mm; border-bottom: 1px solid #eee; font-size: 10pt; color: #333; }
+    .deck-table td:first-child { color: #888; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em; width: 48mm; }
+    .kcode { font-family: 'Courier New', monospace; font-size: 14pt; color: #1a3a5c; letter-spacing: 0.12em; }
+    .deck-hinweis { margin-top: 7mm; width: 120mm; padding: 3.5mm 5mm; background: #f8f9fa; border-left: 3px solid #1a3a5c; font-size: 8.5pt; color: #555; line-height: 1.6; }
+    .page { width: 194mm; height: 281mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
     .page:last-child { page-break-after: auto; }
-    .karte { border: 1px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4mm; text-align: center; gap: 0.5mm; }
-    .logo { font-size: 6pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; }
-    .wahllokal { font-size: 7pt; color: #5a6a7a; }
-    .nummer { font-size: 6pt; color: #aaa; letter-spacing: 0.05em; margin: 0.5mm 0; }
-    .label { font-size: 6pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #5a6a7a; }
-    .token { font-size: 18pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.15em; color: #1a3a5c; margin: 1mm 0; }
-    .hinweis { font-size: 5.5pt; color: #bbb; }
-    .leer { border: 1px dashed #eee; }`;
+    .karte { border: 0.5px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2.5mm 3mm; text-align: center; }
+    .logo { font-size: 5.5pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 0.5mm; }
+    .wahllokal { font-size: 6.5pt; color: #5a6a7a; margin-bottom: 1mm; }
+    .label { font-size: 5.5pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #888; margin-bottom: 0.5mm; }
+    .token { font-size: 16pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.12em; color: #1a3a5c; margin: 1mm 0; }
+    .hinweis { font-size: 5pt; color: #ccc; margin-top: 1mm; }
+    .nummer { font-size: 5.5pt; color: #bbb; margin-top: 1.5mm; letter-spacing: 0.05em; }
+    .leer { border: 0.5px dashed #eee; }`;
 
   const pageHTML = pages.map(function(page, pi) {
     return '<div class="page">' +
@@ -1721,6 +1722,7 @@ function ArchivWahlen({ wahlen, onDelete }) {
 // FIX: OfflineTokenListe liest tokenList aus getDaten und mappt korrekt via mapToken
 function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=false, filterTyp=null }) {
   const [mitQR, setMitQR] = useState(false);
+  const [letzterKontrollcode, setLetzterKontrollcode] = useState(null);
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null); const [ausgewaehlt, setAusgewaehlt] = useState([]); const [loesching, setLoesching] = useState(false);
   const { confirm, dialog } = useConfirm();
@@ -1863,6 +1865,17 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
     <div style={{ ...S.card, marginTop:16 }}>
       {dialog}
       {loesching&&<div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:9990, display:"flex", alignItems:"center", justifyContent:"center" }}><div style={{ background:C.bgWhite, borderRadius:12, padding:"32px 40px", textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.18)" }}><div style={S.spinner}/><p style={{ marginTop:12, color:C.primary, fontWeight:600 }}>Wahlcodes werden gelöscht…</p></div></div>}
+      {letzterKontrollcode && (
+        <div style={{ ...S.alert, background:"#f0f4ff", border:`1px solid ${C.primary}`, marginBottom:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+          <div>
+            <div style={{ fontSize:11, color:C.textLight, marginBottom:2 }}>Kontrollcode letzter Druck</div>
+            <div style={{ fontFamily:"monospace", fontSize:16, fontWeight:700, color:C.primary, letterSpacing:"0.1em" }}>{letzterKontrollcode}</div>
+          </div>
+          <div style={{ fontSize:11, color:C.textLight, textAlign:"right" }}>
+            Mit Deckblatt des<br/>PDF-Ausdrucks vergleichen
+          </div>
+        </div>
+      )}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, gap:8, flexWrap:"wrap" }}>
         <div style={{ ...S.sectionLabel, minWidth:0, flex:1 }}>Wahlcode-Übersicht</div>
         <div style={{ display:"flex", gap:6, flexShrink:0 }}>
@@ -1872,6 +1885,15 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
                 const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet&&(!t.gueltigBis||parseInt(t.gueltigBis)>now)).map(t=>t.code);
                 if (druckWahlcodes.length===0) return;
                 generiereTokenPDF(druckWahlcodes, wahllokalName||eventID, eventID, true);
+                // Kontrollcode berechnen und anzeigen
+                const n = druckWahlcodes.length;
+                const now2 = new Date();
+                const dat = now2.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"})+", "+now2.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})+" Uhr";
+                let h=0; const s=n+"|"+eventID+"|"+dat;
+                for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}
+                const ch="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; const pos=Math.abs(h);
+                const kc="KP-"+now2.getFullYear()+"-"+ch[pos%32]+ch[(pos>>5)%32]+ch[(pos>>10)%32]+ch[(pos>>15)%32]+ch[(n*7+pos)%32]+ch[(n*13+pos)%32];
+                setLetzterKontrollcode(kc);
               }} disabled={loading} title="Aktive, unverwendete, gültige Wahlcodes als PDF drucken">
                 <i className="ti ti-printer" aria-hidden="true"/> PDF drucken ({(()=>{ const n=Math.floor(Date.now()/1000); return tokens.filter(t=>t.aktiv&&!t.verwendet&&(!t.gueltigBis||parseInt(t.gueltigBis)>n)).length; })()})
               </button>
