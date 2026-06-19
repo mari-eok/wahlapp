@@ -1676,7 +1676,7 @@ function ArchivWahlen({ wahlen, onDelete }) {
 }
 
 // FIX: OfflineTokenListe liest tokenList aus getDaten und mappt korrekt via mapToken
-function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=false }) {
+function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=false, filterTyp=null }) {
   const [mitQR, setMitQR] = useState(false);
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null); const [ausgewaehlt, setAusgewaehlt] = useState([]); const [loesching, setLoesching] = useState(false);
@@ -1686,7 +1686,8 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
     setLoading(true);
     try {
       const result = await callFlow("getDaten",{ eventID });
-      const rawTokens = result.tokenList||[];
+      const allRaw = result.tokenList||[];
+      const rawTokens = filterTyp ? allRaw.filter(t=>(t.TokenTyp||t.tokenTyp||"offline")===filterTyp) : allRaw;
       // Sortierung: neu → alt
       const mapped = rawTokens.map(mapToken).sort((a,b)=>{
         const da = a.erstellt ? new Date(a.erstellt) : new Date(0);
@@ -1828,8 +1829,8 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
                 const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet&&(!t.gueltigBis||parseInt(t.gueltigBis)>now)).map(t=>t.code);
                 if (druckWahlcodes.length===0) return;
                 generiereTokenPDF(druckWahlcodes, wahllokalName||eventID, eventID, true);
-              }} disabled={loading} title="Aktive, unverwendete Wahlcodes als PDF drucken">
-                <i className="ti ti-printer" aria-hidden="true"/> PDF drucken ({tokens.filter(t=>t.aktiv&&!t.verwendet).length})
+              }} disabled={loading} title="Aktive, unverwendete, gültige Wahlcodes als PDF drucken">
+                <i className="ti ti-printer" aria-hidden="true"/> PDF drucken ({(()=>{ const n=Math.floor(Date.now()/1000); return tokens.filter(t=>t.aktiv&&!t.verwendet&&(!t.gueltigBis||parseInt(t.gueltigBis)>n)).length; })()})
               </button>
           )}
           <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}><i className="ti ti-refresh" aria-hidden="true"/></button>
@@ -1972,7 +1973,7 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
       // 2. Hash generieren
       await callFlow("generateHashes", { apiKey:API.key, eventID, emails:[email], gueltigBis:formatGueltigBis(gueltigBis) });
       // 3. Link per Mail versenden
-      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
+      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE"), wahllokalUrl:window.location.origin+window.location.pathname+"?wahllokal="+eventID });
       setEmailInput(""); await loadWaehler();
       setErfolg(`Wähler angelegt und Wahlcode-Link an ${email} versendet.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
@@ -1998,7 +1999,7 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     try {
       await callFlow("saveWaehler", { eventID, waehler:lines.map(email=>({ email, token:"" })) });
       await callFlow("generateHashes", { apiKey:API.key, eventID, emails:lines, gueltigBis:formatGueltigBis(gueltigBis) });
-      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
+      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE"), wahllokalUrl:window.location.origin+window.location.pathname+"?wahllokal="+eventID });
       setCsvInput(""); await loadWaehler();
       setErfolg(`${lines.length} Wähler angelegt und Wahlcode-Links versendet.`); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
@@ -2021,7 +2022,7 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     if(zuSenden.length===0){ setFehler("Keine ausstehenden Links."); return; }
     setSending(true); setFehler(null);
     try {
-      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
+      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE"), wahllokalUrl:window.location.origin+window.location.pathname+"?wahllokal="+eventID });
       // Status auf "versendet" setzen
       await callFlow("updateWaehler", { updates:zuSenden.map(w=>({ id:parseInt(w.id), status:"versendet" })) });
       await callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), status:"versendet" })) });
@@ -2035,7 +2036,7 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     try {
       // Neuen Hash generieren und Link versenden
       await callFlow("generateHashes", { apiKey:API.key, eventID, emails:[w.email] });
-      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
+      await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE"), wahllokalUrl:window.location.origin+window.location.pathname+"?wahllokal="+eventID });
       setErfolg(`Wahlcode-Link an ${w.email} versendet.`); setTimeout(()=>setErfolg(null),3000);
       await loadWaehler();
     } catch(e){ setFehler(e.message); }
@@ -2096,6 +2097,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
 // Sortierung & Filter State
   const [sortWaehler, setSortWaehler] = useState({ col:"email", dir:"asc" });
   const [filterStatus, setFilterStatus] = useState("alle");
+  const [onlineTab, setOnlineTab] = useState("eingeladene");
 
   function toggleSort(col) {
     setSortWaehler(s => s.col===col ? { col, dir:s.dir==="asc"?"desc":"asc" } : { col, dir:"asc" });
@@ -2297,10 +2299,24 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
         </div>
       )}
 
-      {/* SCHRITT 3: Wähler-Liste */}
+      {/* SCHRITT 4: Eingeladene + Wahlcodes Tabs */}
       <div style={S.card}>
+        <div style={{ display:"flex", gap:0, marginBottom:16, borderBottom:`2px solid ${C.border}` }}>
+          <button onClick={()=>setOnlineTab("eingeladene")} style={{ background:"none", border:"none", cursor:"pointer", padding:"8px 16px", fontSize:13, fontWeight:600, color:onlineTab==="eingeladene"?C.primary:C.textLight, borderBottom:onlineTab==="eingeladene"?`2px solid ${C.primary}`:"2px solid transparent", marginBottom:-2 }}>
+            <i className="ti ti-users" aria-hidden="true"/> Eingeladene ({waehler.length})
+          </button>
+          <button onClick={()=>setOnlineTab("wahlcodes")} style={{ background:"none", border:"none", cursor:"pointer", padding:"8px 16px", fontSize:13, fontWeight:600, color:onlineTab==="wahlcodes"?C.primary:C.textLight, borderBottom:onlineTab==="wahlcodes"?`2px solid ${C.primary}`:"2px solid transparent", marginBottom:-2 }}>
+            <i className="ti ti-ticket" aria-hidden="true"/> Online-Wahlcodes
+          </button>
+        </div>
+
+        {onlineTab==="wahlcodes" && (
+          <OfflineTokenListe eventID={eventID} reloadTrigger={tokenReloadTrigger} wahllokalName={wahllokal?.name} isMobile={isMobile} filterTyp="online"/>
+        )}
+
+        {onlineTab==="eingeladene" && <div>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-          <div style={S.sectionLabel}>4 · Wähler-Liste</div>
+          <div style={S.sectionLabel}>Eingeladene</div>
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             {hatAuswahl&&kannLoeschen&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12 }} onClick={ausgewaehlteLoschen} disabled={saving}><i className="ti ti-trash" aria-hidden="true"/> Löschen ({ausgewaehlt.filter(id=>waehler.find(w=>w.id===id)?.status!=="versendet").length})</button>}
             {hatAuswahl&&kannDeaktivieren&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12 }} onClick={ausgewaehltDeaktivieren} disabled={saving}><i className="ti ti-ban" aria-hidden="true"/> Sperren</button>}
@@ -2339,16 +2355,17 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
                   </span>
                 </td>
                 <td style={S.td}>
-                  <div style={{ display:"flex", gap:4 }}>
+                  {w.status!=="abgeholt" && (
                     <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", ...S.btnGhost }} onClick={()=>einzelVersenden(w)} disabled={saving}>
-                      <i className="ti ti-mail" aria-hidden="true"/>{w.status==="versendet"||w.status==="abgeholt"?" Erneut":""}
+                      <i className="ti ti-mail" aria-hidden="true"/>{w.status==="versendet"?" Erneut senden":"Link senden"}
                     </button>
-                  </div>
+                  )}
                 </td>
               </tr>
             ))}</tbody>
           </table>
         )}
+        </div>}
       </div>
     </div>
   );
