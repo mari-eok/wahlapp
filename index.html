@@ -2236,8 +2236,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
           style={{ ...S.input, height:90, resize:"vertical", marginBottom:10 }}
           value={emailInput}
           onChange={e=>{ setEmailInput(e.target.value); setCsvInput(e.target.value); }}
-          placeholder={"max@ekiba.de
-anna@ekiba.de, tom@ekiba.de"}
+          placeholder={"max@ekiba.de\nanna@ekiba.de, tom@ekiba.de"}
         />
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>{
