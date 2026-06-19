@@ -2223,65 +2223,72 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}<button onClick={()=>setFehler(null)} style={{ float:"right", background:"none", border:"none", cursor:"pointer" }}><i className="ti ti-x" aria-hidden="true"/></button></div>}
       {erfolg&&<div style={{ ...S.alert, ...S.alertSuccess }}><i className="ti ti-circle-check" aria-hidden="true"/> {erfolg}</div>}
 
-      {/* SCHRITT 1: Gültigkeit */}
-      <div style={{ ...S.card, border:`2px solid ${C.primary}` }}>
-        <div style={{ ...S.sectionLabel, color:C.primary }}>1 · Wahlcode-Gültigkeit festlegen</div>
-        <p style={{ color:C.textLight, fontSize:13, marginBottom:16 }}>Legen Sie zuerst fest wie lange die Zugangscodes gültig sein sollen. Gilt für alle Wähler die Sie anlegen.</p>
-        <DateTimePicker label="Gültig bis" value={gueltigBis} onChange={setGueltigBis} hint="Wahlcodes sind nach diesem Zeitpunkt nicht mehr verwendbar."/>
-      </div>
 
-      {/* SCHRITT 2: Wähler anlegen */}
+
+      {/* SCHRITT 2: E-Mails importieren */}
       <div style={S.card}>
-        <div style={S.sectionLabel}>2 · Wähler anlegen</div>
-        <p style={{ color:C.textLight, fontSize:13, marginBottom:12 }}>Eine oder mehrere E-Mail-Adressen eingeben — komma- oder zeilengetrennt.</p>
+        <div style={S.sectionLabel}>2 · E-Mail-Adressen importieren</div>
+        <p style={{ color:C.textLight, fontSize:13, marginBottom:12 }}>Eine oder mehrere E-Mail-Adressen eingeben — komma- oder zeilengetrennt. Für jede Adresse wird automatisch ein Wahlcode und ein Einmallink generiert.</p>
         <textarea
           style={{ ...S.input, height:90, resize:"vertical", marginBottom:10 }}
           value={emailInput}
           onChange={e=>{ setEmailInput(e.target.value); setCsvInput(e.target.value); }}
-          placeholder={"max@ekiba.de\nanna@ekiba.de, tom@ekiba.de"}
+          placeholder={"max@ekiba.de
+anna@ekiba.de, tom@ekiba.de"}
         />
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>{
-            const lines = emailInput.split(/[\n\r,;]+/).map(l=>l.trim().toLowerCase()).filter(l=>l.includes("@"));
+          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>{
+            const lines = emailInput.split(/[
+
+,;]+/).map(l=>l.trim().toLowerCase()).filter(l=>l.includes("@"));
             if(lines.length===0) return;
             if(lines.length===1) addEmail(); else importCSV();
           }} disabled={saving||!emailInput.trim()}>
-            {saving?"…":"Anlegen"}
-          </button>
-          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>{
-            const lines = emailInput.split(/[\n\r,;]+/).map(l=>l.trim().toLowerCase()).filter(l=>l.includes("@"));
-            if(lines.length===0) return;
-            if(lines.length===1) addEmailUndVersenden(); else importCSVUndVersenden();
-          }} disabled={saving||!emailInput.trim()}>
-            {saving?"…":"Anlegen & sofort versenden"}
+            {saving ? "…" : <><i className="ti ti-upload" aria-hidden="true"/> Importieren</>}
           </button>
         </div>
-        <p style={{ fontSize:12, color:C.textLight, marginTop:8 }}>„Anlegen" speichert die Wähler ohne E-Mail — Sie können später gesammelt versenden. „Anlegen & sofort versenden" macht beides in einem Schritt.</p>
+        <p style={{ fontSize:12, color:C.textLight, marginTop:8 }}>Die Links werden noch nicht versendet — erst nach Ihrer Prüfung im nächsten Schritt.</p>
       </div>
 
-      {/* STATUS + SAMMELVERSAND */}
+      {/* SCHRITT 3: Prüfen & Versenden */}
       {waehler.length > 0 && (
-        <div style={{ ...S.card, padding:"16px 20px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:12 }}>
-            <div style={{ display:"flex", gap:20, flexWrap:"wrap" }}>
-              <span style={{ fontSize:14, color:C.text }}><strong>{waehler.length}</strong> <span style={{ color:C.textLight }}>Wähler</span></span>
-              <span style={{ fontSize:14, color:C.accent }}><strong>{versendet}</strong> <span style={{ color:C.textLight }}>versendet</span></span>
-              {zugewiesen>0&&<span style={{ fontSize:14, color:C.warning }}><strong>{zugewiesen}</strong> <span style={{ color:C.textLight }}>ausstehend</span></span>}
+        <div style={{ ...S.card, border:`2px solid ${angelegt>0?C.warning:C.accent}` }}>
+          <div style={{ ...S.sectionLabel, color:angelegt>0?C.warning:C.accent }}>3 · Prüfen & Links versenden</div>
+          <div style={{ display:"flex", gap:20, flexWrap:"wrap", marginBottom:16 }}>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:28, fontWeight:700, color:C.text }}>{waehler.length}</div>
+              <div style={{ fontSize:12, color:C.textLight }}>Wähler gesamt</div>
             </div>
-            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-              {zugewiesen>0&&<button style={{ ...S.btn, ...S.btnPrimary }} onClick={emailsVersenden} disabled={sending}>
-                {sending?"Wird versendet…":`Alle ausstehenden versenden (${zugewiesen})`}
-              </button>}
-              <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={loadWaehler} disabled={loading}><i className="ti ti-refresh" aria-hidden="true"/></button>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:28, fontWeight:700, color:C.warning }}>{angelegt}</div>
+              <div style={{ fontSize:12, color:C.textLight }}>Link ausstehend</div>
+            </div>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:28, fontWeight:700, color:C.accent }}>{versendet}</div>
+              <div style={{ fontSize:12, color:C.textLight }}>Link versendet</div>
             </div>
           </div>
+          {angelegt>0 && (
+            <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+              <button style={{ ...S.btn, ...S.btnPrimary }} onClick={emailsVersenden} disabled={sending}>
+                {sending ? "Wird versendet…" : <><i className="ti ti-send" aria-hidden="true"/> {angelegt} Einmallink{angelegt!==1?"s":""} versenden</>}
+              </button>
+              <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={loadWaehler} disabled={loading}><i className="ti ti-refresh" aria-hidden="true"/></button>
+            </div>
+          )}
+          {angelegt===0 && versendet>0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, color:C.accent, fontSize:13 }}>
+              <i className="ti ti-circle-check" aria-hidden="true"/>
+              Alle Links wurden versendet.
+            </div>
+          )}
         </div>
       )}
 
       {/* SCHRITT 3: Wähler-Liste */}
       <div style={S.card}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-          <div style={S.sectionLabel}>3 · Wähler-Liste</div>
+          <div style={S.sectionLabel}>4 · Wähler-Liste</div>
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             {hatAuswahl&&kannLoeschen&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12 }} onClick={ausgewaehlteLoschen} disabled={saving}><i className="ti ti-trash" aria-hidden="true"/> Löschen ({ausgewaehlt.filter(id=>waehler.find(w=>w.id===id)?.status!=="versendet").length})</button>}
             {hatAuswahl&&kannDeaktivieren&&<button style={{ ...S.btn, ...S.btnDanger, fontSize:12 }} onClick={ausgewaehltDeaktivieren} disabled={saving}><i className="ti ti-ban" aria-hidden="true"/> Sperren</button>}
