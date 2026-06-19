@@ -348,9 +348,9 @@ function generateToken() {
 }
 
 // ─── Token PDF Generierung (global) ─────────────────────────────────────────
-function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=false) {
-  const COLS = mitQR ? 2 : 2;
-  const ROWS = mitQR ? 4 : 6;
+function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
+  const COLS = 2;
+  const ROWS = 6;
   const PER_PAGE = COLS * ROWS;
   const baseURL = window.location.origin + window.location.pathname;
   const pages = [];
@@ -361,7 +361,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=false) {
     if (!t) return '<div class="karte leer"></div>';
     const wahlURL = `${baseURL}?wahllokal=${evID}`;
     const qrHTML = mitQR
-      ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(wahlURL)}&color=1a2744&bgcolor=ffffff&margin=6" width="120" height="120" alt="QR-Code" style="margin:2mm 0;"/>`
+      ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(wahlURL)}&color=1a2744&bgcolor=ffffff&margin=4" width="80" height="80" alt="QR-Code" style="margin:1mm 0;"/>`
       : '';
     return '<div class="karte">' +
       '<div class="logo">Evangelische Landeskirche in Baden</div>' +
@@ -378,7 +378,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=false) {
     @page { size: A4; margin: 10mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', Arial, sans-serif; }
-    .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(${ROWS}, 1fr); gap: 0; page-break-after: always; }
+    .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
     .page:last-child { page-break-after: auto; }
     .karte { border: 1px dashed #aaa; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6mm; text-align: center; }
     .logo { font-size: 7pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 2mm; }
@@ -1823,19 +1823,13 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
         <div style={{ ...S.sectionLabel, minWidth:0, flex:1 }}>Wahlcode-Übersicht</div>
         <div style={{ display:"flex", gap:6, flexShrink:0 }}>
           {tokens.filter(t=>t.aktiv&&!t.verwendet).length>0&&(
-            <>
-              <button style={{ ...S.btn, ...S.btnGhost, fontSize:12, gap:4 }} onClick={()=>setMitQR(v=>!v)} title="QR-Code auf Wahlcodes ein-/ausblenden">
-                <i className={`ti ${mitQR?"ti-qrcode":"ti-qrcode-off"}`} aria-hidden="true"/>
-                {mitQR?"Mit QR-Code":"Ohne QR-Code"}
-              </button>
-              <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
+            <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
                 const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
                 if (druckWahlcodes.length===0) return;
-                generiereTokenPDF(druckWahlcodes, wahllokalName||eventID, eventID, mitQR);
+                generiereTokenPDF(druckWahlcodes, wahllokalName||eventID, eventID, true);
               }} disabled={loading} title="Aktive, unverwendete Wahlcodes als PDF drucken">
                 <i className="ti ti-printer" aria-hidden="true"/> PDF drucken ({tokens.filter(t=>t.aktiv&&!t.verwendet).length})
               </button>
-            </>
           )}
           <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}><i className="ti ti-refresh" aria-hidden="true"/></button>
         </div>
@@ -1961,14 +1955,9 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     setSaving(true); setFehler(null);
     try {
       await callFlow("saveWaehler", { eventID, waehler:[{ email, token:"" }] });
-      const token = generateToken();
-      await callFlow("saveTokens", { eventID, tokens:[token], typ:"online", gueltigBis:formatGueltigBis(gueltigBis) });
-      const freshResult = await callFlow("getWaehler", { eventID });
-      const alleWaehler = (freshResult||[]).map(mapWaehler);
-      const neuerWaehler = alleWaehler.find(w=>w.email===email&&!w.tokenCode);
-      if (neuerWaehler) await callFlow("updateWaehler", { updates:[{ id:parseInt(neuerWaehler.id), tokenCode:token, status:"zugewiesen", tokenAktiv:true }] });
+      await callFlow("generateHashes", { apiKey:API.key, eventID, emails:[email], gueltigBis:formatGueltigBis(gueltigBis) });
       setEmailInput(""); await loadWaehler();
-      setErfolg(`Wähler angelegt, Wahlcode ${token} zugewiesen.`); setTimeout(()=>setErfolg(null),4000);
+      setErfolg("Wähler angelegt. Link kann jetzt versendet werden."); setTimeout(()=>setErfolg(null),4000);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -2027,15 +2016,14 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     setSaving(false);
   }
   async function emailsVersenden() {
-    const zuSenden = waehler.filter(w=>w.status==="angelegt"||w.status==="zugewiesen");
-    if(zuSenden.length===0){ setFehler("Keine ausstehenden Wähler."); return; }
+    const zuSenden = waehler.filter(w=>w.status==="angelegt");
+    if(zuSenden.length===0){ setFehler("Keine ausstehenden Links."); return; }
     setSending(true); setFehler(null);
     try {
       await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
       // Status auf "versendet" setzen
       await callFlow("updateWaehler", { updates:zuSenden.map(w=>({ id:parseInt(w.id), status:"versendet" })) });
-      setWaehler(prev=>prev.map(w=>zuSenden.find(s=>s.id===w.id)?{...w,status:"versendet"}:w));
-      callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), status:"versendet" })) }).catch(()=>{});
+      await callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), status:"versendet" })) });
       setErfolg(`${zuSenden.length} Wahlcode-Links versendet.`); setTimeout(()=>setErfolg(null),3000);
       await loadWaehler();
     } catch(e){ setFehler(e.message); }
