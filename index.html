@@ -348,19 +348,37 @@ function generateToken() {
 }
 
 // ─── Token PDF Generierung (global) ─────────────────────────────────────────
-function generiereTokenPDF(tokens, wahllokalName, evID) {
-  const COLS = 2, ROWS = 6, PER_PAGE = COLS * ROWS;
+function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=false) {
+  const COLS = mitQR ? 2 : 2;
+  const ROWS = mitQR ? 4 : 6;
+  const PER_PAGE = COLS * ROWS;
+  const baseURL = window.location.origin + window.location.pathname;
   const pages = [];
   for (let i = 0; i < tokens.length; i += PER_PAGE) {
     pages.push(tokens.slice(i, i + PER_PAGE));
   }
+  const karteHTML = (t) => {
+    if (!t) return '<div class="karte leer"></div>';
+    const wahlURL = `${baseURL}?wahllokal=${evID}`;
+    const qrHTML = mitQR
+      ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(wahlURL)}&color=1a2744&bgcolor=ffffff&margin=6" width="120" height="120" alt="QR-Code" style="margin:2mm 0;"/>`
+      : '';
+    return '<div class="karte">' +
+      '<div class="logo">Evangelische Landeskirche in Baden</div>' +
+      '<div class="wahllokal">' + wahllokalName + '</div>' +
+      '<div class="label">Persönlicher Wahlcode</div>' +
+      '<div class="token">' + t + '</div>' +
+      qrHTML +
+      (mitQR ? '<div class="hinweis">QR-Code scannen oder Code manuell eingeben</div>' : '<div class="hinweis">Diesen Code geheim halten</div>') +
+      '</div>';
+  };
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Wahlcodes ${wahllokalName}</title>
   <style>
     @page { size: A4; margin: 10mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', Arial, sans-serif; }
-    .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
+    .page { width: 190mm; height: 277mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(${ROWS}, 1fr); gap: 0; page-break-after: always; }
     .page:last-child { page-break-after: auto; }
     .karte { border: 1px dashed #aaa; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6mm; text-align: center; }
     .logo { font-size: 7pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 2mm; }
@@ -373,17 +391,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID) {
   </head><body>
   ${pages.map(page => `
     <div class="page">
-      ${Array.from({length: PER_PAGE}, (_, i) => {
-        const t = page[i];
-        if (!t) return '<div class="karte leer"></div>';
-        return '<div class="karte">' +
-          '<div class="logo">Evangelische Landeskirche in Baden</div>' +
-          '<div class="wahllokal">' + wahllokalName + '</div>' +
-          '<div class="label">Persönlicher Wahlcode</div>' +
-          '<div class="token">' + t + '</div>' +
-          '<div class="hinweis">Diesen Code geheim halten</div>' +
-          '</div>';
-      }).join('')}
+      ${Array.from({length: PER_PAGE}, (_, i) => karteHTML(page[i])).join('')}
     </div>`).join('')}
   </body></html>`;
   const blob = new Blob([html], { type: "text/html" });
@@ -1669,6 +1677,7 @@ function ArchivWahlen({ wahlen, onDelete }) {
 
 // FIX: OfflineTokenListe liest tokenList aus getDaten und mappt korrekt via mapToken
 function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=false }) {
+  const [mitQR, setMitQR] = useState(false);
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
   const [erfolg, setErfolg] = useState(null); const [ausgewaehlt, setAusgewaehlt] = useState([]); const [loesching, setLoesching] = useState(false);
   const { confirm, dialog } = useConfirm();
@@ -1814,13 +1823,19 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
         <div style={{ ...S.sectionLabel, minWidth:0, flex:1 }}>Wahlcode-Übersicht</div>
         <div style={{ display:"flex", gap:6, flexShrink:0 }}>
           {tokens.filter(t=>t.aktiv&&!t.verwendet).length>0&&(
-            <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
-              const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
-              if (druckWahlcodes.length===0) return;
-              generiereTokenPDF(druckWahlcodes, wahllokalName||eventID, eventID);
-            }} disabled={loading} title="Aktive, unverwendete Wahlcodes als PDF drucken">
-              <i className="ti ti-printer" aria-hidden="true"/> PDF drucken ({tokens.filter(t=>t.aktiv&&!t.verwendet).length})
-            </button>
+            <>
+              <button style={{ ...S.btn, ...S.btnGhost, fontSize:12, gap:4 }} onClick={()=>setMitQR(v=>!v)} title="QR-Code auf Wahlcodes ein-/ausblenden">
+                <i className={`ti ${mitQR?"ti-qrcode":"ti-qrcode-off"}`} aria-hidden="true"/>
+                {mitQR?"Mit QR-Code":"Ohne QR-Code"}
+              </button>
+              <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={()=>{
+                const druckWahlcodes = gefiltert.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
+                if (druckWahlcodes.length===0) return;
+                generiereTokenPDF(druckWahlcodes, wahllokalName||eventID, eventID, mitQR);
+              }} disabled={loading} title="Aktive, unverwendete Wahlcodes als PDF drucken">
+                <i className="ti ti-printer" aria-hidden="true"/> PDF drucken ({tokens.filter(t=>t.aktiv&&!t.verwendet).length})
+              </button>
+            </>
           )}
           <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}><i className="ti ti-refresh" aria-hidden="true"/></button>
         </div>
@@ -2012,13 +2027,15 @@ function LeitungWaehler({ appData, eventID, isMobile=false }) {
     setSaving(false);
   }
   async function emailsVersenden() {
-    // Alle Wähler ohne versendeten Link
     const zuSenden = waehler.filter(w=>w.status==="angelegt"||w.status==="zugewiesen");
     if(zuSenden.length===0){ setFehler("Keine ausstehenden Wähler."); return; }
     setSending(true); setFehler(null);
     try {
-      const emails = zuSenden.map(w=>w.email);
       await callFlow("versendeLinks", { apiKey:API.key, eventID, basisUrl:window.location.origin+window.location.pathname, wahlTitel:wahllokal?.name||eventID, wahlDatum:new Date().toLocaleDateString("de-DE") });
+      // Status auf "versendet" setzen
+      await callFlow("updateWaehler", { updates:zuSenden.map(w=>({ id:parseInt(w.id), status:"versendet" })) });
+      setWaehler(prev=>prev.map(w=>zuSenden.find(s=>s.id===w.id)?{...w,status:"versendet"}:w));
+      callFlow("updateWaehler",{ updates:zuSenden.map(w=>({ id:parseInt(w.id), status:"versendet" })) }).catch(()=>{});
       setErfolg(`${zuSenden.length} Wahlcode-Links versendet.`); setTimeout(()=>setErfolg(null),3000);
       await loadWaehler();
     } catch(e){ setFehler(e.message); }
@@ -2102,10 +2119,10 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
   }
 
   const statusFilterBtns = [
-    { id:"alle", label:`Alle (${waehler.length})` },
-    { id:"zugewiesen", label:`Bereit (${waehler.filter(w=>w.status==="zugewiesen").length})` },
-    { id:"versendet", label:`Versendet (${waehler.filter(w=>w.status==="versendet").length})` },
-    { id:"angelegt", label:`Ohne Wahlcode (${waehler.filter(w=>w.status==="angelegt").length})` },
+    { id:"alle",       label:`Alle (${waehler.length})` },
+    { id:"versendet",  label:`Versendet (${waehler.filter(w=>w.status==="versendet").length})` },
+    { id:"abgeholt",   label:`Abgeholt (${waehler.filter(w=>w.status==="abgeholt").length})` },
+    { id:"angelegt",   label:`Ausstehend (${waehler.filter(w=>w.status==="angelegt").length})` },
   ];
 
   const gefilterteWaehler = waehler
@@ -2210,8 +2227,8 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
   );
 
   const angelegt=waehler.filter(w=>w.status==="angelegt").length;
-  const zugewiesen=waehler.filter(w=>w.status==="zugewiesen").length;
   const versendet=waehler.filter(w=>w.status==="versendet").length;
+  const abgeholt=waehler.filter(w=>w.status==="abgeholt").length;
 
   return (
     <div>
@@ -2264,8 +2281,12 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
               <div style={{ fontSize:12, color:C.textLight }}>Link ausstehend</div>
             </div>
             <div style={{ textAlign:"center" }}>
-              <div style={{ fontSize:28, fontWeight:700, color:C.accent }}>{versendet}</div>
+              <div style={{ fontSize:28, fontWeight:700, color:C.primary }}>{versendet}</div>
               <div style={{ fontSize:12, color:C.textLight }}>Link versendet</div>
+            </div>
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:28, fontWeight:700, color:C.accent }}>{abgeholt}</div>
+              <div style={{ fontSize:12, color:C.textLight }}>Code abgeholt</div>
             </div>
           </div>
           {angelegt>0 && (
@@ -2309,7 +2330,6 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
             <thead><tr>
               <th style={{ ...S.th, width:40 }}><input type="checkbox" checked={alleAusgewaehlt} onChange={toggleAlle}/></th>
               <SortTh col="email" label="E-Mail"/>
-              <SortTh col="token" label="Wahlcode"/>
               <SortTh col="status" label="Status"/>
               <th style={S.th}>Aktion</th>
             </tr></thead>
@@ -2317,24 +2337,21 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
               <tr key={w.id} style={{ background:ausgewaehlt.includes(w.id)?"#f0f4ff":"transparent" }}>
                 <td style={S.td}><input type="checkbox" checked={ausgewaehlt.includes(w.id)} onChange={()=>toggleAuswahl(w.id)}/></td>
                 <td style={S.td}>{w.email}</td>
-                <td style={{ ...S.td, fontFamily:"monospace", fontWeight:700, letterSpacing:"0.08em" }}>
-                  {w.tokenCode
-                    ? <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                        <span style={{ textDecoration:w.tokenAktiv===false?"line-through":"none", opacity:w.tokenAktiv===false?0.5:1 }}>{w.tokenCode}</span>
-                        {w.tokenAktiv===false&&<span style={{ ...S.badge, background:C.errorBg, color:C.error, fontSize:10 }}>gesperrt</span>}
-                      </div>
-                    : <span style={{ color:C.textLight }}>—</span>}
-                </td>
                 <td style={S.td}>
-                  <span style={{ ...S.badge, ...(w.status==="versendet"?S.badgeGreen:w.status==="zugewiesen"?S.badgeOrange:S.badgeGray) }}>
-                    {w.status==="versendet"?"versendet":w.status==="zugewiesen"?"zugewiesen":"angelegt"}
+                  <span style={{ ...S.badge,
+                    ...(w.status==="abgeholt"?S.badgeGreen:
+                        w.status==="versendet"?S.badgeOrange:
+                        S.badgeGray) }}>
+                    {w.status==="abgeholt"?<><i className="ti ti-circle-check" aria-hidden="true"/> abgeholt</>:
+                     w.status==="versendet"?<><i className="ti ti-mail" aria-hidden="true"/> versendet</>:
+                     <><i className="ti ti-clock" aria-hidden="true"/> ausstehend</>}
                   </span>
-                  {w.verwendet&&<span style={{ ...S.badge, ...S.badgeGreen, fontSize:10, marginLeft:4 }}><i className="ti ti-check" aria-hidden="true"/> abgestimmt</span>}
                 </td>
                 <td style={S.td}>
                   <div style={{ display:"flex", gap:4 }}>
-                    {w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:w.tokenAktiv===false?C.success:C.error, border:`1px solid ${w.tokenAktiv===false?C.success:C.error}` }} onClick={()=>einzelTokenToggle(w)} disabled={saving}>{w.tokenAktiv===false?"Aktivieren":"Sperren"}</button>}
-                    {w.tokenCode&&<button style={{ ...S.btn, fontSize:11, padding:"3px 9px", background:"transparent", color:C.primary, border:`1px solid ${C.primary}` }} onClick={()=>einzelVersenden(w)} disabled={saving}><i className="ti ti-mail" aria-hidden="true"/>{w.status==="versendet"?" Erneut":""}</button>}
+                    <button style={{ ...S.btn, fontSize:11, padding:"3px 9px", ...S.btnGhost }} onClick={()=>einzelVersenden(w)} disabled={saving}>
+                      <i className="ti ti-mail" aria-hidden="true"/>{w.status==="versendet"||w.status==="abgeholt"?" Erneut":""}
+                    </button>
                   </div>
                 </td>
               </tr>
