@@ -1262,18 +1262,15 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
     if (!form.datum || !form.anzahl || parseInt(form.anzahl) < 1) return;
     setSaving(true); setFehler(null);
     try {
-      const res = await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
-      // Direkt in den neuen Wahltag springen
-      const neuerWahltag = {
-        id: res.id || Date.now().toString(),
-        datum: form.datum,
-        eventID,
-        anzahlStimmberechtigte: parseInt(form.anzahl),
-        tokensGeneriert: false,
-        kontrollcode: null,
-      };
+      await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
+      // Wahltage neu laden dann direkt reinspringen
+      const res2 = await callFlow("getDaten", { eventID, wahllokalID: eventID });
+      const neuerWahltag = (res2?.wahltage||[])
+        .map(wt => ({ id:String(wt.ID||wt.id), datum:wt.Datum||wt.datum, eventID:wt.EventID||wt.eventID, anzahlStimmberechtigte:wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0, tokensGeneriert:wt.TokensGeneriert||false, kontrollcode:wt.Kontrollcode||null }))
+        .find(wt => wt.datum?.slice(0,10) === form.datum);
       setShowForm(false); setForm({ datum:"", anzahl:"" });
-      onSelect(neuerWahltag);
+      if (neuerWahltag) onSelect(neuerWahltag);
+      else await laden();
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -1357,14 +1354,14 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
                    onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.1)"}
                    onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
                    <div>
-                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
                        <span style={{ ...S.badge, ...si.badge }}>{si.label}</span>
-                       {wt.tokensGeneriert && <span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}><i className="ti ti-ticket" aria-hidden="true"/> Tokens generiert</span>}
+                       {wt.tokensGeneriert && <span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}><i className="ti ti-ticket" aria-hidden="true"/> {wt.anzahlStimmberechtigte} Tokens</span>}
                      </div>
-                     <div style={{ fontWeight:700, fontSize:16, color:C.text }}>{datum}</div>
-                     <div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>
-                       {wt.anzahlStimmberechtigte} Stimmberechtigte
-                       {wt.kontrollcode && <span style={{ marginLeft:8, fontFamily:"monospace", color:C.primary }}>{wt.kontrollcode}</span>}
+                     <div style={{ fontWeight:700, fontSize:18, color:C.text }}>{datum||"—"}</div>
+                     <div style={{ fontSize:13, color:C.textLight, marginTop:3, display:"flex", gap:12, flexWrap:"wrap" }}>
+                       <span><i className="ti ti-users" aria-hidden="true" style={{marginRight:4}}/>{wt.anzahlStimmberechtigte||"—"} Stimmberechtigte</span>
+                       {wt.kontrollcode && <span style={{ fontFamily:"monospace", color:C.primary }}>{wt.kontrollcode}</span>}
                      </div>
                    </div>
                    <i className="ti ti-chevron-right" aria-hidden="true" style={{ fontSize:20, color:C.textLight }}/>
@@ -1380,7 +1377,7 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
 }
 
 function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange, isMobile }) {
-  const [schritt, setSchritt] = useState("wahlen");
+  const [schritt, setSchritt] = useState("uebersicht");
   const wahllokal = appData.wahllokale.find(w => w.eventID===eventID);
   const [tokenReloadTrigger, setTokenReloadTrigger] = useState(0);
 
@@ -1389,9 +1386,9 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
   const istHeute = wahltag.datum?.slice(0,10) === today;
 
   const schritte = [
+    { id:"uebersicht",   label:"Übersicht",     icon:"ti-layout-dashboard" },
     { id:"wahlen",       label:"Wahlen",        icon:"ti-box-multiple" },
     { id:"tagestoken",   label:"Tagestoken",    icon:"ti-ticket" },
-    { id:"durchfuehrung",label:"Durchführung",  icon:"ti-player-play" },
     { id:"ergebnisse",   label:"Ergebnisse",    icon:"ti-chart-bar" },
   ];
 
@@ -1399,9 +1396,9 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
   const wahlenCount = appData.wahlen.filter(w=>w.eventID===eventID).length;
 
   function schrittStatus(id) {
+    if (id==="uebersicht") return istHeute ? "active" : "open";
     if (id==="wahlen") return wahlenCount > 0 ? "done" : "open";
     if (id==="tagestoken") return wahltag.tokensGeneriert ? "done" : "open";
-    if (id==="durchfuehrung") return istHeute ? "active" : "open";
     return "open";
   }
 
@@ -1450,6 +1447,40 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
 
       {/* Content */}
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"16px 12px":"24px 16px" }}>
+        {schritt==="uebersicht" && (
+          <div>
+            <div style={{ ...S.card, marginBottom:16, borderLeft:`4px solid ${istHeute?C.accent:C.border}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:12 }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:600, letterSpacing:"0.1em", textTransform:"uppercase", color:istHeute?C.accent:C.textLight, marginBottom:4 }}>
+                    {istHeute ? "● Heute" : "Wahltag"}
+                  </div>
+                  <div style={{ fontSize:20, fontWeight:700, color:C.text }}>
+                    {wahltag.datum ? new Date(wahltag.datum).toLocaleDateString("de-DE", { weekday:"long", day:"2-digit", month:"long", year:"numeric" }) : "—"}
+                  </div>
+                  <div style={{ fontSize:13, color:C.textLight, marginTop:6, display:"flex", gap:16, flexWrap:"wrap" }}>
+                    <span><i className="ti ti-users" aria-hidden="true" style={{marginRight:4}}/>{wahltag.anzahlStimmberechtigte} Stimmberechtigte</span>
+                    {wahltag.tokensGeneriert
+                      ? <span style={{ color:C.accent }}><i className="ti ti-ticket" aria-hidden="true" style={{marginRight:4}}/>Tagestoken generiert · {wahltag.kontrollcode&&<span style={{ fontFamily:"monospace" }}>{wahltag.kontrollcode}</span>}</span>
+                      : <span style={{ color:C.warning }}><i className="ti ti-alert-triangle" aria-hidden="true" style={{marginRight:4}}/>Noch keine Tagestoken</span>
+                    }
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                  {!wahltag.tokensGeneriert && (
+                    <button style={{ ...S.btn, ...S.btnWarning }} onClick={()=>setSchritt("tagestoken")}>
+                      <i className="ti ti-ticket" aria-hidden="true"/> Tagestoken generieren
+                    </button>
+                  )}
+                  <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSchritt("wahlen")}>
+                    <i className="ti ti-box-multiple" aria-hidden="true"/> Wahlen
+                  </button>
+                </div>
+              </div>
+            </div>
+            <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>
+          </div>
+        )}
         {schritt==="wahlen" && (
           <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}
             initialStichwahl={window._stichwahl} onStichwahl={()=>{window._stichwahl=null;}}
@@ -1458,9 +1489,6 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
         {schritt==="tagestoken" && (
           <LeitungTagestoken appData={appData} eventID={eventID} wahltag={wahltag} onDataChange={onDataChange} isMobile={isMobile}
             onTokensChanged={()=>setTokenReloadTrigger(t=>t+1)}/>
-        )}
-        {schritt==="durchfuehrung" && (
-          <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>
         )}
         {schritt==="ergebnisse" && (
           <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setSchritt} isMobile={isMobile}/>
@@ -3602,7 +3630,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
           <div style={S.formGroup}>
             <label style={S.label}>Startzeit</label>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <input type="time" style={{ ...S.input, width:120 }}
+              <input type="time" style={{ ...S.input, width:120 }} step="300"
                 value={f.startzeit ? (f.startzeit.includes("T") ? f.startzeit.slice(11,16) : f.startzeit.slice(0,5)) : ""}
                 onChange={e=>{
                   const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
@@ -3622,7 +3650,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
             const startVal = f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):"";
             return (<>
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <input type="time" style={{ ...S.input, width:120 }}
+                <input type="time" style={{ ...S.input, width:120 }} step="300"
                   value={f.endzeit ? (f.endzeit.includes("T") ? f.endzeit.slice(11,16) : f.endzeit.slice(0,5)) : ""}
                   onChange={e=>{
                     const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
