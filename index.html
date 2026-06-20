@@ -533,7 +533,7 @@ function App() {
       const wahlen = (raw.wahlen || []).map(mapWahl);
       const optionen = (raw.optionen || []).map(mapOption);
       wahlen.forEach(w => { w.optionen = optionen.filter(o => o.wahlID === w.id).sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }); });
-      const wahltage = (raw.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id), titel:wt.Title||wt.titel, datum:wt.Datum||wt.datum, eventID:wt.EventID||wt.eventID, anzahlStimmberechtigte:wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0, tokensGeneriert:wt.TokensGeneriert||wt.tokensGeneriert||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null }));
+      const wahltage = (raw.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id||""), titel:wt.Title||wt.titel||"", datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||wt.tokensGeneriert===true||wt.TokensGeneriert==="true"||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null }));
       setAppData({ wahllokale, wahlen, optionen, wahltage, tokens: [], tokenCount: raw.tokenCount || 0 });
       setLoadError(null);
     } catch (e) { if (!appData) { setAppData(FALLBACK_DATA); setLoadError("cors_fallback"); } }
@@ -1250,7 +1250,7 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
     setLoading(true);
     try {
       const res = await callFlow("getDaten", { eventID, wahllokalID: eventID });
-      const liste = (res?.wahltage || []).sort((a,b) => b.datum?.localeCompare(a.datum));
+      const liste = (res?.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id||""), datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||wt.tokensGeneriert===true||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null })).sort((a,b) => b.datum?.localeCompare(a.datum));
       setWahltage(liste);
     } catch(e) { setFehler(e.message); }
     setLoading(false);
