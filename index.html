@@ -1410,7 +1410,12 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
   ];
 
   // Status pro Schritt
-  const wahlenCount = appData.wahlen.filter(w=>w.eventID===eventID).length;
+  const wahlenCount = appData.wahlen.filter(w=>{
+    if (w.eventID!==eventID) return false;
+    if (!wahltag?.datum) return true;
+    const wDatum = w.startzeit ? new Date(w.startzeit).toLocaleDateString("sv-SE") : null;
+    return wDatum === wahltag.datum.slice(0,10);
+  }).length;
 
   function schrittStatus(id) {
     if (id==="uebersicht") return istHeute ? "active" : "open";
@@ -2036,6 +2041,15 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
         return;
       }
       let startzeitISO = f.startzeit;
+      // Sicherstellen dass Startzeit ein vollständiges Datum+Uhrzeit hat
+      if (!startzeitISO || startzeitISO.endsWith("T") || startzeitISO.length < 13) {
+        // Fehlende Uhrzeit: Wahltag-Datum + naechsteHalbeStunde
+        const datum = wahltag?.datum?.slice(0,10) || new Date().toLocaleDateString("sv-SE");
+        const jetzt = new Date();
+        const m = jetzt.getMinutes() < 30 ? "30" : "00";
+        const h = jetzt.getMinutes() < 30 ? String(jetzt.getHours()).padStart(2,"0") : String(jetzt.getHours()+1).padStart(2,"0");
+        startzeitISO = datum + "T" + h + ":" + m;
+      }
       if (startzeitISO && !startzeitISO.includes("Z") && !startzeitISO.includes("+")) {
         const parsedStart = parseLocalDatetime(startzeitISO);
         if (!parsedStart || isNaN(parsedStart.getTime())) {
@@ -2069,7 +2083,7 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
     }catch(e){ setFehler(e.message); }
     setSaving(false);
   }
-  if (form) return <WahlForm form={form} onSave={saveWahl} onCancel={()=>setForm(null)} saving={saving} fehler={fehler} wahltag={appData.wahltage?.find(wt=>wt.eventID===eventID)}/>;
+  if (form) return <WahlForm form={form} onSave={saveWahl} onCancel={()=>setForm(null)} saving={saving} fehler={fehler} wahltag={wahltag}/>;
   // Wiederverwendbare Aktionsbuttons für eine Wahl
   function WahlAktionen({ w, size=12 }) {
     const p = `5px ${size>12?"14px":"11px"}`;
@@ -3671,13 +3685,20 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
           <div style={S.formGroup}>
             <label style={S.label}>Startzeit</label>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <input type="time" style={{ ...S.input, width:120 }} step="300"
+              <select style={{ ...S.input, width:100 }}
                 value={f.startzeit ? (f.startzeit.includes("T") ? f.startzeit.slice(11,16) : f.startzeit.slice(0,5)) : ""}
                 onChange={e=>{
+                  if (!e.target.value) return;
                   const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
                   setField("startzeit", datum + "T" + e.target.value);
-                }}/>
-              <span style={{ fontSize:13, color:C.textLight }}>Uhr</span>
+                }}>
+                <option value="">– Uhrzeit –</option>
+                {Array.from({length:24*12}, (_,i)=>{
+                  const h = String(Math.floor(i/12)).padStart(2,"0");
+                  const m = String((i%12)*5).padStart(2,"0");
+                  return <option key={i} value={h+":"+m}>{h}:{m} Uhr</option>;
+                })}
+              </select>
             </div>
             <p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Die Wahl bleibt zunächst pausiert — nach dem Starten erscheint bis zur Startzeit ein Countdown.</p>
           </div>
@@ -3690,15 +3711,20 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
           {f.hatEndzeit&&(()=>{
             const startVal = f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):"";
             return (<>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <input type="time" style={{ ...S.input, width:120 }} step="300"
-                  value={f.endzeit ? (f.endzeit.includes("T") ? f.endzeit.slice(11,16) : f.endzeit.slice(0,5)) : ""}
-                  onChange={e=>{
-                    const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
-                    setField("endzeit", datum + "T" + e.target.value);
-                  }}/>
-                <span style={{ fontSize:13, color:C.textLight }}>Uhr</span>
-              </div>
+              <select style={{ ...S.input, width:100 }}
+                value={f.endzeit ? (f.endzeit.includes("T") ? f.endzeit.slice(11,16) : f.endzeit.slice(0,5)) : ""}
+                onChange={e=>{
+                  if (!e.target.value) return;
+                  const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
+                  setField("endzeit", datum + "T" + e.target.value);
+                }}>
+                <option value="">– Uhrzeit –</option>
+                {Array.from({length:24*12}, (_,i)=>{
+                  const h = String(Math.floor(i/12)).padStart(2,"0");
+                  const m = String((i%12)*5).padStart(2,"0");
+                  return <option key={i} value={h+":"+m}>{h}:{m} Uhr</option>;
+                })}
+              </select>
               {f.endzeit&&f.startzeit&&(()=>{
                 const st = f.startzeit.includes("T") ? f.startzeit.slice(11,16) : f.startzeit.slice(0,5);
                 const vt = f.endzeit.includes("T") ? f.endzeit.slice(11,16) : f.endzeit.slice(0,5);
