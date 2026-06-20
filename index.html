@@ -1250,7 +1250,20 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
     setLoading(true);
     try {
       const res = await callFlow("getDaten", { eventID, wahllokalID: eventID });
-      const liste = (res?.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id||""), datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||wt.tokensGeneriert===true||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null })).sort((a,b) => (b.datum||"").localeCompare(a.datum||""));
+      const liste = (res?.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id||""), datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||wt.tokensGeneriert===true||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null })).sort((a,b) => {
+        const today = new Date().toISOString().slice(0,10);
+        const ad = a.datum||"", bd = b.datum||"";
+        // Heute zuerst
+        if (ad===today && bd!==today) return -1;
+        if (bd===today && ad!==today) return 1;
+        // Zukünftige aufsteigend (nächster zuerst)
+        const aFuture = ad > today, bFuture = bd > today;
+        if (aFuture && bFuture) return ad.localeCompare(bd);
+        // Vergangene absteigend (neueste zuerst)
+        if (!aFuture && !bFuture) return bd.localeCompare(ad);
+        // Zukünftige vor vergangenen
+        return aFuture ? -1 : 1;
+      });
       setWahltage(liste);
     } catch(e) { setFehler(e.message); }
     setLoading(false);
@@ -1482,7 +1495,7 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
                 </div>
               </div>
             </div>
-            <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>
+            <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile} wahltag={wahltag}/>
           </div>
         )}
         {schritt==="wahlen" && (
@@ -1839,9 +1852,11 @@ function QRCode({ url, size=200 }) {
   return <img src={`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&color=1a2744&bgcolor=ffffff&margin=10`} width={size} height={size} alt="QR-Code" style={{ display:"block" }}/>;
 }
 
-function LeitungDashboard({ appData, eventID, onDataChange }) {
+function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null }) {
   const wahlen = appData.wahlen.filter(w=>w.eventID===eventID&&!w.geschlossen);
-  const tokenCount = appData.tokenCount||0;
+  const today = new Date().toISOString().slice(0,10);
+  const aktiverWahltag = wahltag || (appData.wahltage||[]).find(wt=>wt.datum===today);
+  const tokenCount = aktiverWahltag?.anzahlStimmberechtigte || appData.tokenCount || 0;
   const [qrVollbild, setQrVollbild] = useState(false);
   const [toggling, setToggling] = useState(null);
   const wahllokalURL = window.location.origin + window.location.pathname + "?wahllokal=" + eventID;
