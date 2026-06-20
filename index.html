@@ -1501,7 +1501,8 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
         {schritt==="wahlen" && (
           <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}
             initialStichwahl={window._stichwahl} onStichwahl={()=>{window._stichwahl=null;}}
-            onErgebnisse={(wahlId)=>{ window._ergebnisWahlId=wahlId; setSchritt("ergebnisse"); }}/>
+            onErgebnisse={(wahlId)=>{ window._ergebnisWahlId=wahlId; setSchritt("ergebnisse"); }}
+            wahltag={wahltag}/>
         )}
         {schritt==="tagestoken" && (
           <LeitungTagestoken appData={appData} eventID={eventID} wahltag={wahltag} onDataChange={onDataChange} isMobile={isMobile}
@@ -1853,7 +1854,12 @@ function QRCode({ url, size=200 }) {
 }
 
 function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null }) {
-  const wahlen = appData.wahlen.filter(w=>w.eventID===eventID&&!w.geschlossen);
+  const wahlen = appData.wahlen.filter(w=>{
+    if (w.eventID!==eventID||w.geschlossen) return false;
+    if (!aktiverWahltag?.datum) return true;
+    const wDatum = w.startzeit ? w.startzeit.slice(0,10) : null;
+    return wDatum === aktiverWahltag.datum.slice(0,10);
+  });
   const today = new Date().toISOString().slice(0,10);
   const aktiverWahltag = wahltag || (appData.wahltage||[]).find(wt=>wt.datum===today);
   const tokenCount = aktiverWahltag?.anzahlStimmberechtigte || appData.tokenCount || 0;
@@ -1938,11 +1944,16 @@ function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null }) {
   );
 }
 
-function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl, onErgebnisse, isMobile=false }) {
+function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onStichwahl, onErgebnisse, isMobile=false, wahltag=null }) {
   const [form, setForm] = useState(null); const [saving, setSaving] = useState(false); const [fehler, setFehler] = useState(null);
   const { confirm, dialog } = useConfirm();
   // Alle Wahlen — aktive, geschlossene und archivierte
-  const alleWahlen = appData.wahlen.filter(w=>w.eventID===eventID);
+  const alleWahlen = appData.wahlen.filter(w=>{
+    if (w.eventID!==eventID) return false;
+    if (!wahltag?.datum) return true; // kein Wahltag → alle zeigen
+    const wDatum = w.startzeit ? w.startzeit.slice(0,10) : null;
+    return wDatum === wahltag.datum.slice(0,10);
+  });
   const wahlen = alleWahlen.filter(w=>!w.archiviert); // aktiv + geschlossen (nicht archiviert)
   const archiviertWahlen = alleWahlen.filter(w=>w.archiviert);
   useEffect(()=>{
@@ -2081,7 +2092,11 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
       {fehler&&<div style={{ ...S.alert, ...S.alertError }}>{fehler}</div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
         <h3 style={{ margin:0, color:C.primary }}>Wahlen</h3>
-        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit:naechsteHalbeStunde(), hatEndzeit:false, endzeit:"", mehrfach:false, exakt:false, maxAuswahl:1, mehrheitsregel:"absolut", optionen:[{ id:null, _tempKey:"tmp_1", name:"", istEnthaltung:false },{ id:null, _tempKey:"tmp_enth", name:"Enthaltung", istEnthaltung:true }], isNew:true })}>+ Neue Wahl</button>
+        <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>{
+          const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
+          const startzeit = datum + "T" + naechsteHalbeStunde().slice(11,16);
+          setForm({ id:Date.now().toString(), eventID, titel:"", aktiv:false, startzeit, hatEndzeit:false, endzeit:"", mehrfach:false, exakt:false, maxAuswahl:1, mehrheitsregel:"absolut", optionen:[{ id:null, _tempKey:"tmp_1", name:"", istEnthaltung:false },{ id:null, _tempKey:"tmp_enth", name:"Enthaltung", istEnthaltung:true }], isNew:true });
+        }}>+ Neue Wahl</button>
       </div>
 
       {/* Aktive & geschlossene Wahlen */}
