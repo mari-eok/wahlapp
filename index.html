@@ -355,7 +355,7 @@ function generateToken() {
 }
 
 // ─── Token PDF Generierung (global) ─────────────────────────────────────────
-function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
+function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true, kCode=null) {
   const COLS = 2, ROWS = 5, PER_PAGE = COLS * ROWS;
   const baseURL = window.location.origin + window.location.pathname;
   const total = tokens.length;
@@ -363,18 +363,8 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
   const druckDatum = now.toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" });
   const druckZeit = now.toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
   const druckDatumZeit = druckDatum + ", " + druckZeit + " Uhr";
-
-  function kontrollcode(n, evid, datum) {
-    let h = 0;
-    const s = n + "|" + evid + "|" + datum;
-    for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    const pos = Math.abs(h);
-    return "KP-" + now.getFullYear() + "-" +
-           chars[pos%32] + chars[(pos>>5)%32] + chars[(pos>>10)%32] +
-           chars[(pos>>15)%32] + chars[(n*7+pos)%32] + chars[(n*13+pos)%32];
-  }
-  const kCode = kontrollcode(total, evID, druckDatumZeit);
+  // Kontrollcode aus SharePoint verwenden falls vorhanden
+  if (!kCode) kCode = "—";
 
   const pages = [];
   for (let i = 0; i < tokens.length; i += PER_PAGE) pages.push(tokens.slice(i, i + PER_PAGE));
@@ -383,7 +373,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
     if (!t) return '<div class="karte leer"></div>';
     const wahlURL = baseURL + "?wahllokal=" + evID;
     const qrHTML = mitQR
-      ? '<img src="https://api.qrserver.com/v1/create-qr-code/?size=44x44&data=' + encodeURIComponent(wahlURL) + '&color=1a2744&bgcolor=ffffff&margin=2" width="44" height="44" alt="QR" style="display:block;margin:1.5mm auto 0;"/>'
+      ? '<img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=' + encodeURIComponent(wahlURL) + '&color=1a2744&bgcolor=ffffff&margin=4" width="110" height="110" alt="QR" style="display:block;margin:2mm auto 1mm;"/>'
       : '';
     return '<div class="karte">' +
       '<div class="logo">Evangelische Landeskirche in Baden</div>' +
@@ -391,7 +381,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
       '<div class="label">Persönlicher Wahlcode</div>' +
       '<div class="token">' + t + '</div>' +
       qrHTML +
-      '<div class="hinweis">' + (mitQR ? 'QR-Code scannen oder Code eingeben' : 'Diesen Code geheim halten') + '</div>' +
+      (mitQR ? '<div class="hinweis">QR-Code scannen oder Code manuell eingeben</div>' : '') +
       '<div class="nummer">Nr. ' + (globalIdx + 1) + ' von ' + total + '</div>' +
       '</div>';
   }
@@ -426,13 +416,13 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
     .deck-hinweis { margin-top: 7mm; width: 120mm; padding: 3.5mm 5mm; background: #f8f9fa; border-left: 3px solid #1a3a5c; font-size: 8.5pt; color: #555; line-height: 1.6; }
     .page { width: 194mm; height: 281mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, 1fr); gap: 0; page-break-after: always; }
     .page:last-child { page-break-after: auto; }
-    .karte { border: 0.5px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2.5mm 3mm; text-align: center; }
-    .logo { font-size: 5.5pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 0.5mm; }
-    .wahllokal { font-size: 6.5pt; color: #5a6a7a; margin-bottom: 1mm; }
-    .label { font-size: 5.5pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #888; margin-bottom: 0.5mm; }
-    .token { font-size: 16pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.12em; color: #1a3a5c; margin: 1mm 0; }
-    .hinweis { font-size: 5pt; color: #ccc; margin-top: 1mm; }
-    .nummer { font-size: 5.5pt; color: #bbb; margin-top: 1.5mm; letter-spacing: 0.05em; }
+    .karte { border: 0.5px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4mm 3mm; text-align: center; gap: 1.5mm; }
+    .logo { font-size: 6pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; }
+    .wahllokal { font-size: 8pt; color: #5a6a7a; }
+    .label { font-size: 6pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #888; }
+    .token { font-size: 22pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.14em; color: #1a3a5c; }
+    .hinweis { font-size: 6pt; color: #bbb; }
+    .nummer { font-size: 6.5pt; color: #aaa; letter-spacing: 0.05em; }
     .leer { border: 0.5px dashed #eee; }`;
 
   const pageHTML = pages.map(function(page, pi) {
@@ -1610,9 +1600,9 @@ Der Kontrollcode wird zurückgesetzt. Ein bereits verteilter Ausdruck wäre dami
     const now = Math.floor(Date.now()/1000);
     const druckTokens = tokens.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
     if (druckTokens.length===0) { setFehler("Keine druckbaren Tokens vorhanden."); return; }
-    generiereTokenPDF(druckTokens, wahllokal?.name||eventID, eventID, mitQR);
-    // Kontrollcode aus Token lesen
-    if (tokens[0]?.kontrollcode) setLetzterKontrollcode(tokens[0].kontrollcode);
+    // Gespeicherten Kontrollcode aus Token verwenden — kein neuer Code beim Druck
+    const gespeicherterKontrollcode = tokens.find(t=>t.kontrollcode)?.kontrollcode || kontrollcode;
+    generiereTokenPDF(druckTokens, wahllokal?.name||eventID, eventID, true, gespeicherterKontrollcode);
   }
 
   const aktiveTokens = tokens.filter(t=>t.aktiv&&!t.verwendet).length;
@@ -1666,9 +1656,16 @@ Der Kontrollcode wird zurückgesetzt. Ein bereits verteilter Ausdruck wäre dami
               <button style={{ ...S.btn, ...S.btnGhost }} onClick={drucken} disabled={aktiveTokens===0}>
                 <i className="ti ti-printer" aria-hidden="true"/> PDF drucken ({aktiveTokens})
               </button>
-              <button style={{ ...S.btn, ...S.btnGhostDanger }} onClick={alleLoeschen} disabled={deleting}>
-                {deleting?"…":<><i className="ti ti-trash" aria-hidden="true"/> Alle löschen</>}
-              </button>
+              {verwendete === 0 ? (
+                <button style={{ ...S.btn, ...S.btnGhostDanger }} onClick={alleLoeschen} disabled={deleting}>
+                  {deleting?"…":<><i className="ti ti-trash" aria-hidden="true"/> Alle löschen</>}
+                </button>
+              ) : (
+                <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:C.textLight }}>
+                  <i className="ti ti-lock" aria-hidden="true"/>
+                  Löschen gesperrt — {verwendete} Stimme{verwendete!==1?"n":""} bereits abgegeben
+                </div>
+              )}
             </>
           )}
           <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}>
@@ -1676,9 +1673,9 @@ Der Kontrollcode wird zurückgesetzt. Ein bereits verteilter Ausdruck wäre dami
           </button>
         </div>
 
-        {tokens.length > 0 && (
+        {tokens.length > 0 && verwendete === 0 && (
           <p style={{ fontSize:12, color:C.textLight, marginTop:10 }}>
-            <i className="ti ti-info-circle" aria-hidden="true"/> Löschen nur wenn eine Korrektur nötig ist — z.B. falsche Anzahl. Bereits verwendete Tokens können nicht mehr gelöscht werden.
+            <i className="ti ti-info-circle" aria-hidden="true"/> Löschen nur wenn eine Korrektur nötig ist — z.B. falsche Anzahl. Sobald eine Stimme abgegeben wurde ist das Löschen gesperrt.
           </p>
         )}
       </div>
