@@ -35,6 +35,9 @@ const API = {
     sendTokenEmail:  "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e39aa42827e848779c9e43e1841c7ac9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=6GuETz2UvSpl7ARVaWVyy5W9UhJmYC65kd75WOuX_yw",
     resolveHash:     "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8d03b25d1be5488d831500714222f5a8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=l8UAFi2UZSXX9t-oyYvdN-beYu5W6yd-4rdulrNhWQw",
     generateHashes:  "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/917882caeeb94cee83db430b239df2a7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uRqtmmNlAFGUp_KeJPku7qur9SV9MWvCHytdNuYrpT8",
+    saveWahltag:     "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/cb546e6ed51e4fd9bd6a6fa3782e4f3a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=hS420OROFZXzQ9nNz8suK5kyViVxPc9X1VxK5CL4ZLo",
+    generateTagestoken: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/35e1513cd53549129542079942b66b8b/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=_XkXY-JMTENXlkaxC_LRpqMiINXXETs1pQFAKDz_zVA",
+    deleteTagestoken: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3f40ec775f8d4732b703c934471000d8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=XcXVg2YnckAYanvPE7L6Y_GXZ7iBxSrs8_8AYphbOJk",
     versendeLinks:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/0cea6b0ab3974d4691eaed7d6352bd5e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uQ9eR2wFlM9hdgNMVgCAffqgApxgOa0HHSRgyv9Jcq8",
     deleteHashes:    "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c1616e6b803b4ed9aeaa7cb06fd7a47b/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2GGPktFiYGI3qVsjuLB-Um2ZYh33M2qXDTLWiNNu3ig",
     getWaehler:      "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/140675a2915542beb654587147996f24/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Q8uE7JhgKc5h2uh7WaxxtGDsRaLSG6pMBYI8xRSyzQQ",
@@ -131,6 +134,10 @@ function mapToken(item) {
     id: String(item.ID), code: item.Title, eventID: item.EventID, verwendet: item.Verwendet, aktiv: item.Aktiv !== false,
     verwendeteWahlen: item.UsedForWahlID ? [String(item.UsedForWahlID)] : (() => { try { return JSON.parse(item.VerwendeteWahlen || "[]"); } catch { return []; } })(),
     gueltigBis: item.GueltigBis || null,
+    gueltigAm: item.GueltigAm ? (item.GueltigAm.slice ? item.GueltigAm.slice(0,10) : null) : null,
+    kontrollcode: item.Kontrollcode || null,
+    druckID: item.DruckID || null,
+    tokenTyp: item.TokenTyp || item.tokenTyp || "offline",
     erstellt: item.Zeitstempel || item.Created || null,
     verwendetAm: item.VerwendetAm || null,
   };
@@ -517,7 +524,7 @@ function App() {
   useEffect(() => { if (wahllokalID) loadAppData(); }, [wahllokalID]);
   useEffect(() => { if (!wahllokalID) return; const t = setInterval(loadAppData, 10000); return () => clearInterval(t); }, [wahllokalID]);
 
-  const FALLBACK_DATA = { wahllokale:[{ id:"1", eventID:"EOK", name:"Synode Ortenau", aktiv:true }], wahlen:[{ id:"1", eventID:"EOK", titel:"Diakoniepfarrer*in", aktiv:true, startzeit:new Date(Date.now()-60000).toISOString(), mehrfach:false, exakt:true, maxAuswahl:1, optionen:[{ id:"1", wahlID:"1", eventID:"EOK", name:"Leon Hartmann", istEnthaltung:false },{ id:"2", wahlID:"1", eventID:"EOK", name:"Enthaltung", istEnthaltung:true }] }], optionen:[], tokens:[], tokenCount:0 };
+  const FALLBACK_DATA = { wahllokale:[{ id:"1", eventID:"EOK", name:"Synode Ortenau", aktiv:true }], wahlen:[{ id:"1", eventID:"EOK", titel:"Diakoniepfarrer*in", aktiv:true, startzeit:new Date(Date.now()-60000).toISOString(), mehrfach:false, exakt:true, maxAuswahl:1, optionen:[{ id:"1", wahlID:"1", eventID:"EOK", name:"Leon Hartmann", istEnthaltung:false },{ id:"2", wahlID:"1", eventID:"EOK", name:"Enthaltung", istEnthaltung:true }] }], optionen:[], wahltage:[], tokens:[], tokenCount:0 };
 
   async function loadAppData() {
     try {
@@ -526,7 +533,8 @@ function App() {
       const wahlen = (raw.wahlen || []).map(mapWahl);
       const optionen = (raw.optionen || []).map(mapOption);
       wahlen.forEach(w => { w.optionen = optionen.filter(o => o.wahlID === w.id).sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }); });
-      setAppData({ wahllokale, wahlen, optionen, tokens: [], tokenCount: raw.tokenCount || 0 });
+      const wahltage = (raw.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id), titel:wt.Title||wt.titel, datum:wt.Datum||wt.datum, eventID:wt.EventID||wt.eventID, anzahlStimmberechtigte:wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0, tokensGeneriert:wt.TokensGeneriert||wt.tokensGeneriert||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null }));
+      setAppData({ wahllokale, wahlen, optionen, wahltage, tokens: [], tokenCount: raw.tokenCount || 0 });
       setLoadError(null);
     } catch (e) { if (!appData) { setAppData(FALLBACK_DATA); setLoadError("cors_fallback"); } }
   }
@@ -1225,16 +1233,396 @@ function TokenInput({ value, onChange }) {
   );
 }
 
-function LeitungView({ appData, eventID, onExit, onDataChange }) {
-  const [tab, setTab] = useState("dashboard");
+
+// ─── Wahltag-Verwaltung ──────────────────────────────────────────────────────
+
+function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
+  const [wahltage, setWahltage] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ datum: "", anzahl: "" });
+  const [saving, setSaving] = useState(false);
+  const [fehler, setFehler] = useState(null);
   const wahllokal = appData.wahllokale.find(w => w.eventID===eventID);
-  const isMobile = useIsMobile();
-  const tabs = [
-    { id:"dashboard", label:"Dashboard", icon:"ti-layout-dashboard" },
-    { id:"wahlen",    label:"Wahlen",    icon:"ti-box-multiple" },
-    { id:"waehler",   label:"Wahlcodes", icon:"ti-ticket" },
-    { id:"ergebnisse",label:"Ergebnisse",icon:"ti-chart-bar" },
+  const today = new Date().toISOString().slice(0,10);
+
+  async function laden() {
+    setLoading(true);
+    try {
+      const res = await callFlow("getDaten", { eventID, wahllokalID: eventID });
+      const liste = (res?.wahltage || []).sort((a,b) => b.datum?.localeCompare(a.datum));
+      setWahltage(liste);
+    } catch(e) { setFehler(e.message); }
+    setLoading(false);
+  }
+
+  useEffect(() => { laden(); }, []);
+
+  async function speichern() {
+    if (!form.datum || !form.anzahl || parseInt(form.anzahl) < 1) return;
+    setSaving(true); setFehler(null);
+    try {
+      await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
+      setShowForm(false); setForm({ datum:"", anzahl:"" }); await laden();
+    } catch(e) { setFehler(e.message); }
+    setSaving(false);
+  }
+
+  function statusInfo(wt) {
+    const d = wt.datum?.slice(0,10);
+    if (d === today) return { label:"Heute", color:C.accent, badge:S.badgeGreen };
+    if (d > today) return { label:"Geplant", color:C.textLight, badge:S.badgeGray };
+    return { label:"Vergangen", color:C.textLight, badge:S.badgeGray };
+  }
+
+  return (
+    <div style={{ background:C.bg, minHeight:"100vh" }}>
+      <div style={{ background:C.primary, padding:isMobile?"12px 16px":"16px 24px" }}>
+        <div style={{ maxWidth:800, margin:"0 auto", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:10, fontWeight:500, letterSpacing:"0.15em", color:"rgba(255,255,255,0.6)", textTransform:"uppercase" }}>Wahlleitung</div>
+            <div style={{ fontSize:isMobile?16:20, fontWeight:700, color:"#fff" }}>{wahllokal?.name||eventID}</div>
+          </div>
+          <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:12 }}>
+            <i className="ti ti-logout" aria-hidden="true"/>{!isMobile&&" Abmelden"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth:800, margin:"0 auto", padding:isMobile?"16px 12px":"24px 16px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
+          <h2 style={{ margin:0, color:C.primary, fontSize:18 }}>Wahltage</h2>
+          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={()=>setShowForm(true)}>
+            <i className="ti ti-plus" aria-hidden="true"/> Wahltag anlegen
+          </button>
+        </div>
+
+        {fehler && <div style={{ ...S.alert, ...S.alertError, marginBottom:12 }}>{fehler}</div>}
+
+        {showForm && (
+          <div style={{ ...S.card, marginBottom:16, border:`1.5px solid ${C.primary}` }}>
+            <div style={S.sectionLabel}>Neuer Wahltag</div>
+            <div style={{ display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end", marginBottom:12 }}>
+              <div>
+                <label style={S.label}>Datum</label>
+                <input type="date" style={{ ...S.input, width:160 }} value={form.datum} min={today} onChange={e=>setForm(f=>({...f, datum:e.target.value}))}/>
+              </div>
+              <div>
+                <label style={S.label}>Anzahl Stimmberechtigte</label>
+                <input type="number" style={{ ...S.input, width:120 }} min={1} value={form.anzahl} onChange={e=>setForm(f=>({...f, anzahl:e.target.value}))} placeholder="z.B. 150"/>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button style={{ ...S.btn, ...S.btnPrimary }} onClick={speichern} disabled={saving||!form.datum||!form.anzahl}>
+                {saving?"…":"Anlegen"}
+              </button>
+              <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>{setShowForm(false);setForm({datum:"",anzahl:""});}}>Abbrechen</button>
+            </div>
+          </div>
+        )}
+
+        {loading ? <p style={{ color:C.textLight }}>Wird geladen…</p> :
+         wahltage.length === 0 ? (
+           <div style={{ ...S.card, textAlign:"center", padding:32 }}>
+             <i className="ti ti-calendar-event" aria-hidden="true" style={{ fontSize:40, color:C.textLight, display:"block", marginBottom:12 }}/>
+             <p style={{ color:C.textLight, fontSize:14 }}>Noch kein Wahltag angelegt.</p>
+             <button style={{ ...S.btn, ...S.btnPrimary, marginTop:8 }} onClick={()=>setShowForm(true)}>
+               <i className="ti ti-plus" aria-hidden="true"/> Ersten Wahltag anlegen
+             </button>
+           </div>
+         ) : (
+           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+             {wahltage.map(wt => {
+               const si = statusInfo(wt);
+               const datum = wt.datum ? new Date(wt.datum).toLocaleDateString("de-DE", { weekday:"long", day:"2-digit", month:"long", year:"numeric" }) : "—";
+               const istHeute = wt.datum?.slice(0,10) === today;
+               return (
+                 <div key={wt.id} onClick={()=>onSelect(wt)}
+                   style={{ ...S.card, cursor:"pointer", border:`1.5px solid ${istHeute?C.accent:C.border}`, background:istHeute?"#f0faf5":C.bgWhite,
+                     display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap",
+                     transition:"box-shadow 0.15s" }}
+                   onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.1)"}
+                   onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+                   <div>
+                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                       <span style={{ ...S.badge, ...si.badge }}>{si.label}</span>
+                       {wt.tokensGeneriert && <span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}><i className="ti ti-ticket" aria-hidden="true"/> Tokens generiert</span>}
+                     </div>
+                     <div style={{ fontWeight:700, fontSize:16, color:C.text }}>{datum}</div>
+                     <div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>
+                       {wt.anzahlStimmberechtigte} Stimmberechtigte
+                       {wt.kontrollcode && <span style={{ marginLeft:8, fontFamily:"monospace", color:C.primary }}>{wt.kontrollcode}</span>}
+                     </div>
+                   </div>
+                   <i className="ti ti-chevron-right" aria-hidden="true" style={{ fontSize:20, color:C.textLight }}/>
+                 </div>
+               );
+             })}
+           </div>
+         )
+        }
+      </div>
+    </div>
+  );
+}
+
+function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange, isMobile }) {
+  const [schritt, setSchritt] = useState("wahlen");
+  const wahllokal = appData.wahllokale.find(w => w.eventID===eventID);
+  const [tokenReloadTrigger, setTokenReloadTrigger] = useState(0);
+
+  const datum = wahltag.datum ? new Date(wahltag.datum).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—";
+  const today = new Date().toISOString().slice(0,10);
+  const istHeute = wahltag.datum?.slice(0,10) === today;
+
+  const schritte = [
+    { id:"wahlen",       label:"Wahlen",        icon:"ti-box-multiple" },
+    { id:"teilnehmende", label:"Teilnehmende",   icon:"ti-users" },
+    { id:"tagestoken",   label:"Tagestoken",     icon:"ti-ticket" },
+    { id:"durchfuehrung",label:"Durchführung",   icon:"ti-player-play" },
+    { id:"ergebnisse",   label:"Ergebnisse",     icon:"ti-chart-bar" },
   ];
+
+  // Status pro Schritt
+  const wahlenCount = appData.wahlen.filter(w=>w.eventID===eventID).length;
+
+  function schrittStatus(id) {
+    if (id==="wahlen") return wahlenCount > 0 ? "done" : "open";
+    if (id==="tagestoken") return wahltag.tokensGeneriert ? "done" : "open";
+    if (id==="durchfuehrung") return istHeute ? "active" : "open";
+    return "open";
+  }
+
+  function statusIcon(id) {
+    const s = schrittStatus(id);
+    if (s==="done") return <i className="ti ti-circle-check" aria-hidden="true" style={{ color:C.accent, fontSize:14 }}/>;
+    if (s==="active") return <i className="ti ti-player-play" aria-hidden="true" style={{ color:C.primary, fontSize:14 }}/>;
+    return <i className="ti ti-circle" aria-hidden="true" style={{ color:C.border, fontSize:14 }}/>;
+  }
+
+  return (
+    <div style={{ background:C.bg, minHeight:"100vh", paddingBottom:isMobile?72:0 }}>
+      {/* Header */}
+      <div style={{ background:C.primary }}>
+        <div style={{ maxWidth:960, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", minHeight:isMobile?52:56, padding:isMobile?"0 12px":"0 24px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <button onClick={onBack} style={{ background:"rgba(255,255,255,0.15)", border:"none", color:"#fff", borderRadius:6, padding:"4px 8px", cursor:"pointer", fontSize:13 }}>
+              <i className="ti ti-chevron-left" aria-hidden="true"/>
+            </button>
+            <div>
+              <div style={{ fontSize:isMobile?13:15, fontWeight:700, color:"#fff" }}>{wahllokal?.name||eventID}</div>
+              <div style={{ fontSize:11, color:"rgba(255,255,255,0.65)" }}>{datum} · {wahltag.anzahlStimmberechtigte} Stimmberechtigte</div>
+            </div>
+          </div>
+          <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:12, padding:"6px 10px" }}>
+            <i className="ti ti-logout" aria-hidden="true"/>{!isMobile&&" Abmelden"}
+          </button>
+        </div>
+        {/* Desktop Tabs */}
+        {!isMobile && (
+          <div style={{ maxWidth:960, margin:"0 auto", padding:"0 16px", display:"flex", gap:2 }}>
+            {schritte.map(s=>(
+              <button key={s.id} onClick={()=>setSchritt(s.id)}
+                style={{ padding:"8px 14px", border:"none", background:schritt===s.id?"rgba(255,255,255,0.15)":"transparent",
+                  color:schritt===s.id?"#fff":"rgba(255,255,255,0.65)", fontSize:12, fontWeight:600, cursor:"pointer",
+                  borderRadius:"6px 6px 0 0", borderBottom:schritt===s.id?"3px solid #fff":"3px solid transparent",
+                  display:"flex", alignItems:"center", gap:6 }}>
+                {statusIcon(s.id)}
+                <i className={`ti ${s.icon}`} aria-hidden="true"/>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"16px 12px":"24px 16px" }}>
+        {schritt==="wahlen" && (
+          <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}
+            initialStichwahl={window._stichwahl} onStichwahl={()=>{window._stichwahl=null;}}
+            onErgebnisse={(wahlId)=>{ window._ergebnisWahlId=wahlId; setSchritt("ergebnisse"); }}/>
+        )}
+        {schritt==="teilnehmende" && (
+          <LeitungWaehler appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>
+        )}
+        {schritt==="tagestoken" && (
+          <LeitungTagestoken appData={appData} eventID={eventID} wahltag={wahltag} onDataChange={onDataChange} isMobile={isMobile}
+            onTokensChanged={()=>setTokenReloadTrigger(t=>t+1)}/>
+        )}
+        {schritt==="durchfuehrung" && (
+          <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>
+        )}
+        {schritt==="ergebnisse" && (
+          <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setSchritt} isMobile={isMobile}/>
+        )}
+      </div>
+
+      {/* Mobile Bottom Bar */}
+      {isMobile && (
+        <div style={{ position:"fixed", bottom:0, left:0, right:0, background:C.bgWhite,
+          borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100, boxShadow:"0 -2px 12px rgba(0,0,0,0.08)" }}>
+          {schritte.map(s=>(
+            <button key={s.id} onClick={()=>setSchritt(s.id)}
+              style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                gap:2, padding:"6px 2px", border:"none", background:"transparent", cursor:"pointer",
+                color:schritt===s.id?C.primary:C.textLight, fontSize:9, fontWeight:schritt===s.id?700:400,
+                borderTop:schritt===s.id?`2px solid ${C.primary}`:"2px solid transparent" }}>
+              <i className={`ti ${s.icon}`} aria-hidden="true" style={{fontSize:18}}/>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, onTokensChanged }) {
+  const [tokens, setTokens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [fehler, setFehler] = useState(null);
+  const [erfolg, setErfolg] = useState(null);
+  const [kontrollcode, setKontrollcode] = useState(wahltag.kontrollcode||null);
+  const [letzterKontrollcode, setLetzterKontrollcode] = useState(null);
+  const [mitQR, setMitQR] = useState(true);
+  const wahllokal = appData.wahllokale.find(w=>w.eventID===eventID);
+  const datum = wahltag.datum?.slice(0,10);
+
+  async function laden() {
+    setLoading(true);
+    try {
+      const res = await callFlow("getDaten", { eventID, wahllokalID:eventID });
+      const allTokens = (res?.tokenList||[]).map(mapToken);
+      const tagesTokens = allTokens.filter(t=>t.gueltigAm===datum);
+      setTokens(tagesTokens);
+    } catch(e) { setFehler(e.message); }
+    setLoading(false);
+  }
+
+  useEffect(() => { laden(); }, []);
+
+  async function generieren() {
+    setGenerating(true); setFehler(null);
+    try {
+      const res = await callFlow("generateTagestoken", { apiKey:API.key, eventID, datum });
+      if (res.status==="bereits_generiert") {
+        setFehler("Für diesen Wahltag wurden bereits Tokens generiert. Zuerst löschen falls eine Korrektur nötig ist.");
+      } else if (res.status==="ok") {
+        setKontrollcode(res.kontrollcode);
+        setErfolg(`${wahltag.anzahlStimmberechtigte} Tagestoken generiert. Kontrollcode: ${res.kontrollcode}`);
+        setTimeout(()=>setErfolg(null), 5000);
+        await laden(); onDataChange(); onTokensChanged();
+      }
+    } catch(e) { setFehler(e.message); }
+    setGenerating(false);
+  }
+
+  async function alleLoeschen() {
+    const ok = await window.confirm(`Alle ${tokens.length} Tagestoken für den ${datum} wirklich löschen?
+
+Der Kontrollcode wird zurückgesetzt. Ein bereits verteilter Ausdruck wäre damit ungültig.`);
+    if (!ok) return;
+    setDeleting(true); setFehler(null);
+    try {
+      await callFlow("deleteTagestoken", { apiKey:API.key, eventID, datum });
+      setKontrollcode(null); setTokens([]);
+      setErfolg("Alle Tagestoken gelöscht."); setTimeout(()=>setErfolg(null), 3000);
+      onDataChange(); onTokensChanged();
+    } catch(e) { setFehler(e.message); }
+    setDeleting(false);
+  }
+
+  function drucken() {
+    const now = Math.floor(Date.now()/1000);
+    const druckTokens = tokens.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
+    if (druckTokens.length===0) { setFehler("Keine druckbaren Tokens vorhanden."); return; }
+    generiereTokenPDF(druckTokens, wahllokal?.name||eventID, eventID, mitQR);
+    // Kontrollcode aus Token lesen
+    if (tokens[0]?.kontrollcode) setLetzterKontrollcode(tokens[0].kontrollcode);
+  }
+
+  const aktiveTokens = tokens.filter(t=>t.aktiv&&!t.verwendet).length;
+  const verwendete = tokens.filter(t=>t.verwendet).length;
+
+  return (
+    <div>
+      {fehler && <div style={{ ...S.alert, ...S.alertError, marginBottom:12 }}>{fehler}</div>}
+      {erfolg && <div style={{ ...S.alert, ...S.alertSuccess, marginBottom:12 }}><i className="ti ti-circle-check" aria-hidden="true"/> {erfolg}</div>}
+
+      {/* Kontrollcode Banner */}
+      {(kontrollcode||letzterKontrollcode) && (
+        <div style={{ ...S.card, background:"#f0f4ff", border:`1.5px solid ${C.primary}`, marginBottom:16, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+          <div>
+            <div style={{ fontSize:11, color:C.textLight, marginBottom:2 }}>Kontrollcode</div>
+            <div style={{ fontFamily:"monospace", fontSize:20, fontWeight:700, color:C.primary, letterSpacing:"0.1em" }}>{kontrollcode||letzterKontrollcode}</div>
+          </div>
+          <div style={{ fontSize:12, color:C.textLight }}>Mit Deckblatt des PDF-Ausdrucks vergleichen</div>
+        </div>
+      )}
+
+      {/* Status */}
+      <div style={{ ...S.card, marginBottom:16 }}>
+        <div style={S.sectionLabel}>Tagestoken — {datum}</div>
+        <div style={{ display:"flex", gap:24, flexWrap:"wrap", marginBottom:16 }}>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:28, fontWeight:700, color:C.primary }}>{wahltag.anzahlStimmberechtigte}</div>
+            <div style={{ fontSize:12, color:C.textLight }}>Stimmberechtigte</div>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:28, fontWeight:700, color:tokens.length>0?C.accent:C.textLight }}>{tokens.length}</div>
+            <div style={{ fontSize:12, color:C.textLight }}>Generiert</div>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:28, fontWeight:700, color:C.primary }}>{aktiveTokens}</div>
+            <div style={{ fontSize:12, color:C.textLight }}>Verfügbar</div>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:28, fontWeight:700, color:verwendete>0?C.accent:C.textLight }}>{verwendete}</div>
+            <div style={{ fontSize:12, color:C.textLight }}>Verwendet</div>
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {tokens.length===0 ? (
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={generieren} disabled={generating}>
+              {generating ? "Wird generiert…" : <><i className="ti ti-ticket" aria-hidden="true"/> {wahltag.anzahlStimmberechtigte} Tagestoken generieren</>}
+            </button>
+          ) : (
+            <>
+              <button style={{ ...S.btn, ...S.btnGhost }} onClick={drucken} disabled={aktiveTokens===0}>
+                <i className="ti ti-printer" aria-hidden="true"/> PDF drucken ({aktiveTokens})
+              </button>
+              <button style={{ ...S.btn, ...S.btnGhostDanger }} onClick={alleLoeschen} disabled={deleting}>
+                {deleting?"…":<><i className="ti ti-trash" aria-hidden="true"/> Alle löschen</>}
+              </button>
+            </>
+          )}
+          <button style={{ ...S.btn, ...S.btnGhost, fontSize:12 }} onClick={laden} disabled={loading}>
+            <i className="ti ti-refresh" aria-hidden="true"/>
+          </button>
+        </div>
+
+        {tokens.length > 0 && (
+          <p style={{ fontSize:12, color:C.textLight, marginTop:10 }}>
+            <i className="ti ti-info-circle" aria-hidden="true"/> Löschen nur wenn eine Korrektur nötig ist — z.B. falsche Anzahl. Bereits verwendete Tokens können nicht mehr gelöscht werden.
+          </p>
+        )}
+      </div>
+
+      {/* Token-Liste */}
+      {!loading && tokens.length > 0 && (
+        <OfflineTokenListe eventID={eventID} reloadTrigger={tokens.length} wahllokalName={wahllokal?.name} isMobile={isMobile} filterGueltigAm={datum}/>
+      )}
+    </div>
+  );
+}
+
+function LeitungView({ appData, eventID, onExit, onDataChange }) {
+  const [gewaehlterWahltag, setGewaehlterWahltag] = useState(null);
+  const isMobile = useIsMobile();
   // Session-Timeout: nach 30 Minuten Inaktivität automatisch abmelden
   const TIMEOUT_MS = 30 * 60 * 1000;
   const timeoutRef = useRef(null);
@@ -1254,63 +1642,18 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
       events.forEach(e => window.removeEventListener(e, resetTimeout));
     };
   }, []);
-  return (
-    <div style={{ background:C.bg, minHeight:"100vh", paddingBottom:isMobile?72:0 }}>
-      <div style={{ background:C.primary }}>
-        <div style={{ maxWidth:960, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", minHeight:isMobile?52:56, padding:isMobile?"0 12px":"0 24px" }}>
-          <div style={{ overflow:"hidden" }}>
-            <span style={{ ...S.navTitle, fontSize:isMobile?14:16 }}>
-              <i className="ti ti-clipboard-list" aria-hidden="true"/> Wahlleitung
-            </span>
-            {!isMobile && <span style={{ color:"rgba(255,255,255,0.6)", fontSize:13, marginLeft:12 }}>{wahllokal?.name} ({eventID})</span>}
-            {isMobile && <div style={{ color:"rgba(255,255,255,0.65)", fontSize:11, marginTop:1 }}>{wahllokal?.name}</div>}
-          </div>
-          <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:12, padding:isMobile?"6px 10px":"7px 14px" }}>
-            <i className="ti ti-logout" aria-hidden="true"/>{!isMobile && " Abmelden"}
-          </button>
-        </div>
-        {/* Desktop: Tabs in der Navbar */}
-        {!isMobile && (
-          <div style={{ maxWidth:960, margin:"0 auto", padding:"0 16px", display:"flex", gap:4, paddingBottom:0 }}>
-            {tabs.map(t=>(
-              <button key={t.id}
-                style={{ padding:"10px 16px", border:"none", background:tab===t.id?"rgba(255,255,255,0.15)":"transparent",
-                  color:tab===t.id?"#fff":"rgba(255,255,255,0.65)", fontSize:13, fontWeight:600, cursor:"pointer",
-                  borderRadius:"8px 8px 0 0", borderBottom:tab===t.id?"3px solid #fff":"3px solid transparent" }}
-                onClick={()=>setTab(t.id)}>
-                <i className={`ti ${t.icon}`} aria-hidden="true" style={{marginRight:6}}/>{t.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
 
-      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"16px 12px":"24px 16px" }}>
-        {tab==="dashboard" && <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>}
-        {tab==="wahlen" && <LeitungWahlen appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile} initialStichwahl={window._stichwahl} onStichwahl={()=>{ window._stichwahl=null; }} onErgebnisse={(wahlId)=>{ window._ergebnisWahlId=wahlId; setTab("ergebnisse"); }}/>}
-        {tab==="waehler" && <LeitungWaehler appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile}/>}
-        {tab==="ergebnisse" && <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setTab} isMobile={isMobile}/>}
-      </div>
+  if (gewaehlterWahltag) {
+    return <WahltageView
+      appData={appData} eventID={eventID} wahltag={gewaehlterWahltag}
+      onBack={()=>setGewaehlterWahltag(null)} onExit={onExit}
+      onDataChange={onDataChange} isMobile={isMobile}/>;
+  }
 
-      {/* Mobile: Bottom Tab Bar */}
-      {isMobile && (
-        <div style={{ position:"fixed", bottom:0, left:0, right:0, background:C.bgWhite,
-          borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100,
-          boxShadow:"0 -2px 12px rgba(0,0,0,0.08)" }}>
-          {tabs.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)}
-              style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-                gap:3, padding:"8px 4px", border:"none", background:"transparent", cursor:"pointer",
-                color:tab===t.id?C.primary:C.textLight, fontSize:10, fontWeight:tab===t.id?700:400,
-                borderTop:tab===t.id?`2px solid ${C.primary}`:"2px solid transparent" }}>
-              <i className={`ti ${t.icon}`} aria-hidden="true" style={{fontSize:20}}/>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <WahltageAuswahl
+    appData={appData} eventID={eventID}
+    onSelect={wt=>setGewaehlterWahltag(wt)}
+    onExit={onExit} isMobile={isMobile}/>;
 }
 
 
@@ -1720,7 +2063,7 @@ function ArchivWahlen({ wahlen, onDelete }) {
 }
 
 // FIX: OfflineTokenListe liest tokenList aus getDaten und mappt korrekt via mapToken
-function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=false, filterTyp=null }) {
+function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=false, filterTyp=null, filterGueltigAm=null }) {
   const [mitQR, setMitQR] = useState(false);
   const [letzterKontrollcode, setLetzterKontrollcode] = useState(null);
   const [tokens, setTokens] = useState([]); const [loading, setLoading] = useState(true); const [suche, setSuche] = useState(""); const [toggling, setToggling] = useState(null); const [fehler, setFehler] = useState(null);
@@ -1732,7 +2075,8 @@ function OfflineTokenListe({ eventID, reloadTrigger, wahllokalName, isMobile=fal
     try {
       const result = await callFlow("getDaten",{ eventID });
       const allRaw = result.tokenList||[];
-      const rawTokens = filterTyp ? allRaw.filter(t=>(t.TokenTyp||t.tokenTyp||"offline")===filterTyp) : allRaw;
+      let rawTokens = filterTyp ? allRaw.filter(t=>(t.TokenTyp||t.tokenTyp||"offline")===filterTyp) : allRaw;
+      if (filterGueltigAm) rawTokens = rawTokens.filter(t=>t.GueltigAm?.slice(0,10)===filterGueltigAm||t.gueltigAm===filterGueltigAm);
       // Sortierung: neu → alt
       const mapped = rawTokens.map(mapToken).sort((a,b)=>{
         const da = a.erstellt ? new Date(a.erstellt) : new Date(0);
