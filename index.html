@@ -1262,8 +1262,18 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
     if (!form.datum || !form.anzahl || parseInt(form.anzahl) < 1) return;
     setSaving(true); setFehler(null);
     try {
-      await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
-      setShowForm(false); setForm({ datum:"", anzahl:"" }); await laden();
+      const res = await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
+      // Direkt in den neuen Wahltag springen
+      const neuerWahltag = {
+        id: res.id || Date.now().toString(),
+        datum: form.datum,
+        eventID,
+        anzahlStimmberechtigte: parseInt(form.anzahl),
+        tokensGeneriert: false,
+        kontrollcode: null,
+      };
+      setShowForm(false); setForm({ datum:"", anzahl:"" });
+      onSelect(neuerWahltag);
     } catch(e) { setFehler(e.message); }
     setSaving(false);
   }
@@ -1323,10 +1333,13 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
 
         {loading ? <p style={{ color:C.textLight }}>Wird geladen…</p> :
          wahltage.length === 0 ? (
-           <div style={{ ...S.card, textAlign:"center", padding:32 }}>
-             <i className="ti ti-calendar-event" aria-hidden="true" style={{ fontSize:40, color:C.textLight, display:"block", marginBottom:12 }}/>
-             <p style={{ color:C.textLight, fontSize:14 }}>Noch kein Wahltag angelegt.</p>
-             <button style={{ ...S.btn, ...S.btnPrimary, marginTop:8 }} onClick={()=>setShowForm(true)}>
+           <div style={{ textAlign:"center", padding:"48px 24px" }}>
+             <i className="ti ti-calendar-event" aria-hidden="true" style={{ fontSize:64, color:C.border, display:"block", marginBottom:16 }}/>
+             <div style={{ fontSize:20, fontWeight:700, color:C.primary, marginBottom:8 }}>Noch kein Wahltag angelegt</div>
+             <p style={{ color:C.textLight, fontSize:14, marginBottom:24, lineHeight:1.6, maxWidth:320, margin:"0 auto 24px" }}>
+               Legen Sie zuerst einen Wahltag an um Wahlen, Teilnehmende und Tagestoken zu verwalten.
+             </p>
+             <button style={{ ...S.btn, ...S.btnPrimary, fontSize:15, padding:"12px 28px" }} onClick={()=>setShowForm(true)}>
                <i className="ti ti-plus" aria-hidden="true"/> Ersten Wahltag anlegen
              </button>
            </div>
