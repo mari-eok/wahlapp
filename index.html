@@ -1250,7 +1250,7 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
     setLoading(true);
     try {
       const res = await callFlow("getDaten", { eventID, wahllokalID: eventID });
-      const liste = (res?.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id||""), datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||wt.tokensGeneriert===true||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null })).sort((a,b) => b.datum?.localeCompare(a.datum));
+      const liste = (res?.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id||""), datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||wt.tokensGeneriert===true||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null })).sort((a,b) => (b.datum||"").localeCompare(a.datum||""));
       setWahltage(liste);
     } catch(e) { setFehler(e.message); }
     setLoading(false);
@@ -1262,11 +1262,15 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
     if (!form.datum || !form.anzahl || parseInt(form.anzahl) < 1) return;
     setSaving(true); setFehler(null);
     try {
-      await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
+      const resWt = await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
+      if (resWt?.status === "bereits_vorhanden") {
+        setFehler(`Ein Wahltag für den ${new Date(form.datum+"T12:00:00").toLocaleDateString("de-DE")} existiert bereits.`);
+        setSaving(false); return;
+      }
       // Wahltage neu laden dann direkt reinspringen
       const res2 = await callFlow("getDaten", { eventID, wahllokalID: eventID });
       const neuerWahltag = (res2?.wahltage||[])
-        .map(wt => ({ id:String(wt.ID||wt.id), datum:wt.Datum||wt.datum, eventID:wt.EventID||wt.eventID, anzahlStimmberechtigte:wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0, tokensGeneriert:wt.TokensGeneriert||false, kontrollcode:wt.Kontrollcode||null }))
+        .map(wt => ({ id:String(wt.ID||wt.id), datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||false, kontrollcode:wt.Kontrollcode||null }))
         .find(wt => wt.datum?.slice(0,10) === form.datum);
       setShowForm(false); setForm({ datum:"", anzahl:"" });
       if (neuerWahltag) onSelect(neuerWahltag);
@@ -1533,7 +1537,10 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
     try {
       const res = await callFlow("getDaten", { eventID, wahllokalID:eventID });
       const allTokens = (res?.tokenList||[]).map(mapToken);
-      const tagesTokens = allTokens.filter(t=>t.gueltigAm===datum);
+      const tagesTokens = allTokens.filter(t=>{
+        const ta = t.gueltigAm ? t.gueltigAm.slice(0,10) : null;
+        return ta === datum;
+      });
       setTokens(tagesTokens);
     } catch(e) { setFehler(e.message); }
     setLoading(false);
