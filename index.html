@@ -1854,15 +1854,15 @@ function QRCode({ url, size=200 }) {
 }
 
 function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null }) {
-  const wahlen = appData.wahlen.filter(w=>{
-    if (w.eventID!==eventID||w.geschlossen) return false;
-    if (!aktiverWahltag?.datum) return true;
-    const wDatum = w.startzeit ? w.startzeit.slice(0,10) : null;
-    return wDatum === aktiverWahltag.datum.slice(0,10);
-  });
   const today = new Date().toISOString().slice(0,10);
   const aktiverWahltag = wahltag || (appData.wahltage||[]).find(wt=>wt.datum===today);
   const tokenCount = aktiverWahltag?.anzahlStimmberechtigte || appData.tokenCount || 0;
+  const wahlen = appData.wahlen.filter(w=>{
+    if (w.eventID!==eventID||w.geschlossen) return false;
+    if (!aktiverWahltag?.datum) return true;
+    const wDatum = w.startzeit ? new Date(w.startzeit).toLocaleDateString("sv-SE") : null;
+    return wDatum === aktiverWahltag.datum.slice(0,10);
+  });
   const [qrVollbild, setQrVollbild] = useState(false);
   const [toggling, setToggling] = useState(null);
   const wahllokalURL = window.location.origin + window.location.pathname + "?wahllokal=" + eventID;
@@ -1951,7 +1951,7 @@ function LeitungWahlen({ appData, eventID, onDataChange, initialStichwahl, onSti
   const alleWahlen = appData.wahlen.filter(w=>{
     if (w.eventID!==eventID) return false;
     if (!wahltag?.datum) return true; // kein Wahltag → alle zeigen
-    const wDatum = w.startzeit ? w.startzeit.slice(0,10) : null;
+    const wDatum = w.startzeit ? new Date(w.startzeit).toLocaleDateString("sv-SE") : null;
     return wDatum === wahltag.datum.slice(0,10);
   });
   const wahlen = alleWahlen.filter(w=>!w.archiviert); // aktiv + geschlossen (nicht archiviert)
