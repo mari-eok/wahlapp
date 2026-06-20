@@ -356,7 +356,7 @@ function generateToken() {
 
 // ─── Token PDF Generierung (global) ─────────────────────────────────────────
 function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
-  const COLS = 2, ROWS = 6, PER_PAGE = COLS * ROWS;
+  const COLS = 2, ROWS = 5, PER_PAGE = COLS * ROWS;
   const baseURL = window.location.origin + window.location.pathname;
   const total = tokens.length;
   const now = new Date();
@@ -424,7 +424,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true) {
     .deck-table td:first-child { color: #888; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em; width: 48mm; }
     .kcode { font-family: 'Courier New', monospace; font-size: 14pt; color: #1a3a5c; letter-spacing: 0.12em; }
     .deck-hinweis { margin-top: 7mm; width: 120mm; padding: 3.5mm 5mm; background: #f8f9fa; border-left: 3px solid #1a3a5c; font-size: 8.5pt; color: #555; line-height: 1.6; }
-    .page { width: 194mm; height: 281mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(6, 1fr); gap: 0; page-break-after: always; }
+    .page { width: 194mm; height: 281mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, 1fr); gap: 0; page-break-after: always; }
     .page:last-child { page-break-after: auto; }
     .karte { border: 0.5px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2.5mm 3mm; text-align: center; }
     .logo { font-size: 5.5pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; margin-bottom: 0.5mm; }
@@ -1549,9 +1549,13 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
         setFehler("Für diesen Wahltag wurden bereits Tokens generiert. Zuerst löschen falls eine Korrektur nötig ist.");
       } else if (res.status==="ok"||res.timeout) {
         // 502 Timeout = Flow hat trotzdem ausgeführt, kurz warten dann laden
-        if (res.timeout) await new Promise(r=>setTimeout(r, 2000));
+        const wartezeit = res.timeout ? 4000 : 1000;
+        setErfolg("Tokens werden generiert — bitte warten…");
+        await new Promise(r=>setTimeout(r, wartezeit));
         await laden();
-        const kc = tokens[0]?.kontrollcode || res.kontrollcode || null;
+        // Falls noch leer nochmal versuchen
+        setTimeout(async () => { await laden(); }, 3000);
+        const kc = res.kontrollcode || null;
         if (kc) setKontrollcode(kc);
         setErfolg(`${wahltag.anzahlStimmberechtigte} Tagestoken generiert.`);
         setTimeout(()=>setErfolg(null), 5000);
