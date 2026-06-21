@@ -541,6 +541,7 @@ function App() {
 
   return (
     <div style={S.app}><style>{CSS}</style>
+      <GlobalLoadingOverlay/>
       {/* Offline-Banner */}
       {isOffline && (
         <div style={{
@@ -1136,6 +1137,28 @@ function TokenAusgabePage({ hash, eventID }) {
   );
 }
 
+// ─── Globaler Ladeoverlay ────────────────────────────────────────────────────
+let _setGlobalLoading = null;
+function GlobalLoadingOverlay() {
+  const [active, setActive] = useState(false);
+  const [msg, setMsg] = useState("Wird verarbeitet…");
+  React.useEffect(() => {
+    _setGlobalLoading = (on, text) => { setActive(!!on); if(text) setMsg(text); };
+    return () => { _setGlobalLoading = null; };
+  }, []);
+  if (!active) return null;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:9998,
+      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
+      <div style={{ width:52, height:52, border:`5px solid rgba(255,255,255,0.3)`,
+        borderTop:"5px solid #fff", borderRadius:"50%", animation:"spin 0.9s linear infinite" }}/>
+      <div style={{ color:"#fff", fontSize:15, fontWeight:500, letterSpacing:"0.02em" }}>{msg}</div>
+    </div>
+  );
+}
+function showLoading(text) { if(_setGlobalLoading) _setGlobalLoading(true, text||"Wird verarbeitet…"); }
+function hideLoading() { if(_setGlobalLoading) _setGlobalLoading(false); }
+
 // ─── Bestätigungsdialog (ersetzt browser confirm()) ────────────────────────
 function ConfirmDialog({ config, onConfirm, onCancel }) {
   if (!config) return null;
@@ -1263,7 +1286,7 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
 
   async function speichern() {
     if (!form.datum || !form.anzahl || parseInt(form.anzahl) < 1) return;
-    setSaving(true); setFehler(null);
+    setSaving(true); setFehler(null); showLoading("Wahltag wird gespeichert…");
     try {
       const resWt = await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
       if (resWt?.status === "bereits_vorhanden") {
@@ -1592,6 +1615,11 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
         return ta === datum;
       });
       setTokens(tagesTokens);
+      // Kontrollcode aus geladenen Tokens aktualisieren
+      const kc = tagesTokens.find(t=>t.kontrollcode)?.kontrollcode || null;
+      if (kc) setKontrollcode(kc);
+      // Fehler löschen nach erfolgreichem Laden
+      if (tagesTokens.length > 0) setFehler(null);
     } catch(e) { setFehler(e.message); }
     setLoading(false);
   }
@@ -1599,19 +1627,24 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
   useEffect(() => { laden(); }, []);
 
   async function generieren() {
-    setGenerating(true); setFehler(null);
+    setGenerating(true); setFehler(null); showLoading("Tagestoken werden generiert…");
     try {
       const res = await callFlow("generateTagestoken", { apiKey:API.key, eventID, datum });
       if (res.status==="bereits_generiert") {
         setFehler("Für diesen Wahltag wurden bereits Tokens generiert. Zuerst löschen falls eine Korrektur nötig ist.");
       } else if (res.status==="ok"||res.timeout) {
-        // 502 Timeout = Flow hat trotzdem ausgeführt, kurz warten dann laden
-        const wartezeit = res.timeout ? 4000 : 1000;
+        // 502 Timeout = Flow läuft noch im Hintergrund — mehrfach nachladen
+        setFehler(null);
         setErfolg("Tokens werden generiert — bitte warten…");
+        const wartezeit = res.timeout ? 3500 : 800;
         await new Promise(r=>setTimeout(r, wartezeit));
         await laden();
-        // Falls noch leer nochmal versuchen
-        setTimeout(async () => { await laden(); }, 3000);
+        setFehler(null); // Fehler nach Laden immer löschen
+        // Nochmal nachladen falls noch leer
+        setTimeout(async () => {
+          await laden();
+          setFehler(null);
+        }, 3000);
         const kc = res.kontrollcode || null;
         if (kc) setKontrollcode(kc);
         setErfolg(`${wahltag.anzahlStimmberechtigte} Tagestoken generiert.`);
@@ -1619,25 +1652,40 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
         onDataChange(); onTokensChanged();
       }
     } catch(e) { setFehler(e.message); }
-    setGenerating(false);
+    setGenerating(false); hideLoading();
   }
 
   async function alleLoeschen() {
-    const ok = await window.confirm(`Alle ${tokens.length} Tagestoken für den ${datum} wirklich löschen?
-
-Der Kontrollcode wird zurückgesetzt. Ein bereits verteilter Ausdruck wäre damit ungültig.`);
+    const ok = await new Promise(resolve => {
+      const div = document.createElement("div");
+      div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
+      div.innerHTML = `<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+        <div style="font-size:18px;font-weight:700;color:#1a3a5c;margin-bottom:12px">Tagestoken löschen</div>
+        <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 8px">Alle ${tokens.length} Tagestoken für den <strong>${datum}</strong> wirklich löschen?</p>
+        <p style="font-size:13px;color:#e24b4a;margin:0 0 20px">Der Kontrollcode wird zurückgesetzt. Ein bereits verteilter Ausdruck wäre damit ungültig.</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="dlg-cancel" style="padding:8px 16px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:14px">Abbrechen</button>
+          <button id="dlg-ok" style="padding:8px 16px;background:#e24b4a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">Alle löschen</button>
+        </div>
+      </div>`;
+      document.body.appendChild(div);
+      div.querySelector("#dlg-ok").onclick = () => { document.body.removeChild(div); resolve(true); };
+      div.querySelector("#dlg-cancel").onclick = () => { document.body.removeChild(div); resolve(false); };
+      div.onclick = e => { if(e.target===div){ document.body.removeChild(div); resolve(false); } };
+    });
     if (!ok) return;
-    setDeleting(true); setFehler(null);
+    setDeleting(true); setFehler(null); showLoading("Tagestoken werden gelöscht…");
     try {
       await callFlow("deleteTagestoken", { apiKey:API.key, eventID, datum });
-      setKontrollcode(null); setTokens([]);
+      setKontrollcode(null); setLetzterKontrollcode(null); setTokens([]);
       setErfolg("Alle Tagestoken gelöscht."); setTimeout(()=>setErfolg(null), 3000);
       onDataChange(); onTokensChanged();
     } catch(e) { setFehler(e.message); }
-    setDeleting(false);
+    setDeleting(false); hideLoading();
   }
 
   function drucken() {
+    showLoading("PDF wird vorbereitet…"); setTimeout(hideLoading, 2000);
     const druckTokens = tokens.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
     if (druckTokens.length===0) { setFehler("Keine druckbaren Tokens vorhanden."); return; }
     const gespeicherterKontrollcode = tokens.find(t=>t.kontrollcode)?.kontrollcode || kontrollcode;
@@ -1769,7 +1817,18 @@ function LeitungView({ appData, eventID, onExit, onDataChange }) {
   function resetTimeout() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      alert("Sitzung abgelaufen. Sie werden automatisch abgemeldet.");
+      (() => {
+        const div = document.createElement("div");
+        div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
+        div.innerHTML = `<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:360px;width:100%;text-align:center">
+          <div style="font-size:40px;margin-bottom:12px">⏱</div>
+          <div style="font-size:18px;font-weight:700;color:#1a3a5c;margin-bottom:8px">Sitzung abgelaufen</div>
+          <p style="font-size:14px;color:#555;margin:0 0 20px">Sie werden automatisch abgemeldet.</p>
+          <button onclick="this.closest('div[style]').remove()" style="padding:8px 24px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">OK</button>
+        </div>`;
+        document.body.appendChild(div);
+        setTimeout(() => { if(div.parentNode) div.parentNode.removeChild(div); }, 3000);
+      })();
       onExit();
     }, TIMEOUT_MS);
   }
@@ -1830,7 +1889,21 @@ function WahlleitungAblaufCheckliste({ appData, eventID }) {
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch(e) {}
   }
   function reset() {
-    const ok = window.confirm("Durchführungscheck für dieses Wahllokal zurücksetzen?");
+    const ok = await new Promise(resolve => {
+      const div = document.createElement("div");
+      div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
+      div.innerHTML = `<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:380px;width:100%">
+        <div style="font-size:17px;font-weight:700;color:#1a3a5c;margin-bottom:10px">Checkliste zurücksetzen</div>
+        <p style="font-size:14px;color:#555;margin:0 0 20px">Durchführungscheck für dieses Wahllokal zurücksetzen?</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="dlg-c" style="padding:8px 16px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:14px">Abbrechen</button>
+          <button id="dlg-o" style="padding:8px 16px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">Zurücksetzen</button>
+        </div>
+      </div>`;
+      document.body.appendChild(div);
+      div.querySelector("#dlg-o").onclick = () => { document.body.removeChild(div); resolve(true); };
+      div.querySelector("#dlg-c").onclick = () => { document.body.removeChild(div); resolve(false); };
+    });
     if (!ok) return;
     setChecked({});
     try { localStorage.removeItem(storageKey); } catch(e) {}
@@ -1973,7 +2046,7 @@ function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null }) {
           <div style={{ flex:1, minWidth:200 }}>
             <div style={{ fontSize:12, color:C.textLight, marginBottom:8 }}>Wahllokal-URL:</div>
             <code style={{ fontSize:13, background:C.bg, padding:"8px 12px", borderRadius:6, display:"block", wordBreak:"break-all" }}>{wahllokalURL}</code>
-            <button style={{ ...S.btn, ...S.btnGhost, fontSize:12, marginTop:12 }} onClick={()=>navigator.clipboard?.writeText(wahllokalURL).then(()=>alert("URL kopiert!"))}><i className="ti ti-copy" aria-hidden="true"/> URL kopieren</button>
+            <button id="url-copy-btn" style={{ ...S.btn, ...S.btnGhost, fontSize:12, marginTop:12 }} onClick={()=>navigator.clipboard?.writeText(wahllokalURL).then(()=>{ const b=document.getElementById("url-copy-btn"); if(b){const t=b.textContent;b.textContent="✓ Kopiert";setTimeout(()=>{b.textContent=t;},2000); } })}><i className="ti ti-copy" aria-hidden="true"/> URL kopieren</button>
           </div>
         </div>
       </div>
@@ -2056,10 +2129,12 @@ Nur fortfahren wenn dies eine Testwahl war oder das Löschen bewusst gewünscht 
       if (!ok2) return;
     }
 
+    showLoading("Wahl wird gelöscht…");
     try {
       await callFlow("deleteWahl", { wahlID:parseInt(wahl.id) });
       await onDataChange();
     } catch(e) { setFehler(e.message); }
+    hideLoading();
   }
   async function schliesseWahl(wahl) {
     const ok = await confirm({ titel:"Wahl schließen", nachricht:`Wahl "${wahl.titel}" endgültig schließen?\n\nNach dem Schließen können keine weiteren Stimmen abgegeben werden.`, bestaetigen:"Schließen", typ:"warn" });
@@ -2987,7 +3062,7 @@ function SuperadminView({ appData, onExit, onDataChange }) {
   }
   useEffect(()=>{ laden(); },[]);
   async function saveWahllokal(f) { setSaving(true); setFehler(null); try{ await callFlow("saveWahllokal",{ wahllokalID:f.id?parseInt(f.id):null, eventID:f.eventID, name:f.name, aktiv:f.aktiv!==false, leitungPIN:f.leitungPIN||"0000", modus:f.modus||"beides" }); await laden(); await onDataChange(); setForm(null); }catch(e){ setFehler(e.message); } setSaving(false); }
-  async function deleteWahllokal(wl) { const ok = await confirm({ titel:`Wahllokal löschen`, nachricht:`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen, Wahlcodes und Abstimmungen werden unwiderruflich gelöscht.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return; setDeleting(wl.id); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); }
+  async function deleteWahllokal(wl) { const ok = await confirm({ titel:`Wahllokal löschen`, nachricht:`Wahllokal "${wl.name}" wirklich löschen?\n\nAlle zugehörigen Wahlen, Wahlcodes und Abstimmungen werden unwiderruflich gelöscht.`, bestaetigen:"Löschen", typ:"danger" }); if(!ok) return; setDeleting(wl.id); showLoading("Wahllokal wird gelöscht…"); try{ await callFlow("deleteWahllokal",{ wahllokalID:parseInt(wl.id), eventID:wl.eventID }); await laden(); await onDataChange(); }catch(e){ setFehler(e.message); } setDeleting(null); hideLoading(); }
   const tabs = [
     { id:"wahllokale", label:"Wahllokale", icon:"ti-building" },
     { id:"wahlen",     label:"Alle Wahlen", icon:"ti-chart-bar" },
@@ -3405,7 +3480,18 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
   if (!isLeitung || !onDataChange) {
     return (
       <button style={{ ...S.btn, ...S.btnGhost, fontSize:13 }} onClick={()=>
-        alert("Stichwahl erforderlich zwischen:\n"+kandidaten.map(k=>"• "+k.name).join("\n")+"\n\nBitte wende dich an die Wahlleitung.")
+        (() => {
+          const div = document.createElement("div");
+          div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
+          div.innerHTML = `<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:380px;width:100%;text-align:center">
+            <div style="font-size:17px;font-weight:700;color:#1a3a5c;margin-bottom:12px">Stichwahl erforderlich</div>
+            <p style="font-size:14px;color:#555;margin:0 0 8px">Zwischen folgenden Kandidat:innen:</p>
+            <p style="font-size:15px;font-weight:600;color:#1a3a5c;margin:0 0 16px">${kandidaten.map(k=>"• "+k.name).join("<br>")}</p>
+            <p style="font-size:13px;color:#888;margin:0 0 20px">Bitte wende dich an die Wahlleitung.</p>
+            <button onclick="this.closest('[style]').remove()" style="padding:8px 24px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">OK</button>
+          </div>`;
+          document.body.appendChild(div);
+        })()
       }><i className="ti ti-alert-triangle" aria-hidden="true"/> Stichwahl erforderlich</button>
     );
   }
