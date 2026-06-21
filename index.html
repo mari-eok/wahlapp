@@ -15,6 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
+const APP_VERSION = "v2.1 · Build 20260621-001";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -1499,9 +1500,12 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
               <div style={{ fontSize:11, color:"rgba(255,255,255,0.65)" }}>{datum} · {wahltag.anzahlStimmberechtigte} Stimmberechtigte</div>
             </div>
           </div>
-          <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:12, padding:"6px 10px" }}>
-            <i className="ti ti-logout" aria-hidden="true"/>{!isMobile&&" Abmelden"}
-          </button>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontFamily:"monospace" }}>{APP_VERSION}</span>
+            <button onClick={onExit} style={{ ...S.btn, background:"rgba(255,255,255,0.15)", color:"#fff", fontSize:12, padding:"6px 10px" }}>
+              <i className="ti ti-logout" aria-hidden="true"/>{!isMobile&&" Abmelden"}
+            </button>
+          </div>
         </div>
         {/* Desktop Tabs */}
         {!isMobile && (
