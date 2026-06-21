@@ -1630,9 +1630,11 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
     setGenerating(true); setFehler(null); showLoading("Tagestoken werden generiert…");
     try {
       const res = await callFlow("generateTagestoken", { apiKey:API.key, eventID, datum });
-      if (res.status==="bereits_generiert") {
+      if (res.status==="bereits_generiert" && !res.timeout) {
+        // Echter Fehler: Flow läuft durch und sagt explizit "bereits vorhanden"
         setFehler("Für diesen Wahltag wurden bereits Tokens generiert. Zuerst löschen falls eine Korrektur nötig ist.");
-      } else if (res.status==="ok"||res.timeout) {
+      } else if (res.status==="ok"||res.timeout||res.status==="bereits_generiert") {
+        // 502 timeout oder bereits_generiert nach timeout = Tokens werden/wurden generiert
         // 502 Timeout = Flow läuft noch im Hintergrund — mehrfach nachladen
         setFehler(null);
         setErfolg("Tokens werden generiert — bitte warten…");
@@ -1699,7 +1701,7 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
 
   return (
     <div>
-      {fehler && <div style={{ ...S.alert, ...S.alertError, marginBottom:12 }}>{fehler}</div>}
+      {fehler && tokens.length===0 && !loading && <div style={{ ...S.alert, ...S.alertError, marginBottom:12 }}>{fehler}</div>}
       {erfolg && <div style={{ ...S.alert, ...S.alertSuccess, marginBottom:12 }}><i className="ti ti-circle-check" aria-hidden="true"/> {erfolg}</div>}
 
       {/* Kontrollcode Banner */}
