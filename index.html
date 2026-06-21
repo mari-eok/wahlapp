@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-013";
+const APP_VERSION = "v2.1 · Build 20260621-014";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -2036,6 +2036,47 @@ function WahlleitungAblaufCheckliste({ appData, eventID }) {
     setChecked(next);
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch(e) {}
   }
+  function exportChecklistePDF() {
+    const phasen = {};
+    CHECKS.forEach(ch => {
+      if (!phasen[ch.phase]) phasen[ch.phase] = [];
+      phasen[ch.phase].push(ch);
+    });
+    const phasenHTML = Object.entries(phasen).map(([phase, checks]) => `
+      <div style="margin-bottom:20px">
+        <div style="font-size:9pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#1a3a5c;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #1a3a5c;">${phase}</div>
+        ${checks.map(ch => `
+          <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:6px;padding:6px 8px;background:${checked[ch.id]?'#f0faf5':'#fafafa'};border-radius:4px;border-left:3px solid ${checked[ch.id]?'#0f6e56':'#ddd'}">
+            <div style="width:16px;height:16px;border:2px solid ${checked[ch.id]?'#0f6e56':'#bbb'};border-radius:3px;flex-shrink:0;margin-top:1px;background:${checked[ch.id]?'#0f6e56':'#fff'};display:flex;align-items:center;justify-content:center;">${checked[ch.id]?'<span style="color:#fff;font-size:10px;font-weight:700;">&#10003;</span>':''}</div>
+            <div style="font-size:10pt;color:#333;line-height:1.4;">${ch.text}</div>
+          </div>`).join('')}
+      </div>`).join('');
+    const total = CHECKS.length; const done = CHECKS.filter(ch=>checked[ch.id]).length;
+    const now = new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+    const time = new Date().toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      @page{size:A4;margin:15mm} body{font-family:Arial,sans-serif;color:#333}
+      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    </style></head><body>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #1a3a5c;">
+      <div>
+        <div style="font-size:8pt;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#888;margin-bottom:4px;">Evangelische Landeskirche in Baden</div>
+        <div style="font-size:18pt;font-weight:900;color:#1a3a5c;margin-bottom:2px;">Durchführungscheck Wahlleitung</div>
+        <div style="font-size:9pt;color:#888;">Gedruckt am ${now} um ${time} Uhr</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:22pt;font-weight:900;color:${done===total?'#0f6e56':'#1a3a5c'}">${done}/${total}</div>
+        <div style="font-size:8pt;color:#888;">Punkte erledigt</div>
+      </div>
+    </div>
+    ${phasenHTML}
+    <div style="margin-top:24px;padding-top:12px;border-top:1px solid #eee;font-size:8pt;color:#aaa;text-align:center;">EKIBA Wahlapp · Freiwillige Orientierung ohne Sperrwirkung</div>
+    </body></html>`;
+    const win = window.open('','_blank');
+    win.document.write(html); win.document.close(); win.focus();
+    setTimeout(()=>{ win.print(); }, 600);
+  }
+
   async function reset() {
     const ok = await new Promise(resolve => {
       const div = document.createElement("div");
@@ -2065,7 +2106,10 @@ function WahlleitungAblaufCheckliste({ appData, eventID }) {
           <div style={{ fontSize:12, fontWeight:800, color:C.primary, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:4 }}>Durchführungscheck Wahlleitung</div>
           <div style={{ fontSize:13, color:C.textLight, lineHeight:1.45 }}>Freiwillige Orientierung für die Durchführung mit der App – ohne Sperrwirkung und ohne Pflichtcharakter.</div>
         </div>
-        <button onClick={()=>setOffen(true)} style={{ ...S.btn, ...S.btnGhost, whiteSpace:"nowrap" }}><i className="ti ti-checklist" aria-hidden="true"/> Checkliste öffnen</button>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={exportChecklistePDF} style={{ ...S.btn, ...S.btnGhost, whiteSpace:"nowrap" }}><i className="ti ti-download" aria-hidden="true"/> PDF</button>
+          <button onClick={()=>setOffen(true)} style={{ ...S.btn, ...S.btnGhost, whiteSpace:"nowrap" }}><i className="ti ti-checklist" aria-hidden="true"/> Checkliste öffnen</button>
+        </div>
       </div>
 
       {offen && (
