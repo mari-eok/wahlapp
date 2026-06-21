@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-003";
+const APP_VERSION = "v2.1 · Build 20260621-004";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -1639,13 +1639,31 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
       // 502 ist normal bei vielen Tokens — Flow läuft weiter im Hintergrund
     }
     // Warten dann laden — unabhängig vom Flow-Ergebnis
-    await new Promise(r=>setTimeout(r, 5000));
-    await laden();
-    await new Promise(r=>setTimeout(r, 4000));
-    await laden();
-    await new Promise(r=>setTimeout(r, 5000));
-    await laden();
+    // 130 Tokens brauchen ca. 60-90 Sekunden
+    const ziel = wahltag.anzahlStimmberechtigte;
+    let aktuell = 0;
+    const warteSchritte = [6000, 8000, 8000, 8000, 8000, 8000, 8000, 10000];
+    for (const warte of warteSchritte) {
+      await new Promise(r=>setTimeout(r, warte));
+      await laden();
+      // Prüfe ob alle Tokens da sind
+      const res2 = await callFlow("getDaten", { eventID, wahllokalID: eventID });
+      const tT = (res2?.tokenList||[]).map(mapToken).filter(t=>{
+        const raw = t.gueltigAm || null;
+        return raw && raw.slice(0,10) === datum;
+      });
+      aktuell = tT.length;
+      if (tT.length > 0) {
+        setTokens(tT);
+        setFehler(null);
+        const kc = tT.find(t=>t.kontrollcode)?.kontrollcode || null;
+        if (kc) setKontrollcode(kc);
+        showLoading(`Tokens werden generiert (${tT.length} von ${ziel})…`);
+      }
+      if (tT.length >= ziel) break;
+    }
     hideLoading();
+    await laden();
     setGenerating(false);
     setFehler(null);
     onDataChange(); onTokensChanged();
