@@ -1888,7 +1888,7 @@ function WahlleitungAblaufCheckliste({ appData, eventID }) {
     setChecked(next);
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch(e) {}
   }
-  function reset() {
+  async function reset() {
     const ok = await new Promise(resolve => {
       const div = document.createElement("div");
       div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
