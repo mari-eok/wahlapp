@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-018";
+const APP_VERSION = "v2.1 · Build 20260621-019";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3439,6 +3439,7 @@ function PraesentationsModus({ appData, wahllokalID, onExit }) {
   const wahllokal = appData.wahllokale.find(w=>w.eventID===wahllokalID);
   const [wahlenFrisch, setWahlenFrisch] = useState(null);
   const wahlen = wahlenFrisch||appData.wahlen.filter(w=>w.eventID===wahllokalID&&w.geschlossen);
+  const wahlenGeladen = wahlenFrisch !== null;
   const gruppen = gruppiereWahlen(wahlen);
   const [selectedGruppeIdx, setSelectedGruppeIdx] = useState(0);
 
