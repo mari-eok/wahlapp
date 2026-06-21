@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-015";
+const APP_VERSION = "v2.1 · Build 20260621-016";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -535,9 +535,20 @@ function App() {
 
   if (wahllokalID && !appData && !loadError) return (
     <div style={S.app}><style>{CSS}</style>
-      <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
-        <div style={S.spinner}/><p style={{ color:C.textLight, fontSize:14 }}>Wahllokal wird geladen…</p>
+      <div style={{ background:C.primary, height:56, display:"flex", alignItems:"center", padding:"0 24px" }}>
+        <div style={{ width:200, height:20, background:"rgba(255,255,255,0.2)", borderRadius:6 }}/>
       </div>
+      <div style={{ maxWidth:640, margin:"32px auto", padding:"0 16px" }}>
+        {[1,2,3].map(i=>(
+          <div key={i} style={{ background:"#e5e7eb", borderRadius:12, height:i===1?120:72,
+            marginBottom:12, opacity:1-(i-1)*0.25,
+            animation:"skeletonPulse 1.5s ease-in-out infinite" }}/>
+        ))}
+        <p style={{ textAlign:"center", color:C.textLight, fontSize:13, marginTop:24 }}>
+          <span style={S.spinner}/> Wahllokal wird geladen…
+        </p>
+      </div>
+      <style>{`@keyframes skeletonPulse{0%,100%{opacity:0.6}50%{opacity:0.3}}`}</style>
     </div>
   );
 
@@ -829,7 +840,15 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
         positionen: selected.map(s=>({ optionID:parseInt(s.id), name:s.name })),
         maxAuswahl: wahlZumAbstimmen.maxAuswahl||1
       });
-      if (result.status==="gueltig") { setStatus("gueltig"); setStatusMsg(`Ihre Stimme für „${wahlZumAbstimmen.titel}" wurde anonym gespeichert und gezählt.`); onDataChange(); }
+      if (result.status==="gueltig") {
+        const kandidatenNamen = selected.map(id => {
+          const opt = wahlZumAbstimmen.optionen?.find(o=>o.id===id||String(o.id)===String(id));
+          return opt ? opt.name : id;
+        }).filter(Boolean).join(", ");
+        setStatus("gueltig");
+        setStatusMsg(`Wahl: ${wahlZumAbstimmen.titel}${kandidatenNamen ? " · " + kandidatenNamen : ""}`);
+        onDataChange();
+      }
       else if (result.status==="doppelt") { setStatus("doppelt"); setStatusMsg(`Für die Wahl „${wahlZumAbstimmen.titel}" wurde mit diesem Wahlcode bereits eine Stimme abgegeben.`); }
       else { setStatus("ungueltig"); setStatusMsg(result.reason==="wahl_beendet" ? "Diese Wahl ist beendet. Eine Stimmabgabe ist nicht mehr möglich." : result.reason==="wahl_noch_nicht_gestartet" ? "Diese Wahl ist noch nicht freigegeben. Bitte warten Sie bis zur Startzeit." : result.reason==="abgelaufen" ? "Der Wahlcode ist abgelaufen und kann nicht mehr verwendet werden." : result.reason==="gesperrt" ? "Der Wahlcode wurde gesperrt. Bitte wenden Sie sich an die Wahlleitung." : "Der Wahlcode ist ungültig oder die Wahl ist nicht aktiv. Bitte prüfen Sie Ihre Eingabe."); }
     } catch(e) {
@@ -1252,7 +1271,7 @@ function TokenInput({ value, onChange }) {
         {cells.slice(4).map((char,i)=>(<div key={i+4} style={{ ...S.tokenCell, ...(char?S.tokenCellFilled:{}), ...(focused&&cursorPos===i+4?S.tokenCellActive:{}) }}>{char}{focused&&cursorPos===i+4&&<span style={{ position:"absolute", bottom:6, width:2, height:16, background:C.primary, animation:"pulse 1s ease infinite" }}/>}</div>))}
       </div>
       <input ref={inputRef} type="text" value={clean} onChange={e=>onChange(e.target.value.replace(/-/g,"").toUpperCase().slice(0,8))} onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)} maxLength={9} style={{ position:"absolute", opacity:0, top:0, left:0, width:"100%", height:"100%", cursor:"text", fontSize:16 }} autoComplete="off" autoCapitalize="characters" spellCheck={false}/>
-      <p style={{ textAlign:"center", fontSize:12, color:C.textLight, marginTop:8 }}>Tippen Sie hier um Ihren Code einzugeben</p>
+      <p style={{ textAlign:"center", fontSize:12, color:C.textLight, marginTop:8 }}>Format: <span style={{ fontFamily:"monospace", fontWeight:600, letterSpacing:"0.1em" }}>XXXX–XXXX</span> — Ihr persönlicher Wahlcode vom Wahlzettel</p>
     </div>
   );
 }
@@ -1445,7 +1464,7 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
                      <span style={{ ...S.badge, ...si.badge }}>{si.label}</span>
                      {wt.tokensGeneriert && <span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}><i className="ti ti-ticket" aria-hidden="true"/> {wt.anzahlStimmberechtigte} Tokens</span>}
-                     {!wt.tokensGeneriert && <span style={{ ...S.badge, ...S.badgeOrange, fontSize:11 }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Tokens fehlen</span>}
+                     {!wt.tokensGeneriert && <span style={{ ...S.badge, fontSize:11, background:"#fef3c7", color:"#92400e" }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Tokens fehlen</span>}
                    </div>
                    <div style={{ fontWeight:700, fontSize:18, color:C.text }}>{datum||"—"}</div>
                    <div style={{ fontSize:13, color:C.textLight, marginTop:3, display:"flex", gap:12, flexWrap:"wrap" }}>
@@ -1675,7 +1694,7 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
                     )}
                     {!editAnzahl && (wahltag.tokensGeneriert
                       ? <span style={{ color:C.accent }}><i className="ti ti-ticket" aria-hidden="true" style={{marginRight:4}}/>Tagestoken generiert · {wahltag.kontrollcode&&<span style={{ fontFamily:"monospace" }}>{wahltag.kontrollcode}</span>}</span>
-                      : <span style={{ color:C.warning }}><i className="ti ti-alert-triangle" aria-hidden="true" style={{marginRight:4}}/>Noch keine Tagestoken</span>
+                      : <span style={{ color:"#b45309" }}><i className="ti ti-alert-triangle" aria-hidden="true" style={{marginRight:4}}/>Noch keine Tagestoken</span>
                     )}
                   </div>
                 </div>
@@ -1692,7 +1711,7 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
                 </div>
               </div>
             </div>
-            <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile} wahltag={wahltag}/>
+            <LeitungDashboard appData={appData} eventID={eventID} onDataChange={onDataChange} isMobile={isMobile} wahltag={wahltag} onSwitchTab={setSchritt}/>
           </div>
         )}
         {schritt==="wahlen" && (
@@ -2164,7 +2183,7 @@ function QRCode({ url, size=200 }) {
   return <img src={`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&color=1a2744&bgcolor=ffffff&margin=10`} width={size} height={size} alt="QR-Code" style={{ display:"block" }}/>;
 }
 
-function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null }) {
+function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null, onSwitchTab=null }) {
   const today = new Date().toISOString().slice(0,10);
   const aktiverWahltag = wahltag || (appData.wahltage||[]).find(wt=>wt.datum===today);
   const tokenCount = aktiverWahltag?.tokensGeneriert ? (aktiverWahltag?.anzahlStimmberechtigte || 0) : 0;
@@ -2197,9 +2216,12 @@ function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null }) {
     <div>
       {dialog}
       <div style={S.statGrid}>
-        <StatCard num={wahlen.filter(w=>w.aktiv).length} label="Aktive Wahlen" color={C.accent}/>
-        <StatCard num={wahlen.length} label="Wahlen gesamt" color={C.primary}/>
-        <StatCard num={tokenCount} label="Wahlcodes erstellt" color={C.warning}/>
+        <StatCard num={wahlen.filter(w=>w.aktiv).length} label="Aktive Wahlen" color={C.accent}
+          hint={wahlen.length>0?"→ Wahl starten":null} onHintClick={wahlen.length>0?()=>onSwitchTab&&onSwitchTab("wahlen"):null}/>
+        <StatCard num={wahlen.length} label="Wahlen gesamt" color={C.primary}
+          hint="Noch keine Wahlen — jetzt anlegen →" onHintClick={()=>onSwitchTab&&onSwitchTab("wahlen")}/>
+        <StatCard num={tokenCount} label="Wahlcodes erstellt" color={tokenCount>0?C.accent:"#b45309"}
+          hint={tokenCount===0?"Tagestoken generieren →":null} onHintClick={tokenCount===0?()=>onSwitchTab&&onSwitchTab("tagestoken"):null}/>
       </div>
       <WahlleitungAblaufCheckliste appData={appData} eventID={eventID}/>
       {aktiveWahlen.length>0 && (
@@ -3216,7 +3238,7 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
 }
 
 function LeitungErgebnisse({ appData, eventID, onDataChange, onSwitchTab, wahltag=null }) {
-  useEffect(()=>{ window._switchToWahlen=()=>onSwitchTab&&onSwitchTab("wahlen"); return ()=>{ window._switchToWahlen=null; }; },[onSwitchTab]);
+  useEffect(()=>{ window._switchToWahlen=()=>onSwitchTab&&onSwitchTab("wahlen"); window._switchToTagestoken=()=>onSwitchTab&&onSwitchTab("tagestoken"); return ()=>{ window._switchToWahlen=null; window._switchToTagestoken=null; }; },[onSwitchTab]);
   return <ErgebnisDashboard appData={appData} wahllokalID={eventID} onBack={null} isLeitung={true} onDataChange={onDataChange} initialWahlId={window._ergebnisWahlId} wahltag={wahltag}/>;
 }
 
@@ -3979,8 +4001,21 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
   );
 }
 
-function StatCard({ num, label, color }) {
-  return (<div style={S.statCard}><div style={{ ...S.statNum, color }}>{num}</div><div style={S.statLabel}>{label}</div></div>);
+function StatCard({ num, label, color, hint=null, onHintClick=null }) {
+  return (
+    <div style={S.statCard}>
+      <div style={{ ...S.statNum, color }}>{num}</div>
+      <div style={S.statLabel}>{label}</div>
+      {hint && num===0 && (
+        <div onClick={onHintClick}
+          style={{ fontSize:11, color:onHintClick?C.primary:C.textLight, marginTop:6,
+            cursor:onHintClick?"pointer":"default", textDecoration:onHintClick?"underline":"none",
+            lineHeight:1.4 }}>
+          {hint}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
@@ -4007,6 +4042,10 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
         {!f.istStichwahl && (
           <div style={S.formGroup}>
             <label style={S.label}>Startzeit</label>
+            {wahltag?.datum && <p style={{ fontSize:11, color:C.primary, margin:"2px 0 8px", display:"flex", alignItems:"center", gap:4 }}>
+              <i className="ti ti-calendar" aria-hidden="true"/>
+              {new Date(wahltag.datum+"T12:00:00").toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"long",year:"numeric"})}
+            </p>}
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                 <select style={{ ...S.input, width:70 }}
