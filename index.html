@@ -355,10 +355,10 @@ function generateToken() {
 }
 
 // ─── Token PDF Generierung (global) ─────────────────────────────────────────
-function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true, kCode=null) {
+function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true, kCode=null, gesamtanzahl=null) {
   const COLS = 2, ROWS = 5, PER_PAGE = COLS * ROWS;
   const baseURL = window.location.origin + window.location.pathname;
-  const total = tokens.length;
+  const total = gesamtanzahl || tokens.length;
   const now = new Date();
   const druckDatum = now.toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" });
   const druckZeit = now.toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
@@ -402,10 +402,10 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true, kCode=null) 
     '</div>';
 
   const styles = `
-    @page { size: A4; margin: 8mm; }
+    @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', Arial, sans-serif; }
-    .deckblatt { width: 194mm; height: 281mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-after: always; gap: 5mm; }
+    .deckblatt { width: 210mm; height: 297mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-after: always; gap: 5mm; }
     .deck-logo { font-size: 8pt; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #1a3a5c; }
     .deck-title { font-size: 26pt; font-weight: 900; color: #1a3a5c; margin: 2mm 0; }
     .deck-sub { font-size: 13pt; color: #5a6a7a; margin-bottom: 7mm; }
@@ -414,13 +414,13 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true, kCode=null) 
     .deck-table td:first-child { color: #888; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em; width: 48mm; }
     .kcode { font-family: 'Courier New', monospace; font-size: 14pt; color: #1a3a5c; letter-spacing: 0.12em; }
     .deck-hinweis { margin-top: 7mm; width: 120mm; padding: 3.5mm 5mm; background: #f8f9fa; border-left: 3px solid #1a3a5c; font-size: 8.5pt; color: #555; line-height: 1.6; }
-    .page { width: 194mm; height: 281mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, 1fr); gap: 0; page-break-after: always; }
+    .page { width: 210mm; height: 297mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, 1fr); page-break-after: always; }
     .page:last-child { page-break-after: auto; }
-    .karte { border: 0.5px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4mm 3mm; text-align: center; gap: 1.5mm; }
+    .karte { border: 0.5px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3mm; text-align: center; gap: 1.5mm; overflow: hidden; }
     .logo { font-size: 6pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; }
     .wahllokal { font-size: 8pt; color: #5a6a7a; }
     .label { font-size: 6pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #888; }
-    .token { font-size: 22pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.14em; color: #1a3a5c; }
+    .token { font-size: 20pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.12em; color: #1a3a5c; }
     .hinweis { font-size: 6pt; color: #bbb; }
     .nummer { font-size: 6.5pt; color: #aaa; letter-spacing: 0.05em; }
     .leer { border: 0.5px dashed #eee; }`;
@@ -1347,36 +1347,77 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
                <i className="ti ti-plus" aria-hidden="true"/> Ersten Wahltag anlegen
              </button>
            </div>
-         ) : (
-           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-             {wahltage.map(wt => {
-               const si = statusInfo(wt);
-               const datum = wt.datum ? new Date(wt.datum).toLocaleDateString("de-DE", { weekday:"long", day:"2-digit", month:"long", year:"numeric" }) : "—";
-               const istHeute = wt.datum?.slice(0,10) === today;
-               return (
-                 <div key={wt.id} onClick={()=>onSelect(wt)}
-                   style={{ ...S.card, cursor:"pointer", border:`1.5px solid ${istHeute?C.accent:C.border}`, background:istHeute?"#f0faf5":C.bgWhite,
-                     display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap",
-                     transition:"box-shadow 0.15s" }}
-                   onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.1)"}
-                   onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-                   <div>
-                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                       <span style={{ ...S.badge, ...si.badge }}>{si.label}</span>
-                       {wt.tokensGeneriert && <span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}><i className="ti ti-ticket" aria-hidden="true"/> {wt.anzahlStimmberechtigte} Tokens</span>}
-                     </div>
-                     <div style={{ fontWeight:700, fontSize:18, color:C.text }}>{datum||"—"}</div>
-                     <div style={{ fontSize:13, color:C.textLight, marginTop:3, display:"flex", gap:12, flexWrap:"wrap" }}>
-                       <span><i className="ti ti-users" aria-hidden="true" style={{marginRight:4}}/>{wt.anzahlStimmberechtigte||"—"} Stimmberechtigte</span>
-                       {wt.kontrollcode && <span style={{ fontFamily:"monospace", color:C.primary }}>{wt.kontrollcode}</span>}
-                     </div>
+         ) : (() => {
+           const heute = wahltage.filter(wt=>wt.datum?.slice(0,10)===today);
+           const zukuenftig = wahltage.filter(wt=>wt.datum?.slice(0,10)>today);
+           const vergangen = wahltage.filter(wt=>wt.datum?.slice(0,10)<today);
+
+           const WahltageKarte = ({wt}) => {
+             const si = statusInfo(wt);
+             const datum = wt.datum ? new Date(wt.datum+"T12:00:00").toLocaleDateString("de-DE", { weekday:"long", day:"2-digit", month:"long", year:"numeric" }) : "—";
+             const istHeute = wt.datum?.slice(0,10) === today;
+             return (
+               <div onClick={()=>onSelect(wt)}
+                 style={{ ...S.card, cursor:"pointer",
+                   border:`1.5px solid ${istHeute?C.accent:C.border}`,
+                   background:istHeute?"#f0faf5":C.bgWhite,
+                   display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap",
+                   transition:"box-shadow 0.15s", opacity:si.label==="Vergangen"?0.7:1 }}
+                 onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.1)"}
+                 onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+                 <div>
+                   <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                     <span style={{ ...S.badge, ...si.badge }}>{si.label}</span>
+                     {wt.tokensGeneriert && <span style={{ ...S.badge, ...S.badgeGreen, fontSize:11 }}><i className="ti ti-ticket" aria-hidden="true"/> {wt.anzahlStimmberechtigte} Tokens</span>}
+                     {!wt.tokensGeneriert && <span style={{ ...S.badge, ...S.badgeOrange, fontSize:11 }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Tokens fehlen</span>}
                    </div>
-                   <i className="ti ti-chevron-right" aria-hidden="true" style={{ fontSize:20, color:C.textLight }}/>
+                   <div style={{ fontWeight:700, fontSize:18, color:C.text }}>{datum||"—"}</div>
+                   <div style={{ fontSize:13, color:C.textLight, marginTop:3, display:"flex", gap:12, flexWrap:"wrap" }}>
+                     <span><i className="ti ti-users" aria-hidden="true" style={{marginRight:4}}/>{wt.anzahlStimmberechtigte||"—"} Stimmberechtigte</span>
+                     {wt.kontrollcode && <span style={{ fontFamily:"monospace", color:C.primary, fontSize:12 }}>{wt.kontrollcode}</span>}
+                   </div>
                  </div>
-               );
-             })}
-           </div>
-         )
+                 <i className="ti ti-chevron-right" aria-hidden="true" style={{ fontSize:20, color:C.textLight }}/>
+               </div>
+             );
+           };
+
+           return (
+             <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+               {heute.length>0 && (
+                 <div>
+                   <div style={{ fontSize:11, fontWeight:600, letterSpacing:"0.1em", textTransform:"uppercase", color:C.accent, marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>
+                     <span style={{ width:8, height:8, borderRadius:"50%", background:C.accent, display:"inline-block" }}/>
+                     Heute
+                   </div>
+                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                     {heute.map(wt=><WahltageKarte key={wt.id} wt={wt}/>)}
+                   </div>
+                 </div>
+               )}
+               {zukuenftig.length>0 && (
+                 <div>
+                   <div style={{ fontSize:11, fontWeight:600, letterSpacing:"0.1em", textTransform:"uppercase", color:C.primary, marginBottom:8 }}>
+                     Geplant
+                   </div>
+                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                     {zukuenftig.map(wt=><WahltageKarte key={wt.id} wt={wt}/>)}
+                   </div>
+                 </div>
+               )}
+               {vergangen.length>0 && (
+                 <div>
+                   <div style={{ fontSize:11, fontWeight:600, letterSpacing:"0.1em", textTransform:"uppercase", color:C.textLight, marginBottom:8 }}>
+                     Vergangen
+                   </div>
+                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                     {vergangen.map(wt=><WahltageKarte key={wt.id} wt={wt}/>)}
+                   </div>
+                 </div>
+               )}
+             </div>
+           );
+         })()
         }
       </div>
     </div>
@@ -1597,12 +1638,12 @@ Der Kontrollcode wird zurückgesetzt. Ein bereits verteilter Ausdruck wäre dami
   }
 
   function drucken() {
-    const now = Math.floor(Date.now()/1000);
     const druckTokens = tokens.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
     if (druckTokens.length===0) { setFehler("Keine druckbaren Tokens vorhanden."); return; }
-    // Gespeicherten Kontrollcode aus Token verwenden — kein neuer Code beim Druck
     const gespeicherterKontrollcode = tokens.find(t=>t.kontrollcode)?.kontrollcode || kontrollcode;
-    generiereTokenPDF(druckTokens, wahllokal?.name||eventID, eventID, true, gespeicherterKontrollcode);
+    // Gesamtanzahl = Stimmberechtigte (nicht nur verbleibende) — PDF ist inhaltlich immer gleich
+    const gesamtanzahl = wahltag.anzahlStimmberechtigte || tokens.length;
+    generiereTokenPDF(druckTokens, wahllokal?.name||eventID, eventID, true, gespeicherterKontrollcode, gesamtanzahl);
   }
 
   const aktiveTokens = tokens.filter(t=>t.aktiv&&!t.verwendet).length;
@@ -1761,19 +1802,22 @@ function WahlleitungAblaufCheckliste({ appData, eventID }) {
   const storageKey = `wahlleitung_durchfuehrungscheck_${eventID}`;
   const [offen, setOffen] = useState(false);
   const CHECKS = [
-    { id:"wahl_angelegt", phase:"Vorbereitung in der App", text:"Wahl angelegt" },
-    { id:"optionen_angelegt", phase:"Vorbereitung in der App", text:"Kandidat:innen, Enthaltung und ggf. weitere Stimmoptionen angelegt" },
-    { id:"auswahl_zeit_eingestellt", phase:"Vorbereitung in der App", text:"Auswahlregel, Startzeit und ggf. Endzeit eingestellt" },
-    { id:"wahl_pausiert", phase:"Vorbereitung in der App", text:"Wahl bleibt bis zur Freigabe pausiert" },
-    { id:"tokens_vorbereitet", phase:"Wahlcodes und Zugang", text:"Wahlcodes erstellt, gedruckt und verdeckt vorbereitet" },
-    { id:"qr_getestet", phase:"Wahlcodes und Zugang", text:"Wahlseite / QR-Code getestet" },
-    { id:"tokens_ausgegeben", phase:"Wahlcodes und Zugang", text:"Wahlcodes anonym an Stimmberechtigte ausgegeben" },
+    { id:"stimmberechtigte_bekannt", phase:"Vorbereitung (vor dem Wahltag)", text:"Anzahl der Stimmberechtigten ist bekannt und dokumentiert" },
+    { id:"wahltag_angelegt", phase:"Vorbereitung (vor dem Wahltag)", text:"Wahltag mit korrekter Stimmberechtigten-Anzahl angelegt" },
+    { id:"wahl_angelegt", phase:"Vorbereitung (vor dem Wahltag)", text:"Wahl(en) angelegt und dem Wahltag zugeordnet" },
+    { id:"optionen_angelegt", phase:"Vorbereitung (vor dem Wahltag)", text:"Kandidat:innen, Enthaltung und ggf. weitere Stimmoptionen angelegt" },
+    { id:"auswahl_zeit_eingestellt", phase:"Vorbereitung (vor dem Wahltag)", text:"Auswahlregel, Startzeit und ggf. Endzeit eingestellt" },
+    { id:"tagestoken_generiert", phase:"Am Wahltag (vor der Wahl)", text:"Tagestoken generiert — Anzahl entspricht Stimmberechtigten" },
+    { id:"kontrollcode_geprueft", phase:"Am Wahltag (vor der Wahl)", text:"Kontrollcode im 4-Augen-Prinzip geprüft: App-Anzeige = PDF-Deckblatt" },
+    { id:"tokens_gedruckt", phase:"Am Wahltag (vor der Wahl)", text:"Wahlcodes gedruckt und verdeckt vorbereitet" },
+    { id:"qr_getestet", phase:"Am Wahltag (vor der Wahl)", text:"Wahlseite / QR-Code auf Beamer getestet" },
+    { id:"tokens_ausgegeben", phase:"Am Wahltag (vor der Wahl)", text:"Wahlcodes einzeln und anonym an Stimmberechtigte ausgegeben" },
     { id:"verfahren_erlaeutert", phase:"Durchführung", text:"Wahlverfahren kurz erläutert" },
-    { id:"wahl_gestartet", phase:"Durchführung", text:"Wahl gestartet / freigegeben; vor der Startzeit läuft der Countdown" },
-    { id:"stimmen_beobachtet", phase:"Durchführung", text:"Eingegangene Stimmen beobachtet" },
-    { id:"wlan_notfall", phase:"Durchführung", text:"Bei WLAN-Ausfall: Wahl sofort pausieren — nach Wiederherstellung der Verbindung fortsetzen" },
+    { id:"wahl_gestartet", phase:"Durchführung", text:"Wahl gestartet / freigegeben" },
+    { id:"stimmen_beobachtet", phase:"Durchführung", text:"Eingegangene Stimmen werden beobachtet" },
+    { id:"wlan_notfall", phase:"Durchführung", text:"Bei WLAN-Ausfall: Wahl sofort pausieren — nach Wiederherstellung fortsetzen" },
     { id:"wahl_geschlossen", phase:"Abschluss", text:"Wahl geschlossen" },
-    { id:"stimmen_plausibilisiert", phase:"Abschluss", text:"Stimmenanzahl plausibilisiert" },
+    { id:"stimmen_plausibilisiert", phase:"Abschluss", text:"Stimmenanzahl mit Anzahl Stimmberechtigter plausibilisiert" },
     { id:"ergebnis_geprueft", phase:"Abschluss", text:"Ergebnis geprüft und protokolliert" },
     { id:"stichwahl", phase:"Abschluss", text:"Ggf. Stichwahl vorbereitet" },
   ];
