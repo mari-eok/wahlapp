@@ -1650,11 +1650,17 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
           try {
             const pollRes = await callFlow("getDaten", { eventID, wahllokalID: eventID });
             const allT = (pollRes?.tokenList||[]).map(mapToken);
-            const tT = allT.filter(t=>{ const ta=t.gueltigAm?t.gueltigAm.slice(0,10):null; return ta===datum; });
+            // Filter by GueltigAm — try both field name variants
+            const tT = allT.filter(t=>{
+              const raw = t.gueltigAm || t.GueltigAm || null;
+              if (!raw) return false;
+              return raw.slice(0,10) === datum;
+            });
+            console.log(`Poll ${versuche}: ${tT.length}/${ziel} tokens, datum=${datum}, allT=${allT.length}`);
             if (tT.length > 0) {
               setTokens(tT);
               setFehler(null);
-              const kc = tT.find(t=>t.kontrollcode)?.kontrollcode || null;
+              const kc = tT.find(t=>t.kontrollcode||t.Kontrollcode)?.kontrollcode || tT.find(t=>t.Kontrollcode)?.Kontrollcode || null;
               if (kc) setKontrollcode(kc);
             }
             if (tT.length >= ziel) {
@@ -1665,6 +1671,7 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
               onDataChange(); onTokensChanged();
             } else if (versuche < maxVersuche) {
               setErfolg(`Tokens werden generiert (${tT.length} von ${ziel})…`);
+              showLoading(`Tokens werden generiert (${tT.length} von ${ziel})…`);
               setTimeout(poll, 5000);
             } else {
               hideLoading();
@@ -1673,6 +1680,7 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
               setErfolg(`${tT.length} von ${ziel} Tokens geladen.`);
             }
           } catch(e) {
+            console.error("Poll error:", e);
             if (versuche < maxVersuche) setTimeout(poll, 5000);
             else { hideLoading(); setGenerating(false); }
           }
