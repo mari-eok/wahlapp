@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-014";
+const APP_VERSION = "v2.1 · Build 20260621-015";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -4008,20 +4008,38 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
           <div style={S.formGroup}>
             <label style={S.label}>Startzeit</label>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <select style={{ ...S.input, width:100 }}
-                value={f.startzeit ? (f.startzeit.includes("T") ? f.startzeit.slice(11,16) : f.startzeit.slice(0,5)) : ""}
-                onChange={e=>{
-                  if (!e.target.value) return;
-                  const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
-                  setField("startzeit", datum + "T" + e.target.value);
-                }}>
-                <option value="">– Uhrzeit –</option>
-                {Array.from({length:24*12}, (_,i)=>{
-                  const h = String(Math.floor(i/12)).padStart(2,"0");
-                  const m = String((i%12)*5).padStart(2,"0");
-                  return <option key={i} value={h+":"+m}>{h}:{m} Uhr</option>;
-                })}
-              </select>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <select style={{ ...S.input, width:70 }}
+                  value={f.startzeit ? (f.startzeit.includes("T") ? f.startzeit.slice(11,13) : f.startzeit.slice(0,2)) : ""}
+                  onChange={e=>{
+                    if (!e.target.value) return;
+                    const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
+                    const m = f.startzeit ? (f.startzeit.includes("T") ? f.startzeit.slice(14,16) : f.startzeit.slice(3,5)) : "00";
+                    setField("startzeit", datum + "T" + e.target.value + ":" + (m||"00"));
+                  }}>
+                  <option value="">Std.</option>
+                  {Array.from({length:24}, (_,i)=>{
+                    const h = String(i).padStart(2,"0");
+                    return <option key={i} value={h}>{h}</option>;
+                  })}
+                </select>
+                <span style={{ color:C.textLight, fontWeight:700 }}>:</span>
+                <select style={{ ...S.input, width:70 }}
+                  value={f.startzeit ? (f.startzeit.includes("T") ? f.startzeit.slice(14,16) : f.startzeit.slice(3,5)) : ""}
+                  onChange={e=>{
+                    if (!e.target.value) return;
+                    const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
+                    const h = f.startzeit ? (f.startzeit.includes("T") ? f.startzeit.slice(11,13) : f.startzeit.slice(0,2)) : "08";
+                    setField("startzeit", datum + "T" + (h||"08") + ":" + e.target.value);
+                  }}>
+                  <option value="">Min.</option>
+                  {Array.from({length:12}, (_,i)=>{
+                    const m = String(i*5).padStart(2,"0");
+                    return <option key={i} value={m}>{m}</option>;
+                  })}
+                </select>
+                <span style={{ fontSize:13, color:C.textLight }}>Uhr</span>
+              </div>
             </div>
             <p style={{ fontSize:12, color:C.textLight, marginTop:4 }}>Die Wahl bleibt zunächst pausiert — nach dem Starten erscheint bis zur Startzeit ein Countdown.</p>
           </div>
@@ -4034,20 +4052,38 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
           {f.hatEndzeit&&(()=>{
             const startVal = f.startzeit?(f.startzeit.includes("Z")?toLocalInputValue(new Date(f.startzeit)):f.startzeit.slice(0,16)):"";
             return (<>
-              <select style={{ ...S.input, width:100 }}
-                value={f.endzeit ? (f.endzeit.includes("T") ? f.endzeit.slice(11,16) : f.endzeit.slice(0,5)) : ""}
-                onChange={e=>{
-                  if (!e.target.value) return;
-                  const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
-                  setField("endzeit", datum + "T" + e.target.value);
-                }}>
-                <option value="">– Uhrzeit –</option>
-                {Array.from({length:24*12}, (_,i)=>{
-                  const h = String(Math.floor(i/12)).padStart(2,"0");
-                  const m = String((i%12)*5).padStart(2,"0");
-                  return <option key={i} value={h+":"+m}>{h}:{m} Uhr</option>;
-                })}
-              </select>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <select style={{ ...S.input, width:70 }}
+                  value={f.endzeit ? (f.endzeit.includes("T") ? f.endzeit.slice(11,13) : f.endzeit.slice(0,2)) : ""}
+                  onChange={e=>{
+                    if (!e.target.value) return;
+                    const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
+                    const m = f.endzeit ? (f.endzeit.includes("T") ? f.endzeit.slice(14,16) : f.endzeit.slice(3,5)) : "00";
+                    setField("endzeit", datum + "T" + e.target.value + ":" + (m||"00"));
+                  }}>
+                  <option value="">Std.</option>
+                  {Array.from({length:24}, (_,i)=>{
+                    const h = String(i).padStart(2,"0");
+                    return <option key={i} value={h}>{h}</option>;
+                  })}
+                </select>
+                <span style={{ color:C.textLight, fontWeight:700 }}>:</span>
+                <select style={{ ...S.input, width:70 }}
+                  value={f.endzeit ? (f.endzeit.includes("T") ? f.endzeit.slice(14,16) : f.endzeit.slice(3,5)) : ""}
+                  onChange={e=>{
+                    if (!e.target.value) return;
+                    const datum = wahltag?.datum?.slice(0,10) || new Date().toISOString().slice(0,10);
+                    const h = f.endzeit ? (f.endzeit.includes("T") ? f.endzeit.slice(11,13) : f.endzeit.slice(0,2)) : "08";
+                    setField("endzeit", datum + "T" + (h||"08") + ":" + e.target.value);
+                  }}>
+                  <option value="">Min.</option>
+                  {Array.from({length:12}, (_,i)=>{
+                    const m = String(i*5).padStart(2,"0");
+                    return <option key={i} value={m}>{m}</option>;
+                  })}
+                </select>
+                <span style={{ fontSize:13, color:C.textLight }}>Uhr</span>
+              </div>
               {f.endzeit&&f.startzeit&&(()=>{
                 const st = f.startzeit.includes("T") ? f.startzeit.slice(11,16) : f.startzeit.slice(0,5);
                 const vt = f.endzeit.includes("T") ? f.endzeit.slice(11,16) : f.endzeit.slice(0,5);
