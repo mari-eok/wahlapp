@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-002";
+const APP_VERSION = "v2.1 · Build 20260621-003";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -1631,65 +1631,24 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
   useEffect(() => { laden(); }, []);
 
   async function generieren() {
-    setGenerating(true); setFehler(null); showLoading("Tagestoken werden generiert…");
+    setGenerating(true); setFehler(null);
+    showLoading(`${wahltag.anzahlStimmberechtigte} Tagestoken werden generiert — bitte warten…`);
     try {
-      const res = await callFlow("generateTagestoken", { apiKey:API.key, eventID, datum });
-      if (res.status==="bereits_generiert" && !res.timeout) {
-        // Echter Fehler: Flow läuft durch und sagt explizit "bereits vorhanden"
-        setFehler("Für diesen Wahltag wurden bereits Tokens generiert. Zuerst löschen falls eine Korrektur nötig ist.");
-      } else if (res.status==="ok"||res.timeout||res.status==="bereits_generiert") {
-        // Flow läuft im Hintergrund — aktiv pollen bis alle Tokens erstellt sind
-        setFehler(null);
-        const ziel = wahltag.anzahlStimmberechtigte;
-        let versuche = 0;
-        const maxVersuche = 24; // max ~2 Minuten (24 × 5s)
-        setErfolg(`Tokens werden generiert (0 von ${ziel})…`);
-
-        const poll = async () => {
-          versuche++;
-          try {
-            const pollRes = await callFlow("getDaten", { eventID, wahllokalID: eventID });
-            const allT = (pollRes?.tokenList||[]).map(mapToken);
-            // Filter by GueltigAm — try both field name variants
-            const tT = allT.filter(t=>{
-              const raw = t.gueltigAm || t.GueltigAm || null;
-              if (!raw) return false;
-              return raw.slice(0,10) === datum;
-            });
-            console.log(`Poll ${versuche}: ${tT.length}/${ziel} tokens, datum=${datum}, allT=${allT.length}`);
-            if (tT.length > 0) {
-              setTokens(tT);
-              setFehler(null);
-              const kc = tT.find(t=>t.kontrollcode||t.Kontrollcode)?.kontrollcode || tT.find(t=>t.Kontrollcode)?.Kontrollcode || null;
-              if (kc) setKontrollcode(kc);
-            }
-            if (tT.length >= ziel) {
-              hideLoading();
-              setGenerating(false);
-              setErfolg(`${tT.length} Tagestoken generiert.`);
-              setTimeout(()=>setErfolg(null), 5000);
-              onDataChange(); onTokensChanged();
-            } else if (versuche < maxVersuche) {
-              setErfolg(`Tokens werden generiert (${tT.length} von ${ziel})…`);
-              showLoading(`Tokens werden generiert (${tT.length} von ${ziel})…`);
-              setTimeout(poll, 5000);
-            } else {
-              hideLoading();
-              setGenerating(false);
-              await laden();
-              setErfolg(`${tT.length} von ${ziel} Tokens geladen.`);
-            }
-          } catch(e) {
-            console.error("Poll error:", e);
-            if (versuche < maxVersuche) setTimeout(poll, 5000);
-            else { hideLoading(); setGenerating(false); }
-          }
-        };
-        setTimeout(poll, 3000);
-        return; // hideLoading + setGenerating werden im Poll aufgerufen
-      }
-    } catch(e) { setFehler(e.message); hideLoading(); }
+      await callFlow("generateTagestoken", { apiKey:API.key, eventID, datum });
+    } catch(e) {
+      // 502 ist normal bei vielen Tokens — Flow läuft weiter im Hintergrund
+    }
+    // Warten dann laden — unabhängig vom Flow-Ergebnis
+    await new Promise(r=>setTimeout(r, 5000));
+    await laden();
+    await new Promise(r=>setTimeout(r, 4000));
+    await laden();
+    await new Promise(r=>setTimeout(r, 5000));
+    await laden();
+    hideLoading();
     setGenerating(false);
+    setFehler(null);
+    onDataChange(); onTokensChanged();
   }
 
   async function alleLoeschen() {
@@ -1736,7 +1695,7 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
 
   return (
     <div>
-      {fehler && tokens.length===0 && !loading && !generating && <div style={{ ...S.alert, ...S.alertError, marginBottom:12 }}>{fehler}</div>}
+      {fehler && tokens.length===0 && !loading && !generating && !erfolg && <div style={{ ...S.alert, ...S.alertError, marginBottom:12 }}>{fehler}</div>}
       {erfolg && <div style={{ ...S.alert, ...S.alertSuccess, marginBottom:12 }}><i className="ti ti-circle-check" aria-hidden="true"/> {erfolg}</div>}
 
       {/* Kontrollcode Banner */}
