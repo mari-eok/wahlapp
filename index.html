@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-010";
+const APP_VERSION = "v2.1 · Build 20260621-011";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -37,6 +37,7 @@ const API = {
     resolveHash:     "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8d03b25d1be5488d831500714222f5a8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=l8UAFi2UZSXX9t-oyYvdN-beYu5W6yd-4rdulrNhWQw",
     generateHashes:  "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/917882caeeb94cee83db430b239df2a7/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uRqtmmNlAFGUp_KeJPku7qur9SV9MWvCHytdNuYrpT8",
     saveWahltag:     "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/cb546e6ed51e4fd9bd6a6fa3782e4f3a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=hS420OROFZXzQ9nNz8suK5kyViVxPc9X1VxK5CL4ZLo",
+    deleteWahltag:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/0017bf639b8546debca498f28761e047/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ubbkojix4KTHdPtUc8ut9Jhj_HLuA7I_NHQxmgCVvxA",
     generateTagestoken: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/35e1513cd53549129542079942b66b8b/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=_XkXY-JMTENXlkaxC_LRpqMiINXXETs1pQFAKDz_zVA",
     deleteTagestoken: "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/3f40ec775f8d4732b703c934471000d8/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=XcXVg2YnckAYanvPE7L6Y_GXZ7iBxSrs8_8AYphbOJk",
     versendeLinks:   "https://defaulta060ce58619341ee8f962f23b57cca.5d.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/0cea6b0ab3974d4691eaed7d6352bd5e/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uQ9eR2wFlM9hdgNMVgCAffqgApxgOa0HHSRgyv9Jcq8",
@@ -78,7 +79,7 @@ async function callFlow(flowName, body, { retries = 3, retryDelay = 1500 } = {})
       });
       // 502/504 bei bestimmten Flows = SharePoint hat trotzdem ausgeführt (Flow-Timeout)
       if ((res.status === 502 || res.status === 504) &&
-          ["deleteToken","saveTokens","deleteWahllokal","saveWahl","saveWahllokal","deleteWahl","generateTagestoken","deleteTagestoken","saveWahltag"].includes(flowName)) {
+          ["deleteToken","saveTokens","deleteWahllokal","saveWahl","saveWahllokal","deleteWahl","generateTagestoken","deleteTagestoken","saveWahltag","deleteWahltag"].includes(flowName)) {
         return { status: "ok", timeout: true };
       }
       if (!res.ok) throw new Error(`Flow ${flowName} Fehler: ${res.status}`);
@@ -1468,6 +1469,53 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
   const [savingAnzahl, setSavingAnzahl] = useState(false);
   const [anzahlFehler, setAnzahlFehler] = useState(null);
 
+  async function loescheWahltag() {
+    const ok = await new Promise(resolve => {
+      const div = document.createElement("div");
+      div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
+      div.innerHTML = `<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:420px;width:100%">
+        <div style="font-size:18px;font-weight:700;color:#1a3a5c;margin-bottom:12px">Wahltag löschen</div>
+        <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 8px">
+          <strong>${wahltag.datum ? new Date(wahltag.datum+"T12:00:00").toLocaleDateString("de-DE", {weekday:"long", day:"2-digit", month:"long", year:"numeric"}) : wahltag.datum}</strong>
+        </p>
+        <p style="font-size:13px;color:#e24b4a;margin:0 0 20px">
+          Dieser Wahltag wird unwiderruflich gelöscht — inklusive aller Wahlen, Kandidaten und Tagestoken.
+        </p>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="dlg-c" style="padding:8px 16px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:14px">Abbrechen</button>
+          <button id="dlg-o" style="padding:8px 16px;background:#e24b4a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">Wahltag löschen</button>
+        </div>
+      </div>`;
+      document.body.appendChild(div);
+      div.querySelector("#dlg-o").onclick = () => { document.body.removeChild(div); resolve(true); };
+      div.querySelector("#dlg-c").onclick = () => { document.body.removeChild(div); resolve(false); };
+      div.onclick = e => { if(e.target===div){ document.body.removeChild(div); resolve(false); } };
+    });
+    if (!ok) return;
+    showLoading("Wahltag wird gelöscht…");
+    try {
+      const res = await callFlow("deleteWahltag", { apiKey:API.key, eventID, datum:wahltag.datum });
+      if (res?.status === "stimmen_vorhanden") {
+        hideLoading();
+        const div = document.createElement("div");
+        div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
+        div.innerHTML = `<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:380px;width:100%;text-align:center">
+          <i class="ti ti-lock" style="font-size:40px;color:#e24b4a;display:block;margin-bottom:12px"></i>
+          <div style="font-size:17px;font-weight:700;color:#1a3a5c;margin-bottom:8px">Löschen nicht möglich</div>
+          <p style="font-size:14px;color:#555;margin:0 0 20px">Für diesen Wahltag wurden bereits Stimmen abgegeben. Ein Löschen ist nicht mehr möglich.</p>
+          <button onclick="this.closest('[style*=fixed]').remove()" style="padding:8px 24px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">OK</button>
+        </div>`;
+        document.body.appendChild(div);
+        return;
+      }
+      hideLoading();
+      onDataChange();
+      onBack();
+    } catch(e) {
+      hideLoading();
+    }
+  }
+
   async function speichereAnzahl() {
     const n = parseInt(neueAnzahl);
     if (!n || n < 1) { setAnzahlFehler("Bitte eine gültige Zahl eingeben."); return; }
@@ -1635,6 +1683,9 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
                   )}
                   <button style={{ ...S.btn, ...S.btnGhost }} onClick={()=>setSchritt("wahlen")}>
                     <i className="ti ti-box-multiple" aria-hidden="true"/> Wahlen
+                  </button>
+                  <button style={{ ...S.btn, ...S.btnGhostDanger }} onClick={loescheWahltag}>
+                    <i className="ti ti-trash" aria-hidden="true"/> Wahltag löschen
                   </button>
                 </div>
               </div>
