@@ -373,7 +373,7 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true, kCode=null, 
     if (!t) return '<div class="karte leer"></div>';
     const wahlURL = baseURL + "?wahllokal=" + evID;
     const qrHTML = mitQR
-      ? '<img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=' + encodeURIComponent(wahlURL) + '&color=1a2744&bgcolor=ffffff&margin=4" width="110" height="110" alt="QR" style="display:block;margin:2mm auto 1mm;"/>'
+      ? '<img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=' + encodeURIComponent(wahlURL) + '&color=1a2744&bgcolor=ffffff&margin=3" width="80" height="80" alt="QR" style="display:block;margin:1mm auto;"/>'
       : '';
     return '<div class="karte">' +
       '<div class="logo">Evangelische Landeskirche in Baden</div>' +
@@ -416,13 +416,13 @@ function generiereTokenPDF(tokens, wahllokalName, evID, mitQR=true, kCode=null, 
     .deck-hinweis { margin-top: 7mm; width: 120mm; padding: 3.5mm 5mm; background: #f8f9fa; border-left: 3px solid #1a3a5c; font-size: 8.5pt; color: #555; line-height: 1.6; }
     .page { width: 210mm; height: 297mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, 1fr); page-break-after: always; }
     .page:last-child { page-break-after: auto; }
-    .karte { border: 0.5px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3mm; text-align: center; gap: 1.5mm; overflow: hidden; }
-    .logo { font-size: 6pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #1a3a5c; }
-    .wahllokal { font-size: 8pt; color: #5a6a7a; }
-    .label { font-size: 6pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #888; }
-    .token { font-size: 20pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.12em; color: #1a3a5c; }
-    .hinweis { font-size: 6pt; color: #bbb; }
-    .nummer { font-size: 6.5pt; color: #aaa; letter-spacing: 0.05em; }
+    .karte { border: 0.5px dashed #bbb; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2mm; text-align: center; gap: 0.8mm; overflow: hidden; box-sizing: border-box; }
+    .logo { font-size: 5pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #1a3a5c; }
+    .wahllokal { font-size: 7pt; color: #5a6a7a; }
+    .label { font-size: 5pt; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+    .token { font-size: 17pt; font-weight: 900; font-family: 'Courier New', monospace; letter-spacing: 0.1em; color: #1a3a5c; }
+    .hinweis { font-size: 5pt; color: #bbb; }
+    .nummer { font-size: 5.5pt; color: #aaa; letter-spacing: 0.04em; }
     .leer { border: 0.5px dashed #eee; }`;
 
   const pageHTML = pages.map(function(page, pi) {
