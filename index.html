@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-019";
+const APP_VERSION = "v2.1 · Build 20260621-020";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3820,6 +3820,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
     async function ladeWahlen(){ try{ const raw=await callFlow("getDaten",{ eventID:wahllokalID }); const optionen=(raw.optionen||[]).map(mapOption); const w=(raw.wahlen||[]).map(mapWahl); w.forEach(wahl=>{ wahl.optionen=optionen.filter(o=>o.wahlID===wahl.id).sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }); }); setWahlenFrisch(w); }catch(e){ console.error(e); } }
     ladeWahlen();
   },[wahllokalID]);
+  const wahlenGeladen = wahlenFrisch !== null;
   const gruppen = gruppiereWahlen(wahlen);
   const initialGruppeIdx = initialWahlId ? Math.max(0, gruppen.findIndex(g => g.hauptwahl.id===initialWahlId||g.stichwahlen.some(s=>s.id===initialWahlId))) : 0;
   const [selectedGruppeIdx, setSelectedGruppeIdx] = useState(initialGruppeIdx);
