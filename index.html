@@ -1301,7 +1301,7 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
       const resWt = await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: form.datum, anzahlStimmberechtigte: parseInt(form.anzahl) });
       if (resWt?.status === "bereits_vorhanden") {
         setFehler(`Ein Wahltag für den ${new Date(form.datum+"T12:00:00").toLocaleDateString("de-DE")} existiert bereits.`);
-        setSaving(false); return;
+        hideLoading(); setSaving(false); return;
       }
       // Wahltage neu laden dann direkt reinspringen
       const res2 = await callFlow("getDaten", { eventID, wahllokalID: eventID });
@@ -1309,9 +1309,10 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
         .map(wt => ({ id:String(wt.ID||wt.id), datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||false, kontrollcode:wt.Kontrollcode||null }))
         .find(wt => wt.datum?.slice(0,10) === form.datum);
       setShowForm(false); setForm({ datum:"", anzahl:"" });
+      hideLoading();
       if (neuerWahltag) onSelect(neuerWahltag);
       else await laden();
-    } catch(e) { setFehler(e.message); }
+    } catch(e) { setFehler(e.message); hideLoading(); }
     setSaving(false);
   }
 
