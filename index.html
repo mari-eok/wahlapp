@@ -1568,7 +1568,7 @@ function WahltageView({ appData, eventID, wahltag, onBack, onExit, onDataChange,
             onTokensChanged={()=>setTokenReloadTrigger(t=>t+1)}/>
         )}
         {schritt==="ergebnisse" && (
-          <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setSchritt} isMobile={isMobile}/>
+          <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setSchritt} isMobile={isMobile} wahltag={wahltag}/>
         )}
       </div>
 
@@ -3023,9 +3023,9 @@ Diese Wähler können danach wieder abstimmen.`, bestaetigen:"Reaktivieren", typ
   );
 }
 
-function LeitungErgebnisse({ appData, eventID, onDataChange, onSwitchTab }) {
+function LeitungErgebnisse({ appData, eventID, onDataChange, onSwitchTab, wahltag=null }) {
   useEffect(()=>{ window._switchToWahlen=()=>onSwitchTab&&onSwitchTab("wahlen"); return ()=>{ window._switchToWahlen=null; }; },[onSwitchTab]);
-  return <ErgebnisDashboard appData={appData} wahllokalID={eventID} onBack={null} isLeitung={true} onDataChange={onDataChange} initialWahlId={window._ergebnisWahlId}/>;
+  return <ErgebnisDashboard appData={appData} wahllokalID={eventID} onBack={null} isLeitung={true} onDataChange={onDataChange} initialWahlId={window._ergebnisWahlId} wahltag={wahltag}/>;
 }
 
 function SuperadminView({ appData, onExit, onDataChange }) {
@@ -3577,10 +3577,14 @@ function gruppiereWahlen(wahlen) {
   return gruppen;
 }
 
-function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDataChange, initialWahlId }) {
+function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDataChange, initialWahlId, wahltag=null }) {
   const wahllokal = appData.wahllokale.find(w=>w.eventID===wahllokalID);
   const [wahlenFrisch, setWahlenFrisch] = useState(null);
-  const wahlen = wahlenFrisch||appData.wahlen.filter(w=>w.eventID===wahllokalID);
+  const wahlen = (wahlenFrisch||appData.wahlen.filter(w=>w.eventID===wahllokalID)).filter(w=>{
+    if (!wahltag?.datum) return true;
+    const wDatum = w.startzeit ? new Date(w.startzeit).toLocaleDateString("sv-SE") : null;
+    return wDatum === wahltag.datum.slice(0,10);
+  });
   useEffect(()=>{
     async function ladeWahlen(){ try{ const raw=await callFlow("getDaten",{ eventID:wahllokalID }); const optionen=(raw.optionen||[]).map(mapOption); const w=(raw.wahlen||[]).map(mapWahl); w.forEach(wahl=>{ wahl.optionen=optionen.filter(o=>o.wahlID===wahl.id).sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }); }); setWahlenFrisch(w); }catch(e){ console.error(e); } }
     ladeWahlen();
