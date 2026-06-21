@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-004";
+const APP_VERSION = "v2.1 · Build 20260621-005";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -717,7 +717,18 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   const wahllokal = appData.wahllokale.find(w => w.eventID === wahllokalID);
   const now = new Date();
   // FIX Zeitzone + Endzeit: Wahl ist erst ab Startzeit und nur bis zur optionalen Endzeit abstimmbar
-  const aktiveWahlen = appData.wahlen.filter(w => w.eventID===wahllokalID && w.aktiv && !w.geschlossen && isWithinWahlZeitfenster(w, now));
+  // Token-Datum: nur Wahlen anzeigen die zum Datum des verwendeten Tokens passen
+  const tokenDatum = validatedToken?.gueltigAm ? validatedToken.gueltigAm.slice(0,10) : null;
+  const aktiveWahlen = appData.wahlen.filter(w => {
+    if (w.eventID!==wahllokalID || !w.aktiv || w.geschlossen) return false;
+    if (!isWithinWahlZeitfenster(w, now)) return false;
+    // Wenn Token ein Datum hat: nur Wahlen dieses Datums anzeigen
+    if (tokenDatum) {
+      const wDatum = w.startzeit ? new Date(w.startzeit).toLocaleDateString("sv-SE") : null;
+      if (wDatum && wDatum !== tokenDatum) return false;
+    }
+    return true;
+  });
   const naechsteWahl = appData.wahlen
     .filter(w => w.eventID===wahllokalID && w.aktiv && !w.geschlossen && !isAfterEndzeit(w, now) && parseSharePointDate(w.startzeit)>now)
     .sort((a,b)=>parseSharePointDate(a.startzeit)-parseSharePointDate(b.startzeit))[0];
