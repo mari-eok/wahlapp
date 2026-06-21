@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-007";
+const APP_VERSION = "v2.1 · Build 20260621-008";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -2069,7 +2069,7 @@ function QRCode({ url, size=200 }) {
 function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null }) {
   const today = new Date().toISOString().slice(0,10);
   const aktiverWahltag = wahltag || (appData.wahltage||[]).find(wt=>wt.datum===today);
-  const tokenCount = aktiverWahltag?.anzahlStimmberechtigte || appData.tokenCount || 0;
+  const tokenCount = (aktiverWahltag?.tokensGeneriert ? aktiverWahltag?.anzahlStimmberechtigte : null) || appData.tokenCount || 0;
   const wahlen = appData.wahlen.filter(w=>{
     if (w.eventID!==eventID||w.geschlossen) return false;
     if (!aktiverWahltag?.datum) return true;
