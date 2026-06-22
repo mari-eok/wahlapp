@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-020";
+const APP_VERSION = "v2.1 · Build 20260621-021";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3538,7 +3538,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
 
   function pruefeMehrheit(stimmen, total, wahl) {
     if (total===0) return false;
-    if (istStichwahl(wahl)) return pruefeStichwahl(stimmen, total);
+    if (istFolgeWahlgang(wahl)) return pruefeFolgeWahlgang(stimmen, total);
     return pruefeMehrheitGO(stimmen, total);
   }
 
@@ -3631,9 +3631,9 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
 
               {/* Ergebnis-Banner */}
               {wahlGeschlossen&&total>0&&(()=>{
-                const istSW = istStichwahl(wahl);
-                const keinDrittel = istSW && fuehrend && !pruefeStichwahl(fuehrend.stimmen, total);
-                const keinDrittelUeberhaupt = istSW && (!fuehrend || fuehrend.stimmen === 0 || keinDrittel);
+                const istFWG = istFolgeWahlgang(wahl);
+                const keinDrittel = istFWG && fuehrend && !pruefeFolgeWahlgang(fuehrend.stimmen, total);
+                const keinDrittelUeberhaupt = istFWG && (!fuehrend || fuehrend.stimmen === 0 || keinDrittel);
                 return (
                 <div style={{ marginTop:14, padding:10, borderRadius:8,
                   background: mehrheitErreicht&&!gleichstand?"#f0fdf4":keinDrittelUeberhaupt?"#fef2f2":gleichstand?"#fff8e1":"#fef3c7",
@@ -3654,7 +3654,10 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                     </p>
                   </>}
                   {!mehrheitErreicht&&!gleichstand&&!keinDrittelUeberhaupt&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
-                    <i className="ti ti-alert-triangle" aria-hidden="true"/> Absolute Mehrheit nicht erreicht — Stichwahl erforderlich
+                    <i className="ti ti-alert-triangle" aria-hidden="true"/>
+                    {istFolgeWahlgang(wahl)
+                      ? " Einfache Mehrheit nicht erreicht — Stichwahl erforderlich"
+                      : " Absolute Mehrheit nicht erreicht — 2. Wahlgang erforderlich"}
                   </p>}
                 </div>
                 );
@@ -3662,9 +3665,9 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
 
               {/* Stichwahl vorbereiten */}
               {istLetzte&&wahlGeschlossen&&total>0&&(!mehrheitErreicht||gleichstand)&&isLeitung&&!hatNaechsteStichwahl&&(()=>{
-                const istSW = istStichwahl(wahl);
-                const keinDrittel = istSW && fuehrend && !pruefeStichwahl(fuehrend.stimmen, total);
-                const istGleichstandStichwahl = istSW && gleichstand;
+                const istFWG = istFolgeWahlgang(wahl);
+                const keinDrittel = istFWG && fuehrend && !pruefeFolgeWahlgang(fuehrend.stimmen, total);
+                const istGleichstandStichwahl = ist2Wahlgang(wahl) && gleichstand;
                 return (
                   <div style={{ marginTop:12 }}>
                     {keinDrittel&&(
@@ -3699,14 +3702,15 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
 }
 
 function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataChange, wahlen }) {
-  // Ermittle Wahlgang-Nummer anhand bestehender Stichwahlen
-  const basisTitel = wahl?.titel?.replace(/^(\d+\. )?Stichwahl: /, "") || wahl?.titel || "";
-  const vorherigeStichwahlen = wahlen.filter(w => w.titel.includes("Stichwahl:") && w.titel.includes(basisTitel)).length;
-  const naechsterTitel = vorherigeStichwahlen === 0
-    ? "Stichwahl: " + basisTitel
-    : `${vorherigeStichwahlen + 1}. Stichwahl: ${basisTitel}`;
-  // Grundordnung: Stichwahl immer mit einfacher Mehrheit + 1/3-Minimum
-  const mehrheitsregel = "stichwahl";
+  const basisTitel = getBasisTitel(wahl?.titel || "");
+  // Grundordnung: nach 1. Wahlgang → 2. Wahlgang; bei Gleichstand im 2. Wahlgang → Stichwahl
+  const hat2Wahlgang = wahlen.some(w => ist2Wahlgang(w) && getBasisTitel(w.titel) === basisTitel);
+  const istAktuell2WG = ist2Wahlgang(wahl);
+  const naechsterTitel = !hat2Wahlgang && !istStichwahl(wahl)
+    ? `2. Wahlgang: ${basisTitel}`      // Nach 1. Wahlgang → 2. Wahlgang
+    : `Stichwahl: ${basisTitel}`;        // Nach 2. Wahlgang bei Gleichstand → Stichwahl
+  const naechsterTyp = !hat2Wahlgang && !istStichwahl(wahl) ? "2. Wahlgang" : "Stichwahl";
+  const mehrheitsregel = "stichwahl"; // Beide nutzen einfache Mehrheit + 1/3
 
   if (!isLeitung || !onDataChange) {
     return (
@@ -3730,9 +3734,10 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
   return (
     <div style={{ marginTop:12 }}>
       <div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", marginBottom:12, fontSize:13 }}>
-        <i className="ti ti-info-circle" aria-hidden="true"/> {istStichwahl(wahl)
-          ? "Weitere Stichwahl: Gem. Grundordnung § Abs. 1 Nr. 4 gilt weiterhin einfache Mehrheit mit mindestens 1/3 der abgegebenen Stimmen."
-          : "Gem. Grundordnung § Abs. 1 Nr. 4: Im zweiten Wahlgang gilt einfache Mehrheit mit mindestens 1/3 der abgegebenen Stimmen."}
+        <i className="ti ti-info-circle" aria-hidden="true"/>
+        {naechsterTyp === "2. Wahlgang"
+          ? " 2. Wahlgang gem. Grundordnung: Es gilt einfache Mehrheit — gewählt ist wer die meisten Stimmen erhält und mindestens 1/3 der abgegebenen Stimmen erreicht."
+          : " Stichwahl gem. Grundordnung: Gleichstand im 2. Wahlgang — einfache Mehrheit mit mindestens 1/3 der Stimmen."}
       </div>
       <button style={{ ...S.btn, ...S.btnPrimary, fontSize:13 }} onClick={()=>{
         window._stichwahl = {
@@ -3749,7 +3754,7 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
           hatStimmen: false
         };
         window._switchToWahlen&&window._switchToWahlen();
-      }}><i className="ti ti-player-play" aria-hidden="true"/> {naechsterTitel} vorbereiten</button>
+      }}><i className="ti ti-player-play" aria-hidden="true"/> {naechsterTyp} vorbereiten</button>
       <p style={{ fontSize:12, color:C.textLight, marginTop:8 }}>
         Kandidaten: {kandidaten.map(k=>k.name).join(", ")}
       </p>
@@ -3761,29 +3766,47 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
 // Grundordnung EKIBA: Mehrheitsregel automatisch bestimmen
 // Erster Wahlgang: absolute Mehrheit (>50% aller abgegebenen Stimmen inkl. Enthaltungen)
 // Stichwahl: einfache Mehrheit + mind. 1/3 der abgegebenen Stimmen
+// Grundordnung EKIBA Wahlablauf:
+// 1. Wahlgang: absolute Mehrheit (>50%)
+// 2. Wahlgang: einfache Mehrheit + mind. 1/3 (wenn keine absolute Mehrheit im 1. Wahlgang)
+// Stichwahl: einfache Mehrheit + mind. 1/3 (nur bei Gleichstand im 2. Wahlgang)
+
+function ist2Wahlgang(wahl) {
+  return /^2\.\s*Wahlgang:/i.test(wahl?.titel||"");
+}
 function istStichwahl(wahl) {
-  return /Stichwahl:/i.test(wahl?.titel||"");
+  return /Stichwahl:/i.test(wahl?.titel||"") && !ist2Wahlgang(wahl);
+}
+function istFolgeWahlgang(wahl) {
+  // 2. Wahlgang ODER Stichwahl — beide nutzen einfache Mehrheit + 1/3
+  return ist2Wahlgang(wahl) || istStichwahl(wahl);
 }
 function getMehrheitsregel(wahl) {
-  return istStichwahl(wahl) ? "stichwahl" : "absolut";
+  return istFolgeWahlgang(wahl) ? "stichwahl" : "absolut";
 }
 function pruefeMehrheitGO(stimmen, total) {
-  // Grundordnung Abs. 2: Enthaltungen zählen zu abgegebenen Stimmen → total ist korrekt
   if (total === 0) return false;
   return stimmen / total > 0.5; // absolute Mehrheit: mehr als 50%
 }
-function pruefeStichwahl(stimmen, total) {
-  // Grundordnung Abs. 1 Nr. 4: einfache Mehrheit + mindestens 1/3
+function pruefeFolgeWahlgang(stimmen, total) {
+  // 2. Wahlgang + Stichwahl: einfache Mehrheit + mindestens 1/3
   if (total === 0) return false;
-  return stimmen / total >= 1/3; // mind. 1/3
+  return stimmen / total >= 1/3;
+}
+function pruefeStichwahl(stimmen, total) {
+  return pruefeFolgeWahlgang(stimmen, total);
 }
 function getMehrheitsregelLabel(wahl) {
-  if (istStichwahl(wahl)) return "Einfache Mehrheit (mind. 1/3 der Stimmen) · gem. § Grundordnung Abs. 1 Nr. 4";
-  return "Absolute Mehrheit (>50%) · gem. § Grundordnung Abs. 1 Nr. 3";
+  if (ist2Wahlgang(wahl)) return "Einfache Mehrheit (mind. 1/3 der Stimmen) · 2. Wahlgang gem. Grundordnung";
+  if (istStichwahl(wahl)) return "Einfache Mehrheit (mind. 1/3 der Stimmen) · Stichwahl gem. Grundordnung";
+  return "Absolute Mehrheit (>50%) · 1. Wahlgang gem. Grundordnung";
 }
 
 function getBasisTitel(titel) {
-  return titel.replace(/^(\d+\.\s*)?Stichwahl:\s*/i, "").trim();
+  return titel
+    .replace(/^2\.\s*Wahlgang:\s*/i, "")
+    .replace(/^(\d+\.\s*)?Stichwahl:\s*/i, "")
+    .trim();
 }
 // Hilfsfunktion: Wahlen gruppieren (Hauptwahl + Stichwahlen)
 function gruppiereWahlen(wahlen) {
@@ -3791,11 +3814,11 @@ function gruppiereWahlen(wahlen) {
   const zugeordnet = new Set();
   wahlen.forEach(w => {
     if (zugeordnet.has(w.id)) return;
-    if (/Stichwahl:/i.test(w.titel)) return; // Stichwahlen separat behandeln
-    // Hauptwahl gefunden — zugehörige Stichwahlen finden
+    if (istFolgeWahlgang(w)) return; // Folgewahlgänge separat behandeln
+    // Hauptwahl gefunden — zugehörige Folgewahlgänge finden (2. Wahlgang + Stichwahlen)
     const basis = getBasisTitel(w.titel);
     const stichwahlen = wahlen
-      .filter(s => /Stichwahl:/i.test(s.titel) && getBasisTitel(s.titel) === basis)
+      .filter(s => istFolgeWahlgang(s) && getBasisTitel(s.titel) === basis)
       .sort((a,b) => (a.startzeit||"").localeCompare(b.startzeit||""));
     stichwahlen.forEach(s => zugeordnet.add(s.id));
     zugeordnet.add(w.id);
