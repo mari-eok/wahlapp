@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-028";
+const APP_VERSION = "v2.1 · Build 20260621-029";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -2396,6 +2396,18 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
         setSaving(false);
         return;
       }
+      // BKR-Validierung
+      if (f.wahltyp==="bkr") {
+        const nichtEnthaltung = (f.optionen||[]).filter(o=>!o.istEnthaltung);
+        if (nichtEnthaltung.length < f.maxAuswahl) {
+          setFehler(`Bezirkskirchenratswahl: Bitte mindestens ${f.maxAuswahl} Kandidierende eintragen (aktuell: ${nichtEnthaltung.length}).`);
+          setSaving(false); hideLoading(); return;
+        }
+        if (berechneBKRQuota(f) < 0) {
+          setFehler("Bezirkskirchenratswahl: Quota-Berechnung ungültig — bitte Kraft-Amtes-Zahlen prüfen.");
+          setSaving(false); hideLoading(); return;
+        }
+      }
       let startzeitISO = f.startzeit;
       // Sicherstellen dass Startzeit ein vollständiges Datum+Uhrzeit hat
       if (!startzeitISO || startzeitISO.endsWith("T") || startzeitISO.length < 13) {
@@ -4522,6 +4534,27 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
                     <i className="ti ti-info-circle" aria-hidden="true"/> {kandidatenH} Kandidierende im kirchl. Dienst — davon können max. {maxH} gewählt werden. Mehrere dürfen kandidieren.
                   </div>
                 )}
+                {(()=>{
+                  const nichtEnthaltung = (f.optionen||[]).filter(o=>!o.istEnthaltung);
+                  const anzahl = nichtEnthaltung.length;
+                  const diff = maxAuswahl - anzahl;
+                  if (diff > 0) return (
+                    <div style={{ ...S.alert, background:"#fef3c7", border:"1px solid #fbbf24", color:"#92400e", fontSize:12, marginTop:10 }}>
+                      <i className="ti ti-user-plus" aria-hidden="true"/> Noch {diff} Kandidierende hinzufügen — es sollen {maxAuswahl} Mitglieder gewählt werden.
+                    </div>
+                  );
+                  if (diff < 0) return (
+                    <div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:12, marginTop:10 }}>
+                      <i className="ti ti-info-circle" aria-hidden="true"/> {anzahl} Kandidierende für {maxAuswahl} Plätze — mehr Kandidierende als Plätze ist zulässig.
+                    </div>
+                  );
+                  if (diff === 0 && anzahl > 0) return (
+                    <div style={{ ...S.alert, background:"#f0faf5", border:"1px solid #6ee7b7", color:"#065f46", fontSize:12, marginTop:10 }}>
+                      <i className="ti ti-circle-check" aria-hidden="true"/> {anzahl} Kandidierende für {maxAuswahl} Plätze — offene Abstimmung möglich gem. §46 Abs. 5 GO.
+                    </div>
+                  );
+                  return null;
+                })()}
               </div>
             );
           })()}
