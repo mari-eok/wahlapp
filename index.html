@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-030";
+const APP_VERSION = "v2.1 · Build 20260621-031";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -4535,17 +4535,17 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
                   const diff = maxAuswahl - anzahl;
                   if (diff > 0) return (
                     <div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:12, marginTop:10 }}>
-                      <i className="ti ti-info-circle" aria-hidden="true"/> {anzahl} Kandidierende für {maxAuswahl} Sitze — weniger Kandidierende als Sitze ist zulässig. Alle die die Mehrheit erreichen werden gewählt.
+                      <i className="ti ti-info-circle" aria-hidden="true"/> Es sind {diff} Plätze mehr zu besetzen als Kandidierende eingetragen. Das ist möglich — nicht besetzte Plätze bleiben offen.
                     </div>
                   );
                   if (diff < 0) return (
                     <div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:12, marginTop:10 }}>
-                      <i className="ti ti-info-circle" aria-hidden="true"/> {anzahl} Kandidierende für {maxAuswahl} Plätze — mehr Kandidierende als Plätze ist zulässig.
+                      <i className="ti ti-info-circle" aria-hidden="true"/> Es gibt mehr Kandidierende ({anzahl}) als Plätze ({maxAuswahl}) — die Stimmberechtigten wählen aus allen Kandidierenden.
                     </div>
                   );
                   if (diff === 0 && anzahl > 0) return (
                     <div style={{ ...S.alert, background:"#f0faf5", border:"1px solid #6ee7b7", color:"#065f46", fontSize:12, marginTop:10 }}>
-                      <i className="ti ti-circle-check" aria-hidden="true"/> {anzahl} Kandidierende für {maxAuswahl} Plätze — offene Abstimmung möglich gem. §46 Abs. 5 GO.
+                      <i className="ti ti-circle-check" aria-hidden="true"/> Gleich viele Kandidierende wie Plätze ({anzahl}) — gem. §46 Abs. 5 GO wäre eine offene Abstimmung möglich, sofern kein Mitglied widerspricht.
                     </div>
                   );
                   return null;
