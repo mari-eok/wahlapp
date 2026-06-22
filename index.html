@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-025";
+const APP_VERSION = "v2.1 · Build 20260621-026";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -126,9 +126,9 @@ function updateURL(wahllokalID, ansicht) {
 // leitungPIN wird bewusst NICHT gemappt — PIN-Vergleich läuft serverseitig via checkPin-Flow
 function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, modus: item.Modus?.Value || item.Modus || "beides" }; }
 function mapWahl(item) {
-  return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), archiviert: !!(item.Archiviert === true || item.Archiviert === "true" || item.Archiviert === 1), endzeit: item.Endzeit||item.endzeit||null, optionen: [] };
+  return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), archiviert: !!(item.Archiviert === true || item.Archiviert === "true" || item.Archiviert === 1), endzeit: item.Endzeit||item.endzeit||null, wahltyp: item.Wahltyp||"normal", kraftAmtesHauptamtlich: parseInt(item.KraftAmtesHauptamtlich||0), kraftAmtesEhrenamtlich: parseInt(item.KraftAmtesEhrenamtlich||0), optionen: [] };
 }
-function mapOption(item) { return { id: String(item.ID), wahlID: String(item.WahlID), eventID: item.EventID, name: item.Title, istEnthaltung: item.IstEnthaltung }; }
+function mapOption(item) { return { id: String(item.ID), wahlID: String(item.WahlID), eventID: item.EventID, name: item.Title, istEnthaltung: item.IstEnthaltung, istHauptamtlich: item.IstHauptamtlich||item.istHauptamtlich||false }; }
 
 // FIX: SharePoint liefert UsedForWahlID statt VerwendeteWahlen
 function mapToken(item) {
@@ -2428,10 +2428,15 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
         geschlossen: f.geschlossen||false,
         archiviert: f.archiviert||false,
         endzeit: (f.hatEndzeit&&f.endzeit) ? parseLocalDatetime(f.endzeit).toISOString() : null,
+        // BKR-spezifische Felder
+        wahltyp: f.wahltyp || "normal",
+        kraftAmtesHauptamtlich: f.kraftAmtesHauptamtlich || 0,
+        kraftAmtesEhrenamtlich: f.kraftAmtesEhrenamtlich || 0,
         optionen: f.optionen.map(o => ({
           id: o.id && !isNaN(parseInt(o.id)) ? String(parseInt(o.id)) : null,
           name: o.name,
           istEnthaltung: o.istEnthaltung,
+          istHauptamtlich: o.istHauptamtlich || false,
           hatStimmen: !!f.hatStimmen
         }))
       });
@@ -3537,6 +3542,22 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
   useEffect(() => { laden(); }, [gruppe.hauptwahl.id]);
   useEffect(() => { const t = setInterval(laden, 30000); return () => clearInterval(t); }, [gruppe.hauptwahl.id]);
 
+  function berechneOptErgebnisseBKR(wahl, ergebnisse) {
+    // BKR-Auswertung — vollständig abgekapselt
+    const bkr = berechneBKRErgebnisse(wahl, ergebnisse);
+    const enthaltung = (wahl?.optionen||[]).find(o=>o.istEnthaltung);
+    const enthaltungStimmen = enthaltung ? ergebnisse.filter(a=>{
+      try { const pos=JSON.parse(a.Positionen||a.positionen||"[]"); return pos.some(p=>String(p.optionID)===enthaltung.id); } catch { return false; }
+    }).length : 0;
+
+    return bkr.opts.map(opt => ({
+      ...opt,
+      gewaehlt: bkr.gewaehlte.some(g=>g.id===opt.id),
+      quotaGesperrt: bkr.nichtGewaehlteQuota.some(g=>g.id===opt.id),
+      nichtGewaehlt: !bkr.gewaehlte.some(g=>g.id===opt.id) && !bkr.nichtGewaehlteQuota.some(g=>g.id===opt.id),
+    })).concat(enthaltung ? [{...enthaltung, stimmen: enthaltungStimmen, gewaehlt:false, quotaGesperrt:false, nichtGewaehlt:false}] : []);
+  }
+
   function berechneOptErgebnisse(wahl, ergebnisse) {
     const total = berechneTotal(ergebnisse);
     const maxAuswahl = wahl?.maxAuswahl || 1;
@@ -3593,7 +3614,10 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
       {alleWahlen.map((wahl, idx) => {
         const ergebnisse = ergebnisseMap[wahl.id]||[];
         const total = ergebnisse.length;
-        const optErg = berechneOptErgebnisse(wahl, ergebnisse);
+        const optErg = istBKRWahl(wahl)
+          ? berechneOptErgebnisseBKR(wahl, ergebnisse)
+          : berechneOptErgebnisse(wahl, ergebnisse);
+        const bkrDaten = istBKRWahl(wahl) ? berechneBKRErgebnisse(wahl, ergebnisse) : null;
         const maxS = Math.max(...optErg.map(e=>e.stimmen), 1);
         const mehrheitsregel = typeof wahl.mehrheitsregel==="object" ? (wahl.mehrheitsregel?.Value||"relativ") : (wahl.mehrheitsregel||"relativ");
         const nichtenthaltung = optErg.filter(e=>!e.istEnthaltung);
@@ -3684,7 +3708,51 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   background: mehrheitErreicht&&!gleichstand?"#f0fdf4":keinDrittelUeberhaupt?"#fef2f2":gleichstand?"#fff8e1":"#fef3c7",
                   border:`1px solid ${mehrheitErreicht&&!gleichstand?C.success:keinDrittelUeberhaupt?C.error:gleichstand?C.warning:"#f59e0b"}`
                 }}>
-                  {mehrheitErreicht&&!gleichstand&&!istMehrfach&&<p style={{ fontWeight:700, color:C.success, fontSize:13, margin:0 }}>
+                  {/* BKR-spezifische Ergebnisanzeige */}
+                  {istBKRWahl(wahl)&&bkrDaten&&wahlGeschlossen&&total>0&&(
+                    <div style={{ marginTop:8 }}>
+                      {bkrDaten.gewaehlte.length>0&&(
+                        <div style={{ marginBottom:6 }}>
+                          <p style={{ fontWeight:700, color:C.success, fontSize:13, margin:"0 0 4px" }}>
+                            <i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt ({bkrDaten.gewaehlte.length} von {wahl.maxAuswahl}):
+                          </p>
+                          {bkrDaten.gewaehlte.map(k=>(
+                            <p key={k.id} style={{ fontSize:12, margin:"2px 0 2px 16px", color:C.text }}>
+                              {k.name}
+                              {k.istHauptamtlich&&<span style={{ ...S.badge, background:"#dbeafe", color:"#1e40af", fontSize:10, marginLeft:6 }}>kirchl. Dienst</span>}
+                              <span style={{ color:C.textLight, marginLeft:6 }}>{Math.round(k.stimmen/total*100)}%</span>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {bkrDaten.nichtGewaehlteQuota.length>0&&(
+                        <div style={{ ...S.alert, background:"#fef3c7", border:"1px solid #fbbf24", fontSize:12, marginBottom:6 }}>
+                          <p style={{ fontWeight:700, color:"#92400e", margin:"0 0 4px" }}>
+                            <i className="ti ti-lock" aria-hidden="true"/> Quota erreicht — nicht berücksichtigt (§45 Abs. 2 GO):
+                          </p>
+                          {bkrDaten.nichtGewaehlteQuota.map(k=>(
+                            <p key={k.id} style={{ margin:"2px 0", color:"#92400e", fontSize:12 }}>
+                              {k.name} · {Math.round(k.stimmen/total*100)}% (hätte absolute Mehrheit)
+                            </p>
+                          ))}
+                          <p style={{ margin:"4px 0 0", fontSize:11, color:"#92400e" }}>
+                            Gem. §46 Abs. 4 GO: weiterer Wahlgang nur mit anderen Mitgliedern erforderlich.
+                          </p>
+                        </div>
+                      )}
+                      {bkrDaten.offeneAemter>0&&(
+                        <p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
+                          <i className="ti ti-alert-triangle" aria-hidden="true"/> {bkrDaten.offeneAemter} Platz{bkrDaten.offeneAemter>1?"":"" } noch nicht besetzt — {bkrDaten.quotaErreicht?"weiterer Wahlgang (nur andere Mitglieder)":"2. Wahlgang"} erforderlich
+                        </p>
+                      )}
+                      {bkrDaten.offeneAemter===0&&bkrDaten.gewaehlte.length===parseInt(wahl.maxAuswahl)&&(
+                        <p style={{ fontWeight:700, color:C.success, fontSize:13, margin:0 }}>
+                          <i className="ti ti-circle-check" aria-hidden="true"/> Alle {wahl.maxAuswahl} Plätze besetzt.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {mehrheitErreicht&&!gleichstand&&!istMehrfach&&!istBKRWahl(wahl)&&<p style={{ fontWeight:700, color:C.success, fontSize:13, margin:0 }}>
                     <i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt: {fuehrend?.name} · {Math.round(fuehrend.stimmen/total*100)}%
                   </p>}
                   {istMehrfach&&wahlGeschlossen&&total>0&&(
@@ -3759,18 +3827,32 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                 );
 
                 // Fall 3: Normale Stichwahl/2. Wahlgang vorbereiten
+                // BKR: nur nicht-hauptamtliche Kandidaten in weiteren Wahlgang
+                const bkrFolgeKandidaten = istBKRWahl(wahl) && bkrDaten
+                  ? nichtenthaltung.filter(e=>!e.gewaehlt && !e.quotaGesperrt && e.stimmen>0)
+                  : null;
+                const folgeKandidaten = bkrFolgeKandidaten
+                  || (istMehrfach
+                    ? nichtenthaltung.filter(e=>!e.gewaehlt&&e.stimmen>0)
+                    : nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0));
+
                 return (
                   <div style={{ marginTop:12 }}>
+                    {istBKRWahl(wahl)&&bkrDaten?.nichtGewaehlteQuota.length>0&&(
+                      <div style={{ ...S.alert, background:"#fef3c7", border:"1px solid #fbbf24", fontSize:12, marginBottom:10 }}>
+                        <i className="ti ti-info-circle" aria-hidden="true"/> Gem. §46 Abs. 4 Satz 2 GO: Im weiteren Wahlgang können nur andere Mitglieder (nicht im kirchl. Dienst) berücksichtigt werden.
+                      </div>
+                    )}
                     <StichwahVorbereiten
                       wahl={wahl}
-                      kandidaten={istMehrfach
-                        ? nichtenthaltung.filter(e=>!e.gewaehlt&&e.stimmen>0)
-                        : nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0)}
-                      offeneAemter={istMehrfach ? offeneAemter : 1}
+                      kandidaten={folgeKandidaten}
+                      offeneAemter={istBKRWahl(wahl)&&bkrDaten ? bkrDaten.offeneAemter : istMehrfach ? offeneAemter : 1}
                       wahllokalID={wahllokalID}
                       isLeitung={isLeitung}
                       onDataChange={onDataChange}
                       wahlen={wahlen}
+                      istBKR={istBKRWahl(wahl)}
+                      bkrWahl={wahl}
                     />
                   </div>
                 );
@@ -3783,7 +3865,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
   );
 }
 
-function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataChange, wahlen, offeneAemter=1 }) {
+function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataChange, wahlen, offeneAemter=1, istBKR=false, bkrWahl=null }) {
   const basisTitel = getBasisTitel(wahl?.titel || "");
   // Grundordnung: nach 1. Wahlgang → 2. Wahlgang; bei Gleichstand im 2. Wahlgang → Stichwahl
   const hat2Wahlgang = wahlen.some(w => ist2Wahlgang(w) && getBasisTitel(w.titel) === basisTitel);
@@ -3831,8 +3913,12 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
           exakt: false,
           maxAuswahl: offeneAemter,
           mehrheitsregel,
+          // BKR: Folgewahlgang erbt Wahltyp und Quota-Felder
+          wahltyp: istBKR ? "bkr" : "normal",
+          kraftAmtesHauptamtlich: bkrWahl?.kraftAmtesHauptamtlich || 0,
+          kraftAmtesEhrenamtlich: bkrWahl?.kraftAmtesEhrenamtlich || 0,
           optionen: [
-            ...kandidaten.map(k=>({ id:null, name:k.name, istEnthaltung:false })),
+            ...kandidaten.map(k=>({ id:null, name:k.name, istEnthaltung:false, istHauptamtlich: k.istHauptamtlich||false })),
             { id:null, name:"Enthaltung", istEnthaltung:true }
           ],
           eventID: wahllokalID,
@@ -3851,6 +3937,80 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
 // Grundordnung EKIBA: Mehrheitsregel automatisch bestimmen
 // Erster Wahlgang: absolute Mehrheit (>50% aller abgegebenen Stimmen inkl. Enthaltungen)
 // Stichwahl: einfache Mehrheit + mind. 1/3 der abgegebenen Stimmen
+// ─── Bezirkskirchenratswahl (BKR) §45/46 GO ─────────────────────────────────
+// Vollständig abgekapselt — keine Auswirkung auf andere Wahltypen
+
+function istBKRWahl(wahl) {
+  return wahl?.wahltyp === "bkr";
+}
+
+function berechneBKRQuota(wahl) {
+  // §45 Abs. 2: Hauptamtliche gesamt < Ehrenamtliche gesamt
+  // Hauptamtliche gesamt = kraft Amtes + gewählte Hauptamtliche
+  // Max. wählbare Hauptamtliche = (Ehrenamtl. kraft Amtes + zu wählende gesamt) - Hauptamtl. kraft Amtes - 1
+  const kraftAmtesH = parseInt(wahl?.kraftAmtesHauptamtlich || 0);
+  const kraftAmtesE = parseInt(wahl?.kraftAmtesEhrenamtlich || 0);
+  const zuWaehlen = parseInt(wahl?.maxAuswahl || 1);
+  // Maximale Hauptamtliche die gewählt werden dürfen:
+  // (kraftAmtesH + maxHauptamtlGewählt) < (kraftAmtesE + (zuWaehlen - maxHauptamtlGewählt))
+  // → 2 * maxH < (kraftAmtesE - kraftAmtesH + zuWaehlen)
+  // → maxH < (kraftAmtesE - kraftAmtesH + zuWaehlen) / 2
+  const maxH = Math.floor((kraftAmtesE - kraftAmtesH + zuWaehlen) / 2);
+  return Math.max(0, maxH);
+}
+
+function berechneBKRErgebnisse(wahl, ergebnisse) {
+  const total = ergebnisse.length;
+  if (total === 0) return { gewaehlte: [], nichtGewaehlteQuota: [], offeneAemter: 0, quotaErreicht: false };
+
+  const maxAuswahl = parseInt(wahl?.maxAuswahl || 1);
+  const maxHauptamtlich = berechneBKRQuota(wahl);
+
+  // Stimmen pro Kandidat berechnen
+  const opts = (wahl?.optionen || [])
+    .filter(o => !o.istEnthaltung)
+    .map(opt => ({
+      ...opt,
+      stimmen: ergebnisse.filter(a => {
+        try { const pos = JSON.parse(a.Positionen||a.positionen||"[]"); return pos.some(p=>String(p.optionID)===opt.id); } catch { return false; }
+      }).length,
+      istHauptamtlich: opt.istHauptamtlich || false,
+    }))
+    .sort((a,b) => b.stimmen - a.stimmen);
+
+  const hatAbsoluteMehrheit = (s) => total > 0 && s / total > 0.5;
+
+  // Phase 1: Absolute Mehrheit prüfen, Quota beachten
+  let gewaehlteH = 0;
+  let gewaehlteE = 0;
+  let gewaehlte = [];
+  let nichtGewaehlteQuota = []; // hätten Mehrheit aber Quota erreicht
+
+  for (const opt of opts) {
+    if (!hatAbsoluteMehrheit(opt.stimmen)) continue;
+    if (gewaehlte.length >= maxAuswahl) break;
+
+    if (opt.istHauptamtlich) {
+      if (gewaehlteH < maxHauptamtlich) {
+        gewaehlte.push({ ...opt, grund: "absolut" });
+        gewaehlteH++;
+      } else {
+        nichtGewaehlteQuota.push(opt);
+      }
+    } else {
+      gewaehlte.push({ ...opt, grund: "absolut" });
+      gewaehlteE++;
+    }
+  }
+
+  const offeneAemter = maxAuswahl - gewaehlte.length;
+  const quotaErreicht = nichtGewaehlteQuota.length > 0;
+
+  return { gewaehlte, nichtGewaehlteQuota, offeneAemter, quotaErreicht, total, maxHauptamtlich, opts };
+}
+
+// ─── Ende BKR ────────────────────────────────────────────────────────────────
+
 // Grundordnung EKIBA Wahlablauf:
 // 1. Wahlgang: absolute Mehrheit (>50%)
 // 2. Wahlgang: einfache Mehrheit + mind. 1/3 (wenn keine absolute Mehrheit im 1. Wahlgang)
@@ -4275,9 +4435,66 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
             </>);
           })()}
         </div>
-        <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap", opacity:f.hatStimmen?0.5:1, pointerEvents:f.hatStimmen?"none":"auto" }}>
-          <label style={{ display:"flex", alignItems:"center", gap:8, cursor:f.hatStimmen?"not-allowed":"pointer", fontSize:14 }}><input type="checkbox" checked={f.mehrfach} disabled={!!f.hatStimmen} onChange={e=>setField("mehrfach",e.target.checked)}/>Mehrfachauswahl</label>
-          {f.mehrfach&&<><label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}><input type="checkbox" checked={f.exakt} disabled={!!f.hatStimmen} onChange={e=>setField("exakt",e.target.checked)}/>Exakte Anzahl</label><label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>Max: <input style={{ ...S.input, width:60 }} type="number" min={1} value={f.maxAuswahl} disabled={!!f.hatStimmen} onChange={e=>setField("maxAuswahl",parseInt(e.target.value))}/></label></>}
+        <div style={{ marginBottom:16, opacity:f.hatStimmen?0.5:1, pointerEvents:f.hatStimmen?"none":"auto" }}>
+          <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginBottom:8 }}>
+            <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:14 }}>
+              <input type="radio" name="wahltyp" checked={f.wahltyp!=="bkr"&&!f.mehrfach}
+                onChange={()=>{setField("mehrfach",false);setField("maxAuswahl",1);setField("exakt",false);setField("wahltyp","normal");}}
+                style={{ accentColor:C.primary }}/> Einzelwahl
+            </label>
+            <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:14 }}>
+              <input type="radio" name="wahltyp" checked={f.wahltyp!=="bkr"&&!!f.mehrfach}
+                onChange={()=>{setField("mehrfach",true);setField("exakt",false);setField("wahltyp","normal");}}
+                style={{ accentColor:C.primary }}/> Mehrfachauswahl
+            </label>
+            <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:14 }}>
+              <input type="radio" name="wahltyp" checked={f.wahltyp==="bkr"}
+                onChange={()=>{setField("wahltyp","bkr");setField("mehrfach",true);setField("exakt",false);}}
+                style={{ accentColor:C.primary }}/>
+              <i className="ti ti-building-church" aria-hidden="true" style={{marginRight:4}}/>Bezirkskirchenratswahl (§45/46 GO)
+            </label>
+          </div>
+          {f.wahltyp!=="bkr"&&f.mehrfach&&(
+            <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginTop:4 }}>
+              <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>
+                <input type="checkbox" checked={f.exakt} disabled={!!f.hatStimmen} onChange={e=>setField("exakt",e.target.checked)}/>Exakte Anzahl
+              </label>
+              <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:14 }}>
+                Max: <input style={{ ...S.input, width:60 }} type="number" min={1} value={f.maxAuswahl} disabled={!!f.hatStimmen} onChange={e=>setField("maxAuswahl",parseInt(e.target.value))}/>
+              </label>
+            </div>
+          )}
+          {f.wahltyp==="bkr"&&(
+            <div style={{ ...S.card, background:"#f0f4ff", border:`1px solid ${C.primary}`, marginTop:12 }}>
+              <div style={S.sectionLabel}>Quota §45 Abs. 2 GO</div>
+              <p style={{ fontSize:12, color:C.textLight, marginBottom:12 }}>
+                Die Anzahl der Personen im kirchlichen Dienst darf im Gesamtgremium die der anderen nicht erreichen.
+              </p>
+              <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginBottom:8 }}>
+                <div>
+                  <label style={S.label}>Kraft Amtes — im kirchl. Dienst</label>
+                  <input type="number" min={0} style={{ ...S.input, width:80 }}
+                    value={f.kraftAmtesHauptamtlich||0}
+                    onChange={e=>setField("kraftAmtesHauptamtlich", parseInt(e.target.value)||0)}/>
+                </div>
+                <div>
+                  <label style={S.label}>Kraft Amtes — andere Mitglieder</label>
+                  <input type="number" min={0} style={{ ...S.input, width:80 }}
+                    value={f.kraftAmtesEhrenamtlich||0}
+                    onChange={e=>setField("kraftAmtesEhrenamtlich", parseInt(e.target.value)||0)}/>
+                </div>
+                <div>
+                  <label style={S.label}>Zu wählende Mitglieder (gesamt)</label>
+                  <input type="number" min={1} max={14} style={{ ...S.input, width:80 }}
+                    value={f.maxAuswahl||1}
+                    onChange={e=>setField("maxAuswahl", parseInt(e.target.value)||1)}/>
+                </div>
+              </div>
+              <div style={{ fontSize:13, color:C.primary, fontWeight:600 }}>
+                → Max. wählbar im kirchl. Dienst: {berechneBKRQuota(f)} von {f.maxAuswahl||1}
+              </div>
+            </div>
+          )}
         </div>
         <div style={S.formGroup}>
           <label style={S.label}>Kandidaten</label>
@@ -4298,6 +4515,22 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
                     onKeyDown={e=>{ if(e.key==="Enter"&&!nameReadonly){ e.preventDefault(); addOption(); } }}
                     title={nameReadonly?"Name kann nicht geändert werden da bereits Stimmen abgegeben wurden.":""}
                   />
+                  {f.wahltyp==="bkr" && (
+                    <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:12, whiteSpace:"nowrap", cursor:"pointer" }}
+                      title="Im kirchlichen Dienst (§2 Abs. 5 GO)">
+                      <input type="checkbox"
+                        checked={!!o.istHauptamtlich}
+                        onChange={e=>{
+                          setField("optionen", f.optionen.map(opt=>
+                            (opt.id||opt._tempKey)===(o.id||o._tempKey)
+                              ? {...opt, istHauptamtlich: e.target.checked}
+                              : opt
+                          ));
+                        }}
+                        style={{ accentColor:C.primary }}/>
+                      kirchl. Dienst
+                    </label>
+                  )}
                   {!f.hatStimmen&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={()=>removeOpt(o.id||o._tempKey)}><i className="ti ti-x" aria-hidden="true"/></button>}
                   {f.hatStimmen&&!istGespeichert&&<button style={{ ...S.btn, ...S.btnDanger }} onClick={()=>removeOpt(o.id||o._tempKey)}><i className="ti ti-x" aria-hidden="true"/></button>}
                 </>);
