@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-023";
+const APP_VERSION = "v2.1 · Build 20260621-024";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3713,36 +3713,44 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
               {/* Stichwahl vorbereiten */}
               {istLetzte&&wahlGeschlossen&&total>0&&(!mehrheitErreicht||gleichstand)&&isLeitung&&!hatNaechsteStichwahl&&(()=>{
                 const istFWG = istFolgeWahlgang(wahl);
-                const keinDrittel = istFWG && fuehrend && !pruefeFolgeWahlgang(fuehrend.stimmen, total);
-                const keinDrittelUeberhaupt2 = istFWG && (!fuehrend || fuehrend.stimmen === 0 || keinDrittel);
-                const istGleichstandStichwahl = ist2Wahlgang(wahl) && gleichstand;
-                // Wenn kein Drittel erreicht und kein Gleichstand → keine weitere automatische Wahl möglich
-                if (keinDrittelUeberhaupt2 && !istGleichstandStichwahl) return (
-                  <div style={{ marginTop:12, ...S.alert, background:"#fef2f2", border:`1px solid ${C.error}`, color:"#7b2d2d", fontSize:13 }}>
-                    <i className="ti ti-circle-x" aria-hidden="true"/> Gem. Grundordnung ist keine weitere automatische Wahl vorgesehen. Für nicht besetzte Ämter ist eine neue Wahl in einer späteren Sitzung erforderlich.
+                const fuehrendNichtEnthaltung = nichtenthaltung[0];
+                const keinDrittel = istFWG && fuehrendNichtEnthaltung && !pruefeFolgeWahlgang(fuehrendNichtEnthaltung.stimmen, total);
+                const keinDrittelUeberhaupt2 = istFWG && (!fuehrendNichtEnthaltung || fuehrendNichtEnthaltung.stimmen === 0 || keinDrittel);
+                const istGleichstandImFolgeWahlgang = istFolgeWahlgang(wahl) && gleichstand;
+
+                // Fall 1: Stichwahl (Folgewahlgang) mit Gleichstand → weitere Stichwahl vorbereiten
+                if (istGleichstandImFolgeWahlgang) return (
+                  <div style={{ marginTop:12 }}>
+                    <div style={{ ...S.alert, ...S.alertWarning, fontSize:12, marginBottom:10 }}>
+                      <i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand im {ist2Wahlgang(wahl)?"2. Wahlgang":"Stichwahl"} — Stichwahl erforderlich.
+                    </div>
+                    <StichwahVorbereiten
+                      wahl={wahl}
+                      kandidaten={nichtenthaltung.filter(e=>e.stimmen===fuehrendNichtEnthaltung?.stimmen)}
+                      offeneAemter={istMehrfach ? offeneAemter : 1}
+                      wahllokalID={wahllokalID}
+                      isLeitung={isLeitung}
+                      onDataChange={onDataChange}
+                      wahlen={wahlen}
+                    />
                   </div>
                 );
+
+                // Fall 2: Kein Kandidat erreicht 1/3 → keine weitere automatische Wahl
+                if (keinDrittelUeberhaupt2) return (
+                  <div style={{ marginTop:12, ...S.alert, background:"#fef2f2", border:`1px solid ${C.error}`, color:"#7b2d2d", fontSize:13 }}>
+                    <i className="ti ti-circle-x" aria-hidden="true"/> Kein Kandidat hat 1/3 der Stimmen erreicht. Gem. Grundordnung ist keine weitere automatische Wahl vorgesehen — für nicht besetzte Ämter ist eine neue Wahl in einer späteren Sitzung erforderlich.
+                  </div>
+                );
+
+                // Fall 3: Normale Stichwahl/2. Wahlgang vorbereiten
                 return (
                   <div style={{ marginTop:12 }}>
-                    {keinDrittel&&!istGleichstandStichwahl&&(
-                      <div style={{ ...S.alert, background:"#fef2f2", border:`1px solid ${C.error}`, color:"#7b2d2d", fontSize:12, marginBottom:10 }}>
-                        <i className="ti ti-alert-triangle" aria-hidden="true"/> Gem. Grundordnung ist keine weitere automatische Wahl vorgesehen. Eine weitere Wahl bedarf eines Beschlusses der Versammlung.
-                      </div>
-                    )}
-                    {istGleichstandStichwahl&&(
-                      <div style={{ ...S.alert, ...S.alertWarning, fontSize:12, marginBottom:10 }}>
-                        <i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand in der Stichwahl — die Grundordnung sieht hierfür keinen automatischen weiteren Wahlgang vor. Die Versammlung muss beraten.
-                      </div>
-                    )}
                     <StichwahVorbereiten
                       wahl={wahl}
                       kandidaten={istMehrfach
-                        ? (gleichstand
-                            ? nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen&&!e.gewaehlt)
-                            : nichtenthaltung.filter(e=>!e.gewaehlt&&e.stimmen>0))
-                        : (gleichstand
-                            ? nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen)
-                            : nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0))}
+                        ? nichtenthaltung.filter(e=>!e.gewaehlt&&e.stimmen>0)
+                        : nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0)}
                       offeneAemter={istMehrfach ? offeneAemter : 1}
                       wahllokalID={wahllokalID}
                       isLeitung={isLeitung}
