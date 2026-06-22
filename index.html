@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-022";
+const APP_VERSION = "v2.1 · Build 20260621-023";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3549,11 +3549,12 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
         const hatMehrheit = istFWG
           ? pruefeFolgeWahlgang(opt.stimmen, total)
           : pruefeMehrheitGO(opt.stimmen, total);
-        // Gewählt wenn: Mehrheit erreicht UND noch Ämter frei UND meiste Stimmen
+        // Im 2. Wahlgang: gewählt nur wenn 1/3 erreicht UND unter den top-N (Ämter)
+        // Im 1. Wahlgang: gewählt nur wenn absolute Mehrheit UND unter den top-N
         const rangIdx = nichtenthaltung.findIndex(o=>o.id===opt.id);
-        const gewaehlt = hatMehrheit && rangIdx < maxAuswahl;
+        const gewaehlt = hatMehrheit && rangIdx < maxAuswahl && opt.stimmen > 0;
         if (gewaehlt) gewaehlteAnzahl++;
-        return { ...opt, gewaehlt, nichtGewaehlt: !gewaehlt && !opt.istEnthaltung };
+        return { ...opt, gewaehlt, nichtGewaehlt: !gewaehlt && !opt.istEnthaltung && opt.stimmen > 0 };
       });
     }
     return opts.map(opt => ({ ...opt, gewaehlt: false, nichtGewaehlt: false }));
@@ -3601,7 +3602,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
             {idx>0&&<div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16 }}>
               <div style={{ flex:1, height:1, background:C.border }}/>
               <span style={{ fontSize:12, color:C.textLight, fontWeight:600, whiteSpace:"nowrap" }}>
-                {idx===1?"1. Stichwahl":`${idx}. Stichwahl`}
+                {ist2Wahlgang(wahl) ? "2. Wahlgang" : idx===1 ? "Stichwahl" : `${idx}. Stichwahl`}
               </span>
               <div style={{ flex:1, height:1, background:C.border }}/>
             </div>}
@@ -3680,7 +3681,10 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                       )}
                       {offeneAemter > 0 && (
                         <p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
-                          <i className="ti ti-alert-triangle" aria-hidden="true"/> {offeneAemter} Amt{offeneAemter>1?"er":""} noch nicht besetzt — {istFolgeWahlgang(wahl) ? "Stichwahl" : "2. Wahlgang"} erforderlich
+                          <i className="ti ti-alert-triangle" aria-hidden="true"/>
+                          {istFolgeWahlgang(wahl)
+                            ? ` ${offeneAemter} Amt${offeneAemter>1?"er":""} nicht besetzt — neue Wahl in späterer Sitzung erforderlich`
+                            : ` ${offeneAemter} Amt${offeneAemter>1?"er":""} noch nicht besetzt — 2. Wahlgang erforderlich`}
                         </p>
                       )}
                     </div>
@@ -3710,12 +3714,19 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
               {istLetzte&&wahlGeschlossen&&total>0&&(!mehrheitErreicht||gleichstand)&&isLeitung&&!hatNaechsteStichwahl&&(()=>{
                 const istFWG = istFolgeWahlgang(wahl);
                 const keinDrittel = istFWG && fuehrend && !pruefeFolgeWahlgang(fuehrend.stimmen, total);
+                const keinDrittelUeberhaupt2 = istFWG && (!fuehrend || fuehrend.stimmen === 0 || keinDrittel);
                 const istGleichstandStichwahl = ist2Wahlgang(wahl) && gleichstand;
+                // Wenn kein Drittel erreicht und kein Gleichstand → keine weitere automatische Wahl möglich
+                if (keinDrittelUeberhaupt2 && !istGleichstandStichwahl) return (
+                  <div style={{ marginTop:12, ...S.alert, background:"#fef2f2", border:`1px solid ${C.error}`, color:"#7b2d2d", fontSize:13 }}>
+                    <i className="ti ti-circle-x" aria-hidden="true"/> Gem. Grundordnung ist keine weitere automatische Wahl vorgesehen. Für nicht besetzte Ämter ist eine neue Wahl in einer späteren Sitzung erforderlich.
+                  </div>
+                );
                 return (
                   <div style={{ marginTop:12 }}>
-                    {keinDrittel&&(
+                    {keinDrittel&&!istGleichstandStichwahl&&(
                       <div style={{ ...S.alert, background:"#fef2f2", border:`1px solid ${C.error}`, color:"#7b2d2d", fontSize:12, marginBottom:10 }}>
-                        <i className="ti ti-alert-triangle" aria-hidden="true"/> Gem. Grundordnung § Abs. 1 Nr. 4 ist keine weitere Stichwahl vorgesehen. Eine weitere Wahl ist nur durch Beschluss der Versammlung möglich.
+                        <i className="ti ti-alert-triangle" aria-hidden="true"/> Gem. Grundordnung ist keine weitere automatische Wahl vorgesehen. Eine weitere Wahl bedarf eines Beschlusses der Versammlung.
                       </div>
                     )}
                     {istGleichstandStichwahl&&(
