@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-021";
+const APP_VERSION = "v2.1 · Build 20260621-022";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3528,12 +3528,35 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
   useEffect(() => { const t = setInterval(laden, 30000); return () => clearInterval(t); }, [gruppe.hauptwahl.id]);
 
   function berechneOptErgebnisse(wahl, ergebnisse) {
-    return (wahl?.optionen||[]).map(opt => ({
+    const total = berechneTotal(ergebnisse);
+    const maxAuswahl = wahl?.maxAuswahl || 1;
+    const mehrfach = wahl?.mehrfach || false;
+    const istFWG = istFolgeWahlgang(wahl);
+
+    const opts = (wahl?.optionen||[]).map(opt => ({
       ...opt,
       stimmen: (ergebnisse||[]).filter(a => {
         try { const pos = JSON.parse(a.Positionen||a.positionen||"[]"); return pos.some(p=>String(p.optionID)===opt.id); } catch { return false; }
       }).length
     })).sort((a,b) => b.stimmen - a.stimmen);
+
+    // Bei Mehrfachauswahl: markiere wer gewählt ist
+    if (mehrfach && maxAuswahl > 1) {
+      const nichtenthaltung = opts.filter(o=>!o.istEnthaltung);
+      let gewaehlteAnzahl = 0;
+      return opts.map(opt => {
+        if (opt.istEnthaltung) return { ...opt, gewaehlt: false, nichtGewaehlt: false };
+        const hatMehrheit = istFWG
+          ? pruefeFolgeWahlgang(opt.stimmen, total)
+          : pruefeMehrheitGO(opt.stimmen, total);
+        // Gewählt wenn: Mehrheit erreicht UND noch Ämter frei UND meiste Stimmen
+        const rangIdx = nichtenthaltung.findIndex(o=>o.id===opt.id);
+        const gewaehlt = hatMehrheit && rangIdx < maxAuswahl;
+        if (gewaehlt) gewaehlteAnzahl++;
+        return { ...opt, gewaehlt, nichtGewaehlt: !gewaehlt && !opt.istEnthaltung };
+      });
+    }
+    return opts.map(opt => ({ ...opt, gewaehlt: false, nichtGewaehlt: false }));
   }
 
   function pruefeMehrheit(stimmen, total, wahl) {
@@ -3559,8 +3582,14 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
         const mehrheitsregel = typeof wahl.mehrheitsregel==="object" ? (wahl.mehrheitsregel?.Value||"relativ") : (wahl.mehrheitsregel||"relativ");
         const nichtenthaltung = optErg.filter(e=>!e.istEnthaltung);
         const fuehrend = nichtenthaltung[0];
-        const mehrheitErreicht = fuehrend && pruefeMehrheit(fuehrend.stimmen, total, wahl);
-        const gleichstand = nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen&&e.id!==fuehrend?.id).length>0;
+        const maxAuswahl = wahl?.maxAuswahl || 1;
+        const istMehrfach = wahl?.mehrfach && maxAuswahl > 1;
+        // Bei Mehrfachauswahl: zähle gewählte Kandidaten
+        const gewaehlteKandidaten = istMehrfach ? optErg.filter(o=>o.gewaehlt) : [];
+        const offeneAemter = istMehrfach ? maxAuswahl - gewaehlteKandidaten.length : 0;
+        const alleAemterBesetzt = istMehrfach && offeneAemter === 0;
+        const mehrheitErreicht = istMehrfach ? alleAemterBesetzt : (fuehrend && pruefeMehrheit(fuehrend.stimmen, total, wahl));
+        const gleichstand = !istMehrfach && nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen&&e.id!==fuehrend?.id).length>0;
         const wahlGeschlossen = !!wahl.geschlossen;
         const istLetzte = idx===alleWahlen.length-1;
         const naechsteStichwahl = gruppe.stichwahlen[idx]; // nächste Stichwahl nach dieser Wahl
@@ -3639,9 +3668,23 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   background: mehrheitErreicht&&!gleichstand?"#f0fdf4":keinDrittelUeberhaupt?"#fef2f2":gleichstand?"#fff8e1":"#fef3c7",
                   border:`1px solid ${mehrheitErreicht&&!gleichstand?C.success:keinDrittelUeberhaupt?C.error:gleichstand?C.warning:"#f59e0b"}`
                 }}>
-                  {mehrheitErreicht&&!gleichstand&&<p style={{ fontWeight:700, color:C.success, fontSize:13, margin:0 }}>
+                  {mehrheitErreicht&&!gleichstand&&!istMehrfach&&<p style={{ fontWeight:700, color:C.success, fontSize:13, margin:0 }}>
                     <i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt: {fuehrend?.name} · {Math.round(fuehrend.stimmen/total*100)}%
                   </p>}
+                  {istMehrfach&&wahlGeschlossen&&total>0&&(
+                    <div>
+                      {gewaehlteKandidaten.length > 0 && (
+                        <p style={{ fontWeight:700, color:C.success, fontSize:13, margin:"0 0 4px" }}>
+                          <i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt ({gewaehlteKandidaten.length} von {maxAuswahl}): {gewaehlteKandidaten.map(k=>k.name).join(", ")}
+                        </p>
+                      )}
+                      {offeneAemter > 0 && (
+                        <p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
+                          <i className="ti ti-alert-triangle" aria-hidden="true"/> {offeneAemter} Amt{offeneAemter>1?"er":""} noch nicht besetzt — {istFolgeWahlgang(wahl) ? "Stichwahl" : "2. Wahlgang"} erforderlich
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {gleichstand&&!keinDrittelUeberhaupt&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
                     <i className="ti ti-scale" aria-hidden="true"/> Gleichstand — Stichwahl erforderlich
                   </p>}
@@ -3682,9 +3725,14 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                     )}
                     <StichwahVorbereiten
                       wahl={wahl}
-                      kandidaten={gleichstand
-                        ? nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen)
-                        : nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0)}
+                      kandidaten={istMehrfach
+                        ? (gleichstand
+                            ? nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen&&!e.gewaehlt)
+                            : nichtenthaltung.filter(e=>!e.gewaehlt&&e.stimmen>0))
+                        : (gleichstand
+                            ? nichtenthaltung.filter(e=>e.stimmen===fuehrend?.stimmen)
+                            : nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0))}
+                      offeneAemter={istMehrfach ? offeneAemter : 1}
                       wahllokalID={wahllokalID}
                       isLeitung={isLeitung}
                       onDataChange={onDataChange}
@@ -3701,7 +3749,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
   );
 }
 
-function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataChange, wahlen }) {
+function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataChange, wahlen, offeneAemter=1 }) {
   const basisTitel = getBasisTitel(wahl?.titel || "");
   // Grundordnung: nach 1. Wahlgang → 2. Wahlgang; bei Gleichstand im 2. Wahlgang → Stichwahl
   const hat2Wahlgang = wahlen.some(w => ist2Wahlgang(w) && getBasisTitel(w.titel) === basisTitel);
@@ -3745,18 +3793,21 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
           titel: naechsterTitel,
           istStichwahl: true,
           startzeit: toLocalInputValue(new Date()),
-          mehrfach: false,
+          mehrfach: offeneAemter > 1,
           exakt: false,
-          maxAuswahl: 1,
+          maxAuswahl: offeneAemter,
           mehrheitsregel,
-          optionen: kandidaten.map(k=>({ id:null, name:k.name, istEnthaltung:false })),
+          optionen: [
+            ...kandidaten.map(k=>({ id:null, name:k.name, istEnthaltung:false })),
+            { id:null, name:"Enthaltung", istEnthaltung:true }
+          ],
           eventID: wahllokalID,
           hatStimmen: false
         };
         window._switchToWahlen&&window._switchToWahlen();
       }}><i className="ti ti-player-play" aria-hidden="true"/> {naechsterTyp} vorbereiten</button>
       <p style={{ fontSize:12, color:C.textLight, marginTop:8 }}>
-        Kandidaten: {kandidaten.map(k=>k.name).join(", ")}
+        {offeneAemter > 1 ? `${offeneAemter} Ämter · ` : ""}Kandidaten: {kandidaten.map(k=>k.name).join(", ")}
       </p>
     </div>
   );
@@ -3784,6 +3835,16 @@ function istFolgeWahlgang(wahl) {
 function getMehrheitsregel(wahl) {
   return istFolgeWahlgang(wahl) ? "stichwahl" : "absolut";
 }
+// Bezugsgröße für absolute Mehrheit — PENDING KLÄRUNG
+// Aktuell: Anzahl abgegebener Stimmzettel (nicht Stimmberechtigte)
+// Nach Klärung hier anpassen falls nötig
+function berechneTotal(ergebnisse, stimmberechtigte=null) {
+  // Option A (aktuell): Anzahl abgegebener Stimmzettel
+  return ergebnisse.length;
+  // Option B (nach Klärung falls nötig): Anzahl Stimmberechtigte
+  // return stimmberechtigte || ergebnisse.length;
+}
+
 function pruefeMehrheitGO(stimmen, total) {
   if (total === 0) return false;
   return stimmen / total > 0.5; // absolute Mehrheit: mehr als 50%
