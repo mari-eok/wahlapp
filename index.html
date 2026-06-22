@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-024";
+const APP_VERSION = "v2.1 · Build 20260621-025";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -2203,6 +2203,16 @@ function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null, onSwit
   const today = new Date().toISOString().slice(0,10);
   const aktiverWahltag = wahltag || (appData.wahltage||[]).find(wt=>wt.datum===today);
   const tokenCount = aktiverWahltag?.tokensGeneriert ? (aktiverWahltag?.anzahlStimmberechtigte || 0) : 0;
+  const alleWahlenGesamt = appData.wahlen.filter(w=>w.eventID===eventID).filter(w=>{
+    if (!aktiverWahltag?.datum) return true;
+    const wDatum = w.startzeit ? new Date(w.startzeit).toLocaleDateString("sv-SE") : null;
+    return wDatum === aktiverWahltag.datum.slice(0,10);
+  }).length;
+  const wahlenGeschlossen = appData.wahlen.filter(w=>w.eventID===eventID&&w.geschlossen).filter(w=>{
+    if (!aktiverWahltag?.datum) return true;
+    const wDatum = w.startzeit ? new Date(w.startzeit).toLocaleDateString("sv-SE") : null;
+    return wDatum === aktiverWahltag.datum.slice(0,10);
+  }).length;
   const wahlen = appData.wahlen.filter(w=>{
     if (w.eventID!==eventID||w.geschlossen) return false;
     if (!aktiverWahltag?.datum) return true;
@@ -2234,8 +2244,8 @@ function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null, onSwit
       <div style={S.statGrid}>
         <StatCard num={wahlen.filter(w=>w.aktiv).length} label="Aktive Wahlen" color={C.accent}
           hint={wahlen.length>0?"→ Wahl starten":null} onHintClick={wahlen.length>0?()=>onSwitchTab&&onSwitchTab("wahlen"):null}/>
-        <StatCard num={wahlen.length} label="Wahlen gesamt" color={C.primary}
-          hint="Noch keine Wahlen — jetzt anlegen →" onHintClick={()=>onSwitchTab&&onSwitchTab("wahlen")}/>
+        <StatCard num={alleWahlenGesamt} label={alleWahlenGesamt>0&&alleWahlenGesamt===wahlenGeschlossen?"Alle Wahlen geschlossen":"Wahlen gesamt"} color={C.primary}
+          hint={alleWahlenGesamt===0?"Noch keine Wahlen — jetzt anlegen →":null} onHintClick={alleWahlenGesamt===0?()=>onSwitchTab&&onSwitchTab("wahlen"):null}/>
         <StatCard num={tokenCount} label="Wahlcodes erstellt" color={tokenCount>0?C.accent:"#b45309"}
           hint={tokenCount===0?"Tagestoken generieren →":null} onHintClick={tokenCount===0?()=>onSwitchTab&&onSwitchTab("tagestoken"):null}/>
       </div>
@@ -3538,7 +3548,12 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
       stimmen: (ergebnisse||[]).filter(a => {
         try { const pos = JSON.parse(a.Positionen||a.positionen||"[]"); return pos.some(p=>String(p.optionID)===opt.id); } catch { return false; }
       }).length
-    })).sort((a,b) => b.stimmen - a.stimmen);
+    })).sort((a,b) => {
+      // Enthaltungen immer zuletzt
+      if (a.istEnthaltung && !b.istEnthaltung) return 1;
+      if (!a.istEnthaltung && b.istEnthaltung) return -1;
+      return b.stimmen - a.stimmen;
+    });
 
     // Bei Mehrfachauswahl: markiere wer gewählt ist
     if (mehrfach && maxAuswahl > 1) {
@@ -3690,7 +3705,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                     </div>
                   )}
                   {gleichstand&&!keinDrittelUeberhaupt&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
-                    <i className="ti ti-scale" aria-hidden="true"/> Gleichstand — Stichwahl erforderlich
+                    <i className="ti ti-scale" aria-hidden="true"/>{istFolgeWahlgang(wahl) ? " Gleichstand — Stichwahl erforderlich" : " Gleichstand — 2. Wahlgang erforderlich"}
                   </p>}
                   {keinDrittelUeberhaupt&&<>
                     <p style={{ fontWeight:700, color:C.error, fontSize:13, margin:"0 0 6px" }}>
@@ -3703,7 +3718,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   {!mehrheitErreicht&&!gleichstand&&!keinDrittelUeberhaupt&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
                     <i className="ti ti-alert-triangle" aria-hidden="true"/>
                     {istFolgeWahlgang(wahl)
-                      ? " Einfache Mehrheit nicht erreicht — Stichwahl erforderlich"
+                      ? " Einfache Mehrheit nicht erreicht — Versammlung muss beraten"
                       : " Absolute Mehrheit nicht erreicht — 2. Wahlgang erforderlich"}
                   </p>}
                 </div>
@@ -4088,7 +4103,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
               )}
               {wahlGeschlossen&&total>0&&<div style={{ paddingBottom:VB?12:6 }}>
                 {gewaehlteKandidaten.length>0&&gewaehlteKandidaten.map(g=><div key={g.id} style={{ fontSize:VB?20:14, fontWeight:800, color:col(C.text,"#fff"), marginBottom:2 }}><i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt: {g.name} · {Math.round(g.stimmen/total*100)}%</div>)}
-                {stichwahNötig&&!hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#92400e","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Absolute Mehrheit nicht erreicht — Stichwahl erforderlich</div>}
+                {stichwahNötig&&!hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#92400e","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> {istFolgeWahlgang(gruppe.hauptwahl) ? "Einfache Mehrheit nicht erreicht" : "Absolute Mehrheit nicht erreicht — 2. Wahlgang erforderlich"}</div>}
                 {hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#f59e0b","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand — Stichwahl erforderlich</div>}
               </div>}
               {letzteAktualisierung&&<div style={{ paddingBottom:VB?12:6, marginLeft:"auto" }}><div style={{ fontSize:12, color:col(C.textLight,"rgba(255,255,255,0.4)") }}>Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}</div><div style={{ fontSize:11, color:col(C.textLight,"rgba(255,255,255,0.3)") }}>Auto-Refresh alle 30 Sekunden</div></div>}
