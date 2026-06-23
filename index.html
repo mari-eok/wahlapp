@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-051";
+const APP_VERSION = "v2.1 · Build 20260621-052";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -4008,28 +4008,47 @@ function berechneBKRErgebnisse(wahl, ergebnisse) {
     }))
     .sort((a,b) => b.stimmen - a.stimmen);
 
-  const hatAbsoluteMehrheit = (s) => total > 0 && s / total > 0.5;
+  // Mehrheitsregel: 1. Wahlgang = absolute Mehrheit, Folgewahlgang = einfache + 1/3
+  const istFWGBKR = istFolgeWahlgang(wahl);
+  const hatErforderlicheMehrheit = (s) => {
+    if (total === 0) return false;
+    if (istFWGBKR) return pruefeFolgeWahlgang(s, total); // ≥1/3
+    return s / total > 0.5; // absolute Mehrheit
+  };
 
-  // Phase 1: Absolute Mehrheit prüfen, Quota beachten
+  // Phase 1: Kandidaten mit erforderlicher Mehrheit nach Stimmen sortiert
+  // Quota beachten: Hauptamtliche bis maxHauptamtlich, dann nur Ehrenamtliche
   let gewaehlteH = 0;
-  let gewaehlteE = 0;
   let gewaehlte = [];
   let nichtGewaehlteQuota = []; // hätten Mehrheit aber Quota erreicht
 
   for (const opt of opts) {
-    if (!hatAbsoluteMehrheit(opt.stimmen)) continue;
+    if (!hatErforderlicheMehrheit(opt.stimmen)) continue;
     if (gewaehlte.length >= maxAuswahl) break;
 
     if (opt.istHauptamtlich) {
       if (gewaehlteH < maxHauptamtlich) {
-        gewaehlte.push({ ...opt, grund: "absolut" });
+        gewaehlte.push({ ...opt, grund: istFWGBKR ? "einfach" : "absolut" });
         gewaehlteH++;
       } else {
         nichtGewaehlteQuota.push(opt);
       }
     } else {
-      gewaehlte.push({ ...opt, grund: "absolut" });
-      gewaehlteE++;
+      gewaehlte.push({ ...opt, grund: istFWGBKR ? "einfach" : "absolut" });
+    }
+  }
+
+  // Phase 2: Falls Plätze offen und Quota verhindert Hauptamtliche,
+  // Ehrenamtliche auffüllen auch wenn sie weniger Stimmen haben als gesperrte Hauptamtliche
+  if (gewaehlte.length < maxAuswahl && nichtGewaehlteQuota.length > 0) {
+    const ehrenamtlicheRest = opts.filter(o =>
+      !o.istHauptamtlich &&
+      !gewaehlte.some(g=>g.id===o.id) &&
+      hatErforderlicheMehrheit(o.stimmen)
+    );
+    for (const opt of ehrenamtlicheRest) {
+      if (gewaehlte.length >= maxAuswahl) break;
+      gewaehlte.push({ ...opt, grund: "quota_auffuellung" });
     }
   }
 
