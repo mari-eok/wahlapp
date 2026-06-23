@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-040";
+const APP_VERSION = "v2.1 · Build 20260623-041";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3683,7 +3683,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
               {/* Wahlkopf */}
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16, flexWrap:"wrap", gap:8 }}>
                 <div>
-                  <div style={{ fontWeight:800, fontSize:16, color:C.primary }}>{idx===0?"Hauptwahl":wahl.titel}</div>
+                  <div style={{ fontWeight:800, fontSize:16, color:C.primary }}>{wahl.titel}</div>
                   <div style={{ fontSize:12, color:C.textLight, marginTop:2 }}>
                     {getMehrheitsregelLabel(wahl)}
                     {" · "}{total} Stimme{total!==1?"n":""} eingegangen{wahlGeschlossen ? "" : " · Stimmverteilung erst nach Schließen"}
