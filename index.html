@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-035";
+const APP_VERSION = "v2.1 · Build 20260621-037";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -913,7 +913,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
       <div style={S.card}><div style={S.sectionLabel}>Persönlicher Wahlcode</div><TokenInput value={tokenRaw} onChange={setTokenRaw}/></div>
       {selectedWahl && (
         <div style={S.card}>
-          <div style={S.sectionLabel}>{isBKRWahl ? `Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen — max. eine Stimme pro Person.` : selectedWahl.mehrfach ? `Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen.` : "Bitte wählen Sie genau 1 Person."}</div>
+          <div style={S.sectionLabel}>{isBKRWahl ? `Bitte wählen Sie bis zu ${maxCount} Personen — max. eine Stimme pro Person.` : selectedWahl.mehrfach ? `Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen.` : "Bitte wählen Sie genau 1 Person."}</div>
           {[...selectedWahl.optionen].sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }).map(opt => {
             const isSel = selected.find(s=>s.id===opt.id);
             return (<div key={opt.id} style={{ ...S.optionRow, ...(isSel?S.optionRowSelected:{ borderColor:C.border }), ...(opt.istEnthaltung?{ background:C.bg }:{}), outline:"none", userSelect:"none", WebkitTapHighlightColor:"transparent" }} onClick={()=>toggleOption(opt)} onMouseDown={e=>e.preventDefault()}><div style={{ ...S.checkbox, ...(isSel?S.checkboxChecked:{ borderColor:C.border, background:"transparent" }) }}>{isSel&&<span style={{ color:"#fff", fontSize:13, fontWeight:700 }}><i className="ti ti-check" aria-hidden="true"/></span>}</div><span style={{ fontSize:15, fontWeight:500, color:opt.istEnthaltung?C.textLight:C.text }}>{opt.name}</span></div>);
@@ -2403,11 +2403,16 @@ Archivierte Wahlen sind schreibgeschützt und werden separat angezeigt.`, bestae
         setSaving(false);
         return;
       }
-      // BKR-Validierung — nur Quota-Fehler blockiert, Kandidatenzahl ist nur Hinweis
+      // BKR-Validierung
       if (f.wahltyp==="bkr") {
         if (berechneBKRQuota(f) < 0) {
           setFehler("Bezirkskirchenratswahl: Quota-Berechnung ungültig — bitte Kraft-Amtes-Zahlen prüfen.");
           setSaving(false); hideLoading(); return;
+        }
+        const nichtEnthaltung = (f.optionen||[]).filter(o=>!o.istEnthaltung);
+        if (nichtEnthaltung.length < f.maxAuswahl) {
+          setFehler(`Bezirkskirchenratswahl: Es sind nur ${nichtEnthaltung.length} Kandidierende eingetragen, aber ${f.maxAuswahl} Sitze zu vergeben. Bitte mindestens ${f.maxAuswahl} Kandidierende eintragen oder die Anzahl der Sitze anpassen.`);
+          setSaving(false); return;
         }
       }
       let startzeitISO = f.startzeit;
@@ -4541,8 +4546,8 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
                   const anzahl = nichtEnthaltung.length;
                   const diff = maxAuswahl - anzahl;
                   if (diff > 0) return (
-                    <div style={{ ...S.alert, background:"#eff6ff", border:"1px solid #bfdbfe", color:"#1e40af", fontSize:12, marginTop:10 }}>
-                      <i className="ti ti-info-circle" aria-hidden="true"/> Es sind {diff} Plätze mehr zu besetzen als Kandidierende eingetragen. Das ist möglich — nicht besetzte Plätze bleiben offen.
+                    <div style={{ ...S.alert, background:"#fef2f2", border:`1px solid ${C.error}`, color:"#7b2d2d", fontSize:12, marginTop:10 }}>
+                      <i className="ti ti-alert-circle" aria-hidden="true"/> Zu wenige Kandidierende: {anzahl} eingetragen, {maxAuswahl} Sitze zu vergeben. Bitte {diff} weitere Kandidierende hinzufügen — die Wahl kann so nicht gespeichert werden.
                     </div>
                   );
                   if (diff < 0) return (
