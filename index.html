@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-056";
+const APP_VERSION = "v2.1 · Build 20260621-057";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -4441,11 +4441,6 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
                   </div>
                 );
               })()}
-              </>}
-            </div>
-          )}
-        </>
-      )}
       {ergebnisse===null&&<div style={{ textAlign:"center", padding:48, color:col(C.textLight,"rgba(255,255,255,0.5)") }}>Wird geladen…</div>}
       {ergebnisse!==null&&total===0&&<div style={{ textAlign:"center", padding:48, color:col(C.textLight,"rgba(255,255,255,0.5)") }}>Noch keine Stimmen abgegeben.</div>}
     </div>
