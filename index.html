@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-031";
+const APP_VERSION = "v2.1 · Build 20260621-035";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -126,7 +126,7 @@ function updateURL(wahllokalID, ansicht) {
 // leitungPIN wird bewusst NICHT gemappt — PIN-Vergleich läuft serverseitig via checkPin-Flow
 function mapWahllokal(item) { return { id: String(item.ID), eventID: item.EventID, name: item.Title, aktiv: item.Aktiv, modus: item.Modus?.Value || item.Modus || "beides" }; }
 function mapWahl(item) {
-  return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), archiviert: !!(item.Archiviert === true || item.Archiviert === "true" || item.Archiviert === 1), endzeit: item.Endzeit||item.endzeit||null, wahltyp: item.Wahltyp||"normal", kraftAmtesHauptamtlich: parseInt(item.KraftAmtesHauptamtlich||0), kraftAmtesEhrenamtlich: parseInt(item.KraftAmtesEhrenamtlich||0), optionen: [] };
+  return { id: String(item.ID), eventID: item.EventID, titel: item.Title, aktiv: item.Aktiv && !(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1), startzeit: item.Startzeit ? toLocalInputValue(new Date(item.Startzeit)) : null, mehrfach: item.Mehrfach, exakt: item.Exakt, maxAuswahl: item.MaxAuswahl || 1, mehrheitsregel: (item.Mehrheitsregel?.Value || item.Mehrheitsregel || "relativ"), geschlossen: !!(item.Geschlossen === true || item.Geschlossen === "true" || item.Geschlossen === 1 || (typeof item.Geschlossen === 'object' && item.Geschlossen?.Value === true)), archiviert: !!(item.Archiviert === true || item.Archiviert === "true" || item.Archiviert === 1), endzeit: item.Endzeit ? toLocalInputValue(new Date(item.Endzeit)) : null, wahltyp: item.Wahltyp||"normal", kraftAmtesHauptamtlich: parseInt(item.KraftAmtesHauptamtlich||0), kraftAmtesEhrenamtlich: parseInt(item.KraftAmtesEhrenamtlich||0), optionen: [] };
 }
 function mapOption(item) { return { id: String(item.ID), wahlID: String(item.WahlID), eventID: item.EventID, name: item.Title, istEnthaltung: item.IstEnthaltung, istHauptamtlich: item.IstHauptamtlich||item.istHauptamtlich||false }; }
 
@@ -808,8 +808,8 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   function isValid() {
     if (!selectedWahl || tokenClean.length!==8 || selected.length===0 || submitting) return false;
     if (!selectedWahl.mehrfach && selected.length!==1) return false;
-    if (selectedWahl.mehrfach && selectedWahl.exakt && selected.length!==selectedWahl.maxAuswahl) return false;
-    if (selectedWahl.mehrfach && !selectedWahl.exakt && selected.length>selectedWahl.maxAuswahl) return false;
+    if (selectedWahl.mehrfach && selectedWahl.exakt && !istBKRWahl(selectedWahl) && selected.length!==selectedWahl.maxAuswahl) return false;
+    if ((selectedWahl.mehrfach || istBKRWahl(selectedWahl)) && selected.length>selectedWahl.maxAuswahl) return false;
     return true;
   }
 
@@ -887,7 +887,14 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
 
   const endCountdownSeconds = selectedWahl ? secondsUntilEndzeit(selectedWahl, nowTime) : null;
   const showEndCountdown = endCountdownSeconds !== null && endCountdownSeconds >= 0 && endCountdownSeconds <= 300;
-  const maxCount = selectedWahl?.mehrfach ? selectedWahl.maxAuswahl : 1;
+  // BKR-Wahl: max. so viele Stimmen wie Sitze (§46 LWG), aber max. 1 Stimme pro Person
+  // Quota (max. X Hauptamtliche) greift erst bei der Auswertung
+  const isBKRWahl = istBKRWahl(selectedWahl);
+  const kandidatenAnzahl = (selectedWahl?.optionen||[]).filter(o=>!o.istEnthaltung).length;
+  // Max. Stimmen = min(Sitze, Kandidierende) — kann nicht mehr wählen als Kandidaten vorhanden
+  const maxCount = isBKRWahl || selectedWahl?.mehrfach
+    ? Math.min(selectedWahl.maxAuswahl, kandidatenAnzahl)
+    : 1;
   const counterOk = selectedWahl && (!selectedWahl.mehrfach ? selected.length===1 : selected.length>0 && selected.length<=maxCount);
   return (
     <div style={S.wlContainer}>
@@ -906,7 +913,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
       <div style={S.card}><div style={S.sectionLabel}>Persönlicher Wahlcode</div><TokenInput value={tokenRaw} onChange={setTokenRaw}/></div>
       {selectedWahl && (
         <div style={S.card}>
-          <div style={S.sectionLabel}>{selectedWahl.mehrfach?`Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen.`:"Bitte wählen Sie genau 1 Person."}</div>
+          <div style={S.sectionLabel}>{isBKRWahl ? `Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen — max. eine Stimme pro Person.` : selectedWahl.mehrfach ? `Bitte wählen Sie bis zu ${selectedWahl.maxAuswahl} Personen.` : "Bitte wählen Sie genau 1 Person."}</div>
           {[...selectedWahl.optionen].sort((a,b)=>{ if(a.istEnthaltung&&!b.istEnthaltung) return 1; if(!a.istEnthaltung&&b.istEnthaltung) return -1; return parseInt(a.id)-parseInt(b.id); }).map(opt => {
             const isSel = selected.find(s=>s.id===opt.id);
             return (<div key={opt.id} style={{ ...S.optionRow, ...(isSel?S.optionRowSelected:{ borderColor:C.border }), ...(opt.istEnthaltung?{ background:C.bg }:{}), outline:"none", userSelect:"none", WebkitTapHighlightColor:"transparent" }} onClick={()=>toggleOption(opt)} onMouseDown={e=>e.preventDefault()}><div style={{ ...S.checkbox, ...(isSel?S.checkboxChecked:{ borderColor:C.border, background:"transparent" }) }}>{isSel&&<span style={{ color:"#fff", fontSize:13, fontWeight:700 }}><i className="ti ti-check" aria-hidden="true"/></span>}</div><span style={{ fontSize:15, fontWeight:500, color:opt.istEnthaltung?C.textLight:C.text }}>{opt.name}</span></div>);
@@ -1310,14 +1317,14 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
   const [saving, setSaving] = useState(false);
   const [fehler, setFehler] = useState(null);
   const wahllokal = appData.wahllokale.find(w => w.eventID===eventID);
-  const today = new Date().toISOString().slice(0,10);
+  const today = new Date().toLocaleDateString("sv-SE");
 
   async function laden() {
     setLoading(true);
     try {
       const res = await callFlow("getDaten", { eventID, wahllokalID: eventID });
       const liste = (res?.wahltage || []).map(wt => ({ id:String(wt.ID||wt.id||""), datum:wt.Datum ? wt.Datum.slice(0,10) : (wt.datum||""), eventID:wt.EventID||wt.eventID||"", anzahlStimmberechtigte:parseInt(wt.AnzahlStimmberechtigte||wt.anzahlStimmberechtigte||0), tokensGeneriert:wt.TokensGeneriert===true||wt.tokensGeneriert===true||false, kontrollcode:wt.Kontrollcode||wt.kontrollcode||null })).sort((a,b) => {
-        const today = new Date().toISOString().slice(0,10);
+        const today = new Date().toLocaleDateString("sv-SE");
         const ad = a.datum||"", bd = b.datum||"";
         // Heute zuerst
         if (ad===today && bd!==today) return -1;
@@ -1597,7 +1604,7 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
   }
 
   const datum = wahltag.datum ? new Date(wahltag.datum).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—";
-  const today = new Date().toISOString().slice(0,10);
+  const today = new Date().toLocaleDateString("sv-SE");
   const istHeute = wahltag.datum?.slice(0,10) === today;
 
   const schritte = [
@@ -2200,7 +2207,7 @@ function QRCode({ url, size=200 }) {
 }
 
 function LeitungDashboard({ appData, eventID, onDataChange, wahltag=null, onSwitchTab=null }) {
-  const today = new Date().toISOString().slice(0,10);
+  const today = new Date().toLocaleDateString("sv-SE");
   const aktiverWahltag = wahltag || (appData.wahltage||[]).find(wt=>wt.datum===today);
   const tokenCount = aktiverWahltag?.tokensGeneriert ? (aktiverWahltag?.anzahlStimmberechtigte || 0) : 0;
   const alleWahlenGesamt = appData.wahlen.filter(w=>w.eventID===eventID).filter(w=>{
@@ -3735,7 +3742,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                       {bkrDaten.nichtGewaehlteQuota.length>0&&(
                         <div style={{ ...S.alert, background:"#fef3c7", border:"1px solid #fbbf24", fontSize:12, marginBottom:6 }}>
                           <p style={{ fontWeight:700, color:"#92400e", margin:"0 0 4px" }}>
-                            <i className="ti ti-lock" aria-hidden="true"/> Quota erreicht — nicht berücksichtigt (§45 Abs. 2 GO):
+                            <i className="ti ti-lock" aria-hidden="true"/> Quota erreicht — nicht berücksichtigt (§45 Abs. 2 LWG):
                           </p>
                           {bkrDaten.nichtGewaehlteQuota.map(k=>(
                             <p key={k.id} style={{ margin:"2px 0", color:"#92400e", fontSize:12 }}>
@@ -3743,7 +3750,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                             </p>
                           ))}
                           <p style={{ margin:"4px 0 0", fontSize:11, color:"#92400e" }}>
-                            Gem. §46 Abs. 4 GO: weiterer Wahlgang nur mit anderen Mitgliedern erforderlich.
+                            Gem. §46 Abs. 4 LWG: weiterer Wahlgang nur mit anderen Mitgliedern erforderlich.
                           </p>
                         </div>
                       )}
@@ -3847,7 +3854,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   <div style={{ marginTop:12 }}>
                     {istBKRWahl(wahl)&&bkrDaten?.nichtGewaehlteQuota.length>0&&(
                       <div style={{ ...S.alert, background:"#fef3c7", border:"1px solid #fbbf24", fontSize:12, marginBottom:10 }}>
-                        <i className="ti ti-info-circle" aria-hidden="true"/> Gem. §46 Abs. 4 Satz 2 GO: Im weiteren Wahlgang können nur andere Mitglieder (nicht im kirchl. Dienst) berücksichtigt werden.
+                        <i className="ti ti-info-circle" aria-hidden="true"/> Gem. §46 Abs. 4 Satz 2 LWG: Im weiteren Wahlgang können nur andere Mitglieder (nicht im kirchl. Dienst) berücksichtigt werden.
                       </div>
                     )}
                     <StichwahVorbereiten
@@ -3944,7 +3951,7 @@ function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataC
 // Grundordnung EKIBA: Mehrheitsregel automatisch bestimmen
 // Erster Wahlgang: absolute Mehrheit (>50% aller abgegebenen Stimmen inkl. Enthaltungen)
 // Stichwahl: einfache Mehrheit + mind. 1/3 der abgegebenen Stimmen
-// ─── Bezirkskirchenratswahl (BKR) §45/46 GO ─────────────────────────────────
+// ─── Bezirkskirchenratswahl (BKR) §45/46 LWG ─────────────────────────────────
 // Vollständig abgekapselt — keine Auswirkung auf andere Wahltypen
 
 function istBKRWahl(wahl) {
@@ -3952,17 +3959,17 @@ function istBKRWahl(wahl) {
 }
 
 function berechneBKRQuota(wahl) {
-  // §45 Abs. 2: Hauptamtliche gesamt < Ehrenamtliche gesamt
-  // Hauptamtliche gesamt = kraft Amtes + gewählte Hauptamtliche
-  // Max. wählbare Hauptamtliche = (Ehrenamtl. kraft Amtes + zu wählende gesamt) - Hauptamtl. kraft Amtes - 1
+  // §45 Abs. 2 LWG: Hauptamtliche DÜRFEN Ehrenamtliche NICHT ERREICHEN (strikt <, nicht <=)
+  // Gesamt nach Wahl: (kraftH + maxH) < (kraftE + zuWaehlen - maxH)
+  // → kraftH + maxH < kraftE + zuWaehlen - maxH
+  // → 2 * maxH < kraftE - kraftH + zuWaehlen
+  // → maxH < (kraftE - kraftH + zuWaehlen) / 2
+  // → maxH = ceil((kraftE - kraftH + zuWaehlen) / 2) - 1
+  //        = floor((kraftE - kraftH + zuWaehlen - 1) / 2)
   const kraftAmtesH = parseInt(wahl?.kraftAmtesHauptamtlich || 0);
   const kraftAmtesE = parseInt(wahl?.kraftAmtesEhrenamtlich || 0);
   const zuWaehlen = parseInt(wahl?.maxAuswahl || 1);
-  // Maximale Hauptamtliche die gewählt werden dürfen:
-  // (kraftAmtesH + maxHauptamtlGewählt) < (kraftAmtesE + (zuWaehlen - maxHauptamtlGewählt))
-  // → 2 * maxH < (kraftAmtesE - kraftAmtesH + zuWaehlen)
-  // → maxH < (kraftAmtesE - kraftAmtesH + zuWaehlen) / 2
-  const maxH = Math.floor((kraftAmtesE - kraftAmtesH + zuWaehlen) / 2);
+  const maxH = Math.floor((kraftAmtesE - kraftAmtesH + zuWaehlen - 1) / 2);
   return Math.max(0, maxH);
 }
 
@@ -4458,7 +4465,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
               <input type="radio" name="wahltyp" checked={f.wahltyp==="bkr"}
                 onChange={()=>{setField("wahltyp","bkr");setField("mehrfach",true);setField("exakt",false);}}
                 style={{ accentColor:C.primary }}/>
-              <i className="ti ti-building-church" aria-hidden="true" style={{marginRight:4}}/>Bezirkskirchenratswahl (§45/46 GO)
+              <i className="ti ti-building-church" aria-hidden="true" style={{marginRight:4}}/>Bezirkskirchenratswahl (§45/46 LWG)
             </label>
           </div>
           {f.wahltyp!=="bkr"&&f.mehrfach&&(
@@ -4494,7 +4501,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
             return (
               <div style={{ ...S.card, background:"#f0f4ff", border:`1.5px solid ${C.primary}`, marginTop:12 }}>
                 <div style={{ fontSize:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:C.primary, marginBottom:12 }}>
-                  Quota §45 Abs. 2 GO
+                  Quota §45 Abs. 2 LWG
                 </div>
                 <div style={{ display:"flex", gap:32, flexWrap:"wrap" }}>
                   <Stepper
@@ -4509,7 +4516,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
                     onChange={v=>setField("kraftAmtesEhrenamtlich",v)}/>
                   <Stepper
                     label="Zu wählende Mitglieder (gesamt)"
-                    hint="Max. 14 laut §45 Abs. 1 GO"
+                    hint="Max. 14 laut §45 Abs. 1 LWG"
                     value={maxAuswahl}
                     min={1} max={14}
                     onChange={v=>setField("maxAuswahl",v)}/>
@@ -4545,7 +4552,7 @@ function WahlForm({ form, onSave, onCancel, saving, fehler, wahltag=null }) {
                   );
                   if (diff === 0 && anzahl > 0) return (
                     <div style={{ ...S.alert, background:"#f0faf5", border:"1px solid #6ee7b7", color:"#065f46", fontSize:12, marginTop:10 }}>
-                      <i className="ti ti-circle-check" aria-hidden="true"/> Gleich viele Kandidierende wie Plätze ({anzahl}) — gem. §46 Abs. 5 GO wäre eine offene Abstimmung möglich, sofern kein Mitglied widerspricht.
+                      <i className="ti ti-circle-check" aria-hidden="true"/> Gleich viele Kandidierende wie Plätze ({anzahl}) — gem. §46 Abs. 5 LWG wäre eine offene Abstimmung möglich, sofern kein Mitglied widerspricht.
                     </div>
                   );
                   return null;
