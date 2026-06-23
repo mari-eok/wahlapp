@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-039";
+const APP_VERSION = "v2.1 · Build 20260621-040";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3575,9 +3575,11 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
 
   function berechneOptErgebnisseBKR(wahl, ergebnisse) {
     // BKR-Auswertung — vollständig abgekapselt
+    if (!wahl?.optionen?.length || !ergebnisse) return [];
     const bkr = berechneBKRErgebnisse(wahl, ergebnisse);
+    if (!bkr?.opts) return [];
     const enthaltung = (wahl?.optionen||[]).find(o=>o.istEnthaltung);
-    const enthaltungStimmen = enthaltung ? ergebnisse.filter(a=>{
+    const enthaltungStimmen = enthaltung ? (ergebnisse||[]).filter(a=>{
       try { const pos=JSON.parse(a.Positionen||a.positionen||"[]"); return pos.some(p=>String(p.optionID)===enthaltung.id); } catch { return false; }
     }).length : 0;
 
@@ -3999,7 +4001,7 @@ function berechneBKRErgebnisse(wahl, ergebnisse) {
 
   // Stimmen pro Kandidat berechnen
   const opts = (wahl?.optionen || [])
-    .filter(o => !o.istEnthaltung)
+    .filter(o => o && !o.istEnthaltung)
     .map(opt => ({
       ...opt,
       stimmen: ergebnisse.filter(a => {
