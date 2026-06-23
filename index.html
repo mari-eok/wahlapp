@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-037";
+const APP_VERSION = "v2.1 · Build 20260621-038";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -1595,7 +1595,7 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
       }
       // Wahltag aktualisieren
       await callFlow("saveWahltag", { apiKey: API.key, eventID, datum: wahltag.datum, anzahlStimmberechtigte: n, update: true });
-      setWahltag(wt => ({ ...wt, anzahlStimmberechtigte: n, tokensGeneriert: false, kontrollcode: null }));
+      setWahltag(wt => ({ ...wt, anzahlStimmberechtigte: n, tokensGeneriert: false, kontrollcode: null, anzahlGeaendert: true }));
       setEditAnzahl(false);
       onDataChange();
     } catch(e) { setAnzahlFehler(e.message); }
@@ -1717,7 +1717,9 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
                     )}
                     {!editAnzahl && (wahltag.tokensGeneriert
                       ? <span style={{ color:C.accent }}><i className="ti ti-ticket" aria-hidden="true" style={{marginRight:4}}/>Tagestoken generiert · {wahltag.kontrollcode&&<span style={{ fontFamily:"monospace" }}>{wahltag.kontrollcode}</span>}</span>
-                      : <span style={{ color:"#b45309" }}><i className="ti ti-alert-triangle" aria-hidden="true" style={{marginRight:4}}/>Noch keine Tagestoken</span>
+                      : wahltag.anzahlGeaendert
+          ? <span style={{ color:C.error }}><i className="ti ti-refresh-alert" aria-hidden="true" style={{marginRight:4}}/>Tagestoken neu generieren — Anzahl geändert</span>
+          : <span style={{ color:"#b45309" }}><i className="ti ti-alert-triangle" aria-hidden="true" style={{marginRight:4}}/>Noch keine Tagestoken</span>
                     )}
                   </div>
                 </div>
@@ -1745,7 +1747,7 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
         )}
         {schritt==="tagestoken" && (
           <LeitungTagestoken appData={appData} eventID={eventID} wahltag={wahltag} onDataChange={onDataChange} isMobile={isMobile}
-            onTokensChanged={()=>setTokenReloadTrigger(t=>t+1)}/>
+            onTokensChanged={()=>setTokenReloadTrigger(t=>t+1)} onWahltag={setWahltag}/>
         )}
         {schritt==="ergebnisse" && (
           <LeitungErgebnisse appData={appData} eventID={eventID} onDataChange={onDataChange} onSwitchTab={setSchritt} isMobile={isMobile} wahltag={wahltag}/>
@@ -1772,7 +1774,7 @@ function WahltageView({ appData, eventID, wahltag: wahltageInit, onBack, onExit,
   );
 }
 
-function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, onTokensChanged }) {
+function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, onTokensChanged, onWahltag }) {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -1842,6 +1844,8 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
     await laden();
     setGenerating(false);
     setFehler(null);
+    // Reset anzahlGeaendert — neue Tokens entsprechen aktueller Anzahl
+    onWahltag && onWahltag(wt => ({ ...wt, anzahlGeaendert: false }));
     onDataChange(); onTokensChanged();
   }
 
@@ -1879,8 +1883,8 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
     const druckTokens = tokens.filter(t=>t.aktiv&&!t.verwendet).map(t=>t.code);
     if (druckTokens.length===0) { setFehler("Keine druckbaren Tokens vorhanden."); return; }
     const gespeicherterKontrollcode = tokens.find(t=>t.kontrollcode)?.kontrollcode || kontrollcode;
-    // Gesamtanzahl = Stimmberechtigte (nicht nur verbleibende) — PDF ist inhaltlich immer gleich
-    const gesamtanzahl = wahltag.anzahlStimmberechtigte || tokens.length;
+    // Gesamtanzahl = tatsächliche Token-Anzahl — nicht anzahlStimmberechtigte (könnte abweichen)
+    const gesamtanzahl = tokens.length;
     generiereTokenPDF(druckTokens, wahllokal?.name||eventID, eventID, true, gespeicherterKontrollcode, gesamtanzahl);
   }
 
@@ -1892,6 +1896,14 @@ function LeitungTagestoken({ appData, eventID, wahltag, onDataChange, isMobile, 
       {fehler && tokens.length===0 && !loading && !generating && !erfolg && <div style={{ ...S.alert, ...S.alertError, marginBottom:12 }}>{fehler}</div>}
       {erfolg && <div style={{ ...S.alert, ...S.alertSuccess, marginBottom:12 }}><i className="ti ti-circle-check" aria-hidden="true"/> {erfolg}</div>}
 
+      {/* Warnung wenn Token-Anzahl nicht mit Stimmberechtigten übereinstimmt */}
+      {!generating && tokens.length > 0 && wahltag.anzahlStimmberechtigte && tokens.length !== wahltag.anzahlStimmberechtigte && (
+        <div style={{ ...S.alert, background:"#fef3c7", border:"1px solid #fbbf24", color:"#92400e", marginBottom:12 }}>
+          <i className="ti ti-alert-triangle" aria-hidden="true"/>
+          <strong> Tagestoken nicht aktuell:</strong> Es wurden {tokens.length} Tokens generiert, aber die Anzahl der Stimmberechtigten beträgt jetzt {wahltag.anzahlStimmberechtigte}.
+          Bitte neue Tagestoken generieren — bestehende Tokens sind ungültig.
+        </div>
+      )}
       {/* Kontrollcode Banner */}
       {(kontrollcode||letzterKontrollcode) && (
         <div style={{ ...S.card, background:"#f0f4ff", border:`1.5px solid ${C.primary}`, marginBottom:16, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
