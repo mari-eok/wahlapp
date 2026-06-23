@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-043";
+const APP_VERSION = "v2.1 · Build 20260621-044";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -170,7 +170,8 @@ function isAfterEndzeit(wahl, refDate = new Date()) {
   return !!end && !isNaN(end.getTime()) && end <= refDate;
 }
 function isWithinWahlZeitfenster(wahl, refDate = new Date()) {
-  const start = parseSharePointDate(wahl?.startzeit);
+  const s = wahl?.startzeit;
+  const start = s && !s.includes("Z") && !s.includes("+") ? parseLocalDatetime(s) : parseSharePointDate(s);
   if (!start || isNaN(start.getTime())) return false;
   return start <= refDate && !isAfterEndzeit(wahl, refDate);
 }
@@ -749,9 +750,18 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
     if (wDatum && wDatum !== heuteDatum) return false;
     return true;
   });
+  const parseWahlStartzeit = (s) => s && !s.includes("Z") && !s.includes("+") ? parseLocalDatetime(s) : parseSharePointDate(s);
   const naechsteWahl = appData.wahlen
-    .filter(w => w.eventID===wahllokalID && w.aktiv && !w.geschlossen && !isAfterEndzeit(w, now) && parseSharePointDate(w.startzeit)>now)
-    .sort((a,b)=>parseSharePointDate(a.startzeit)-parseSharePointDate(b.startzeit))[0];
+    .filter(w => {
+      if (w.eventID!==wahllokalID || !w.aktiv || w.geschlossen || isAfterEndzeit(w, now)) return false;
+      const start = parseWahlStartzeit(w.startzeit);
+      if (!start || isNaN(start.getTime())) return false;
+      // Nur Wahlen von heute anzeigen — kein Countdown für andere Tage
+      const wDatum = start.toLocaleDateString("sv-SE");
+      const heuteDatum = now.toLocaleDateString("sv-SE");
+      return start > now && wDatum === heuteDatum;
+    })
+    .sort((a,b)=>parseWahlStartzeit(a.startzeit)-parseWahlStartzeit(b.startzeit))[0];
   const abgelaufeneWahl = appData.wahlen
     .filter(w => w.eventID===wahllokalID && w.aktiv && !w.geschlossen && isAfterEndzeit(w, now))
     .sort((a,b)=>parseSharePointDate(b.endzeit)-parseSharePointDate(a.endzeit))[0];
@@ -879,7 +889,7 @@ function WahllokalView({ appData, wahllokalID, onDataChange }) {
   if (status==="doppelt") return <div style={{ ...S.statusScreen, background:C.warningBg }}><i className="ti ti-alert-triangle" aria-hidden="true" style={{ fontSize:72, color:C.warning }}/><h2 style={{ ...S.statusTitle, color:C.warning }}>STIMME BEREITS ABGEGEBEN</h2><p style={{ ...S.statusMsg, color:"#7d5a0a" }}>{statusMsg}</p><p style={{ fontSize:13, color:"rgba(0,0,0,0.35)", marginTop:8 }}>Für diese Wahl wurde mit diesem Code bereits abgestimmt. Zurück in {countdown} Sekunden…</p></div>;
   if (!wahllokal||!wahllokal.aktiv) return <div style={S.wlContainer}><WlHeader/><WahllokalGear wahllokalID={wahllokalID}/><div style={S.closedScreen}><div><i className="ti ti-lock" aria-hidden="true" style={{fontSize:48, color:C.textLight}}/></div><h2 style={{ fontSize:22, fontWeight:700, color:C.primary, margin:0 }}>Das Wahllokal ist geschlossen.</h2></div></div>;
   if (aktiveWahlen.length===0) {
-    const diff = naechsteWahl ? Math.max(0, Math.floor((parseSharePointDate(naechsteWahl.startzeit)-nowTime)/1000)) : null;
+    const diff = naechsteWahl ? Math.max(0, Math.floor((parseWahlStartzeit(naechsteWahl.startzeit)-nowTime)/1000)) : null;
     const endzeitErreicht = !naechsteWahl && !!abgelaufeneWahl;
     return (
       <div style={S.wlContainer}>
