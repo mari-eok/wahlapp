@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-049";
+const APP_VERSION = "v2.1 · Build 20260621-050";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3680,6 +3680,9 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
         const istMehrfach = wahl?.mehrfach && maxAuswahl > 1;
         const istFWG = istFolgeWahlgang(wahl);
         const isBKR = istBKRWahl(wahl);
+        const wahlGeschlossen = !!wahl.geschlossen;
+        const istLetzte = idx===alleWahlen.length-1;
+        const hatNaechsteStichwahl = alleWahlen.some((w,i)=>i>idx&&getBasisTitel(w.titel)===getBasisTitel(wahl.titel));
 
         // Kategorisierung
         const gewaehlteNeu = isBKR
