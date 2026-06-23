@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-038";
+const APP_VERSION = "v2.1 · Build 20260621-039";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -4294,7 +4294,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
               )}
               {wahlGeschlossen&&total>0&&<div style={{ paddingBottom:VB?12:6 }}>
                 {gewaehlteKandidaten.length>0&&gewaehlteKandidaten.map(g=><div key={g.id} style={{ fontSize:VB?20:14, fontWeight:800, color:col(C.text,"#fff"), marginBottom:2 }}><i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt: {g.name} · {Math.round(g.stimmen/total*100)}%</div>)}
-                {stichwahNötig&&!hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#92400e","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> {istFolgeWahlgang(gruppe.hauptwahl) ? "Einfache Mehrheit nicht erreicht" : "Absolute Mehrheit nicht erreicht — 2. Wahlgang erforderlich"}</div>}
+                {stichwahNötig&&!hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#92400e","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> {istFolgeWahlgang(wahl) ? "Einfache Mehrheit nicht erreicht" : "Absolute Mehrheit nicht erreicht — 2. Wahlgang erforderlich"}</div>}
                 {hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#f59e0b","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand — Stichwahl erforderlich</div>}
               </div>}
               {letzteAktualisierung&&<div style={{ paddingBottom:VB?12:6, marginLeft:"auto" }}><div style={{ fontSize:12, color:col(C.textLight,"rgba(255,255,255,0.4)") }}>Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}</div><div style={{ fontSize:11, color:col(C.textLight,"rgba(255,255,255,0.3)") }}>Auto-Refresh alle 30 Sekunden</div></div>}
