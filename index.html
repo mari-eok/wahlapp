@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-042";
+const APP_VERSION = "v2.1 · Build 20260621-043";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -198,6 +198,13 @@ function getWahlZeitStatus(wahl, refDate = new Date()) {
   // wahl.startzeit ist nach mapWahl-Fix bereits lokale Zeit (kein Z) → parseLocalDatetime verwenden
   const start = wahl.startzeit && !wahl.startzeit.includes("Z") && !wahl.startzeit.includes("+") ? parseLocalDatetime(wahl.startzeit) : parseSharePointDate(wahl.startzeit);
   if (start && !isNaN(start.getTime()) && start > refDate) {
+    // Countdown nur anzeigen wenn Start heute ist (nicht für zukünftige Wahltage)
+    const startDatum = start.toLocaleDateString("sv-SE");
+    const heuteDatum = refDate.toLocaleDateString("sv-SE");
+    if (startDatum !== heuteDatum) {
+      // Startzeit liegt in der Zukunft aber nicht heute — pausiert anzeigen
+      return { status:"pausiert", label:"pausiert", icon:<i className="ti ti-player-pause" aria-hidden="true"/>, badge:S.badgeOrange, hint:`Startet am ${new Date(start).toLocaleDateString("de-DE", {day:"2-digit", month:"2-digit", year:"numeric"})} um ${new Date(start).toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit"})} Uhr` };
+    }
     return { status:"wartet", label:"wartet auf Startzeit", icon:<i className="ti ti-clock" aria-hidden="true"/>, badge:S.badgeGray, hint:`Start in ${formatRestzeit(Math.floor((start - refDate) / 1000))}` };
   }
 
