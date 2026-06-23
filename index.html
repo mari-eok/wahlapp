@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-044";
+const APP_VERSION = "v2.1 · Build 20260621-045";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3765,16 +3765,16 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   {istBKRWahl(wahl)&&bkrDaten&&wahlGeschlossen&&total>0&&(
                     <div style={{ marginTop:8 }}>
                       {bkrDaten.gewaehlte.length>0&&(
-                        <div style={{ marginBottom:6 }}>
-                          <p style={{ fontWeight:700, color:C.success, fontSize:13, margin:"0 0 4px" }}>
+                        <div style={{ marginBottom:8 }}>
+                          <p style={{ fontWeight:700, color:C.success, fontSize:13, margin:"0 0 6px" }}>
                             <i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt ({bkrDaten.gewaehlte.length} von {wahl.maxAuswahl}):
                           </p>
                           {bkrDaten.gewaehlte.map(k=>(
-                            <p key={k.id} style={{ fontSize:12, margin:"2px 0 2px 16px", color:C.text }}>
-                              {k.name}
-                              {k.istHauptamtlich&&<span style={{ ...S.badge, background:"#dbeafe", color:"#1e40af", fontSize:10, marginLeft:6 }}>kirchl. Dienst</span>}
-                              <span style={{ color:C.textLight, marginLeft:6 }}>{Math.round(k.stimmen/total*100)}%</span>
-                            </p>
+                            <div key={k.id} style={{ display:"flex", alignItems:"center", gap:6, margin:"3px 0 3px 16px" }}>
+                              <span style={{ fontSize:13, color:C.text, fontWeight:600 }}>{k.name}</span>
+                              {k.istHauptamtlich&&<span style={{ ...S.badge, background:"#dbeafe", color:"#1e40af", fontSize:10 }}>kirchl. Dienst</span>}
+                              <span style={{ color:C.textLight, fontSize:12 }}>{Math.round(k.stimmen/total*100)}%</span>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -3808,7 +3808,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                   {mehrheitErreicht&&!gleichstand&&!istMehrfach&&!istBKRWahl(wahl)&&<p style={{ fontWeight:700, color:C.success, fontSize:13, margin:0 }}>
                     <i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt: {fuehrend?.name} · {Math.round(fuehrend.stimmen/total*100)}%
                   </p>}
-                  {istMehrfach&&wahlGeschlossen&&total>0&&(
+                  {istMehrfach&&!istBKRWahl(wahl)&&wahlGeschlossen&&total>0&&(
                     <div>
                       {gewaehlteKandidaten.length > 0 && (
                         <p style={{ fontWeight:700, color:C.success, fontSize:13, margin:"0 0 4px" }}>
@@ -3825,7 +3825,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                       )}
                     </div>
                   )}
-                  {gleichstand&&!keinDrittelUeberhaupt&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
+                  {gleichstand&&!keinDrittelUeberhaupt&&!istBKRWahl(wahl)&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
                     <i className="ti ti-scale" aria-hidden="true"/>{istFolgeWahlgang(wahl) ? " Gleichstand — Stichwahl erforderlich" : " Gleichstand — 2. Wahlgang erforderlich"}
                   </p>}
                   {keinDrittelUeberhaupt&&<>
@@ -3836,7 +3836,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
                       Gem. Grundordnung § Abs. 1 Nr. 4 ist keine weitere automatische Stichwahl vorgesehen. Die Versammlung muss über das weitere Vorgehen beraten.
                     </p>
                   </>}
-                  {!mehrheitErreicht&&!gleichstand&&!keinDrittelUeberhaupt&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
+                  {!mehrheitErreicht&&!gleichstand&&!keinDrittelUeberhaupt&&!istBKRWahl(wahl)&&<p style={{ fontWeight:700, color:"#92400e", fontSize:13, margin:0 }}>
                     <i className="ti ti-alert-triangle" aria-hidden="true"/>
                     {istFolgeWahlgang(wahl)
                       ? " Einfache Mehrheit nicht erreicht — Versammlung muss beraten"
