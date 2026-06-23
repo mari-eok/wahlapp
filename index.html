@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-053";
+const APP_VERSION = "v2.1 · Build 20260621-054";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -4318,72 +4318,162 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
                   </div>
                 </div>
               )}
-              {wahlGeschlossen&&total>0&&<div style={{ paddingBottom:VB?12:6 }}>
-                {gewaehlteKandidaten.length>0&&(
-                  <div style={{ background:VB?"rgba(255,255,255,0.1)":"#f0faf5", border:VB?"1px solid rgba(255,255,255,0.3)":"2px solid "+C.accent, borderRadius:8, padding:"10px 14px", marginBottom:8 }}>
-                    <div style={{ fontSize:VB?12:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:VB?"rgba(255,255,255,0.7)":C.accent, marginBottom:6 }}>
-                      {"✓ Gewählt"}
-                    </div>
-                    {gewaehlteKandidaten.map(g=>(
-                      <div key={g.id} style={{ fontSize:VB?18:14, fontWeight:800, color:col(C.text,"#fff"), marginBottom:2 }}>
-                        <i className="ti ti-trophy" style={{color:C.warning, marginRight:6}}/>{g.name} · {Math.round(g.stimmen/total*100)}%
+              {wahlGeschlossen&&total>0&&(()=>{
+              // Kategorisierung
+              const isBKRw = istBKRWahl(wahl);
+              const bkrD = isBKRw ? berechneBKRErgebnisse(wahl, ergebnisse||[]) : null;
+              const istFWGw = istFolgeWahlgang(wahl);
+              const maxAuswahlw = parseInt(wahl?.maxAuswahl||1);
+              const istMehrfachw = wahl?.mehrfach && maxAuswahlw>1;
+
+              const gewNeu = isBKRw
+                ? (bkrD?.gewaehlte||[])
+                : nichtenthaltung.filter(e=>{
+                    if (!mehrheitErreicht || hatGleichstand) return false;
+                    if (istMehrfachw) return !!e.gewaehlt;
+                    return e===nichtenthaltung[0] && pruefeMehrheit(e.stimmen);
+                  });
+              const quotaGesperrtn = isBKRw ? (bkrD?.nichtGewaehlteQuota||[]) : [];
+              const nichtGewNeu = nichtenthaltung.filter(e=>
+                !gewNeu.some(g=>g.id===e.id) && !quotaGesperrtn.some(g=>g.id===e.id)
+              );
+              const offeneN = isBKRw ? (bkrD?.offeneAemter||0) : istMehrfachw ? maxAuswahlw-gewNeu.length : (gewNeu.length===0?1:0);
+              const braucht2WGn = offeneN>0 && !hatGleichstand && !(istFWGw && (!nichtenthaltung[0]||!pruefeFolgeWahlgang(nichtenthaltung[0].stimmen,total)));
+              const gescheitern = istFWGw && nichtenthaltung[0] && !pruefeFolgeWahlgang(nichtenthaltung[0].stimmen,total) && !hatGleichstand;
+
+              // Balken renderer für Präsentation
+              function PBalk({opt, highlight}) {
+                const pct = maxS>0 ? opt.stimmen/maxS*100 : 0;
+                const tpct = total>0 ? Math.round(opt.stimmen/total*100) : 0;
+                const barColor = highlight==="gewählt" ? (VB?"#4ade80":C.accent)
+                  : highlight==="quota" ? "#f59e0b"
+                  : highlight==="2wg" ? (VB?"#a78bfa":"#6366f1")
+                  : (VB?"rgba(255,255,255,0.2)":"#e5e7eb");
+                const textColor = VB ? "#fff" : C.text;
+                const mutedColor = VB ? "rgba(255,255,255,0.6)" : C.textLight;
+                return (
+                  <div style={{ marginBottom:6 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontSize:VB?17:14, fontWeight:highlight==="gewählt"?800:500, color:highlight==="gewählt"?(VB?"#fff":C.accent):mutedColor }}>
+                          {highlight==="gewählt"&&<span style={{marginRight:6}}>✓</span>}
+                          {opt.name}
+                        </span>
+                        {opt.istHauptamtlich&&<span style={{ fontSize:VB?11:10, background:VB?"rgba(59,130,246,0.3)":"#dbeafe", color:VB?"#93c5fd":"#1e40af", padding:"1px 6px", borderRadius:4, fontWeight:600 }}>kirchl. Dienst</span>}
                       </div>
-                    ))}
-                  </div>
-                )}
-                {stichwahNötig&&!hatGleichstand&&(
-                  <div style={{ background:VB?"rgba(255,165,0,0.15)":"#f5f3ff", border:VB?"1px solid rgba(255,165,0,0.4)":"2px solid #6366f1", borderRadius:8, padding:"10px 14px" }}>
-                    <div style={{ fontSize:VB?12:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:VB?"#fbbf24":"#4338ca", marginBottom:4 }}>
-                      {"⏳ " + (istFolgeWahlgang(wahl) ? "Stichwahl erforderlich" : "2. Wahlgang erforderlich")}
+                      <span style={{ fontSize:VB?17:13, fontWeight:700, color:highlight==="gewählt"?(VB?"#4ade80":C.accent):mutedColor }}>
+                        {tpct}%
+                      </span>
                     </div>
-                    {optErgebnisse.filter(o=>!o.istEnthaltung&&!gewaehlteKandidaten.some(g=>g.id===o.id)).map(o=>(
-                      <div key={o.id} style={{ fontSize:VB?14:12, color:col("#555","rgba(255,255,255,0.8)"), marginBottom:1 }}>
-                        {o.name} · {Math.round(o.stimmen/total*100)}%
+                    <div style={{ background:VB?"rgba(255,255,255,0.1)":"#f3f4f6", borderRadius:4, height:VB?10:7, overflow:"hidden" }}>
+                      <div style={{ width:pct+"%", height:"100%", background:barColor, borderRadius:4 }}/>
+                    </div>
+                  </div>
+                );
+              }
+
+              const blockStyle = (type) => ({
+                borderRadius:10,
+                padding:VB?"16px 20px":"12px 16px",
+                marginBottom:10,
+                ...(type==="gewählt" ? {
+                  background:VB?"rgba(74,222,128,0.15)":"#f0faf5",
+                  border:VB?"2px solid rgba(74,222,128,0.5)":"2px solid "+C.accent,
+                } : type==="quota" ? {
+                  background:VB?"rgba(245,158,11,0.15)":"#fffbeb",
+                  border:VB?"2px solid rgba(245,158,11,0.5)":"2px solid #f59e0b",
+                } : type==="2wg" ? {
+                  background:VB?"rgba(99,102,241,0.15)":"#f5f3ff",
+                  border:VB?"2px solid rgba(99,102,241,0.5)":"2px solid #6366f1",
+                } : type==="gleichstand" ? {
+                  background:VB?"rgba(245,158,11,0.15)":"#fffbeb",
+                  border:VB?"2px solid rgba(245,158,11,0.5)":"2px solid #f59e0b",
+                } : {
+                  background:VB?"rgba(239,68,68,0.15)":"#fef2f2",
+                  border:VB?"2px solid rgba(239,68,68,0.5)":"2px solid #ef4444",
+                })
+              });
+
+              const labelStyle = (type) => ({
+                fontSize:VB?13:11,
+                fontWeight:700,
+                letterSpacing:"0.1em",
+                textTransform:"uppercase",
+                marginBottom:VB?12:8,
+                color: type==="gewählt" ? (VB?"#4ade80":C.accent)
+                  : type==="quota" ? (VB?"#fbbf24":"#92400e")
+                  : type==="2wg" ? (VB?"#a78bfa":"#4338ca")
+                  : type==="gleichstand" ? (VB?"#fbbf24":"#92400e")
+                  : (VB?"#fca5a5":"#7b2d2d"),
+              });
+
+              return (
+                <div style={{ paddingBottom:VB?12:6 }}>
+                  {gewNeu.length>0 && (
+                    <div style={blockStyle("gewählt")}>
+                      <div style={labelStyle("gewählt")}>
+                        {"✓ Gewählt" + (istMehrfachw||isBKRw ? " ("+gewNeu.length+" von "+maxAuswahlw+" Plätzen)" : "")}
                       </div>
-                    ))}
-                  </div>
-                )}
-                {hatGleichstand&&(
-                  <div style={{ background:VB?"rgba(245,158,11,0.15)":"#fffbeb", border:"2px solid #f59e0b", borderRadius:8, padding:"10px 14px" }}>
-                    <div style={{ fontSize:VB?14:13, fontWeight:700, color:VB?"#fbbf24":"#92400e" }}>
-                      {"⚖ Gleichstand — Stichwahl erforderlich"}
+                      {gewNeu.map(opt=><PBalk key={opt.id} opt={opt} highlight="gewählt"/>)}
                     </div>
-                  </div>
-                )}
-              </div>}
-              {letzteAktualisierung&&<div style={{ paddingBottom:VB?12:6, marginLeft:"auto" }}><div style={{ fontSize:12, color:col(C.textLight,"rgba(255,255,255,0.4)") }}>Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}</div><div style={{ fontSize:11, color:col(C.textLight,"rgba(255,255,255,0.3)") }}>Auto-Refresh alle 30 Sekunden</div></div>}
-            </div>
-          </div>
-          {wahlGeschlossen
-            ? <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={gewaehlteKandidaten} gleichstandListe={hatGleichstand?[...gleichstandKandidaten,...(gewinner.slice(-1))]:[]}/>
-            : <div style={{ padding:"20px 0", textAlign:"center", color:C.textLight, fontSize:14, background:C.bg, borderRadius:8 }}>
-                <div style={{ fontSize:32, marginBottom:8 }}><i className="ti ti-lock" aria-hidden="true" style={{fontSize:32, color:C.textLight}}/></div>
-                <p style={{ margin:0, fontWeight:600 }}>Ergebnisse und Stimmverteilung werden erst nach dem Schließen der Wahl angezeigt.</p>
-              </div>
-          }
-          {wahlGeschlossen&&stichwahNötig&&!VB&&(
-            <div style={{ marginTop:24, padding:16, borderRadius:10, background:stichwahExistiert?"#f0fdf4":"#fff8e1", border:`1px solid ${stichwahExistiert?"#22c55e":"#f59e0b"}` }}>
-              {stichwahExistiert?<p style={{ fontWeight:700, color:"#166534" }}><i className="ti ti-circle-check" aria-hidden="true" style={{color:C.success}}/> Stichwahl bereits angelegt: "{stichwahSuchTitel}"</p>:<>
-                {hatGleichstand&&<p style={{ fontWeight:700, color:"#92400e", marginBottom:8 }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand: {[...gleichstandKandidaten,...gewinner.slice(-1)].map(k=>k.name).join(", ")} — je {gewinnerSchwelle} Stimmen.</p>}
-                {!mehrheitErreicht&&!hatGleichstand&&!wahlIstStichwahl&&<p style={{ fontWeight:700, color:"#92400e", marginBottom:8 }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Absolute Mehrheit (>50%) nicht erreicht.</p>}
-                {!mehrheitErreicht&&wahlIstStichwahl&&gewinner.length>0&&!pruefeStichwahl(gewinner[0].stimmen,total)&&(
-                  <><p style={{ fontWeight:700, color:C.error, marginBottom:4 }}><i className="ti ti-circle-x" aria-hidden="true"/> Kein Kandidat hat die erforderliche Mindestanzahl von 1/3 der Stimmen erreicht.</p>
-                  <p style={{ fontSize:12, color:"#7b2d2d", marginBottom:12 }}>Gem. Grundordnung § Abs. 1 Nr. 4 ist keine weitere automatische Stichwahl vorgesehen. Die Versammlung muss über das weitere Vorgehen beraten.</p></>
-                )}
-                {(!wahlIstStichwahl||(wahlIstStichwahl&&gewinner.length>0&&pruefeStichwahl(gewinner[0].stimmen,total)))&&<p style={{ fontSize:13, color:"#78350f", marginBottom:12 }}>Eine Stichwahl ist erforderlich.</p>}
-                {wahlenFrisch&&<StichwahVorbereiten
-                  wahl={wahl}
-                  kandidaten={hatGleichstand?[...gleichstandKandidaten,...gewinner.slice(-1)]:sichereGewinner}
-                  wahllokalID={wahllokalID}
-                  isLeitung={isLeitung}
-                  onDataChange={onDataChange}
-                  wahlen={wahlen}
-                />}
-              </>}
-            </div>
-          )}
-        </>
-      )}
+                  )}
+
+                  {quotaGesperrtn.length>0 && (
+                    <div style={blockStyle("quota")}>
+                      <div style={labelStyle("quota")}>
+                        {"⚠ Quota — nicht berücksichtigt (§45 Abs. 2 LWG)"}
+                      </div>
+                      {quotaGesperrtn.map(opt=><PBalk key={opt.id} opt={opt} highlight="quota"/>)}
+                    </div>
+                  )}
+
+                  {hatGleichstand && (
+                    <div style={blockStyle("gleichstand")}>
+                      <div style={labelStyle("gleichstand")}>
+                        {"⚖ Gleichstand — " + (istFWGw?"Stichwahl":"2. Wahlgang") + " erforderlich"}
+                      </div>
+                      {nichtGewNeu.map(opt=><PBalk key={opt.id} opt={opt} highlight="2wg"/>)}
+                    </div>
+                  )}
+
+                  {!hatGleichstand && braucht2WGn && nichtGewNeu.length>0 && (
+                    <div style={blockStyle("2wg")}>
+                      <div style={labelStyle("2wg")}>
+                        {"⏳ " + offeneN + " Platz"+(offeneN>1?"e":"")+" offen — " + (istFWGw?"Stichwahl":"2. Wahlgang")+" erforderlich"}
+                      </div>
+                      {nichtGewNeu.map(opt=><PBalk key={opt.id} opt={opt} highlight="2wg"/>)}
+                    </div>
+                  )}
+
+                  {!hatGleichstand && gescheitern && (
+                    <div style={blockStyle("gescheitert")}>
+                      <div style={labelStyle("gescheitert")}>
+                        {"✕ Kein Kandidat hat 1/3 erreicht — neue Wahl in späterer Sitzung"}
+                      </div>
+                      {nichtGewNeu.map(opt=><PBalk key={opt.id} opt={opt} highlight="none"/>)}
+                    </div>
+                  )}
+
+                  {!hatGleichstand && !braucht2WGn && !gescheitern && nichtGewNeu.length>0 && (
+                    <div style={{ paddingTop:8 }}>
+                      {nichtGewNeu.map(opt=><PBalk key={opt.id} opt={opt} highlight="none"/>)}
+                    </div>
+                  )}
+
+                  {optErgebnisse.filter(o=>o.istEnthaltung).map(o=>(
+                    <div key={o.id} style={{ marginTop:4 }}>
+                      <PBalk opt={o} highlight="none"/>
+                    </div>
+                  ))}
+
+                  {gewNeu.length>0 && offeneN===0 && !hatGleichstand && (
+                    <div style={{ textAlign:"center", fontSize:VB?14:12, color:VB?"rgba(255,255,255,0.5)":C.textLight, marginTop:8 }}>
+                      {isBKRw||istMehrfachw ? "Alle "+maxAuswahlw+" Plätze besetzt ✓" : "Wahl abgeschlossen ✓"}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
       {ergebnisse===null&&<div style={{ textAlign:"center", padding:48, color:col(C.textLight,"rgba(255,255,255,0.5)") }}>Wird geladen…</div>}
       {ergebnisse!==null&&total===0&&<div style={{ textAlign:"center", padding:48, color:col(C.textLight,"rgba(255,255,255,0.5)") }}>Noch keine Stimmen abgegeben.</div>}
     </div>
