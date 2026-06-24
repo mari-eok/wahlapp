@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-062";
+const APP_VERSION = "v2.1 · Build 20260621-064";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3705,20 +3705,22 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
         function ErgebnisBalken({opt,hl}) {
           const pct = maxS>0?Math.round(opt.stimmen/maxS*100):0;
           const tpct = total>0?Math.round(opt.stimmen/total*100):0;
-          const barColor = hl==="g"?C.accent:hl==="q"?"#f59e0b":hl==="w"?"#6366f1":"#d1d5db";
+          const barColor = hl==="g"?(VB?"#4ade80":C.accent):hl==="q"?"#f59e0b":hl==="w"?(VB?"#a78bfa":"#6366f1"):(VB?"rgba(255,255,255,0.15)":"#d1d5db");
+          const nameColor = hl==="g"?(VB?"#fff":C.text):(VB?"rgba(255,255,255,0.7)":C.textLight);
+          const pctColor = hl==="g"?(VB?"#4ade80":C.accent):(VB?"rgba(255,255,255,0.5)":C.textLight);
           return (
-            <div style={{marginBottom:8}}>
+            <div style={{marginBottom:VB?10:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  {hl==="g"&&<i className="ti ti-circle-check" style={{color:C.accent,fontSize:13}}/>}
+                  {hl==="g"&&<i className="ti ti-circle-check" style={{color:VB?"#4ade80":C.accent,fontSize:13}}/>}
                   {hl==="q"&&<i className="ti ti-lock" style={{color:"#f59e0b",fontSize:13}}/>}
-                  <span style={{fontSize:14,fontWeight:hl==="g"?700:400,color:hl==="g"?C.text:C.textLight}}>{opt.name}</span>
-                  {opt.istHauptamtlich&&<span style={{...S.badge,background:"#dbeafe",color:"#1e40af",fontSize:10}}>kirchl. Dienst</span>}
-                  {opt.istEnthaltung&&<span style={{...S.badge,...S.badgeGray,fontSize:10}}>Enthaltung</span>}
+                  <span style={{fontSize:VB?17:14,fontWeight:hl==="g"?700:400,color:nameColor}}>{opt.name}</span>
+                  {opt.istHauptamtlich&&<span style={{fontSize:10,background:VB?"rgba(59,130,246,0.3)":"#dbeafe",color:VB?"#93c5fd":"#1e40af",padding:"1px 5px",borderRadius:4,fontWeight:600}}>kirchl. Dienst</span>}
+                  {opt.istEnthaltung&&<span style={{fontSize:10,background:VB?"rgba(255,255,255,0.1)":"#f3f4f6",color:VB?"rgba(255,255,255,0.5)":C.textLight,padding:"1px 5px",borderRadius:4}}>Enthaltung</span>}
                 </div>
-                <span style={{fontSize:13,fontWeight:600,color:hl==="g"?C.accent:C.textLight}}>{opt.stimmen} ({tpct}%)</span>
+                <span style={{fontSize:VB?17:13,fontWeight:600,color:pctColor}}>{opt.stimmen} ({tpct}%)</span>
               </div>
-              <div style={{background:"#f3f4f6",borderRadius:4,height:8,overflow:"hidden"}}>
+              <div style={{background:VB?"rgba(255,255,255,0.1)":"#f3f4f6",borderRadius:4,height:VB?10:8,overflow:"hidden"}}>
                 <div style={{width:pct+"%",height:"100%",background:barColor,borderRadius:4}}/>
               </div>
             </div>
@@ -3726,10 +3728,12 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
         }
 
         function ErgebnisBlock({type,title,children}) {
-          const cfg={g:{bg:"#f0faf5",bd:C.accent,tc:C.accent},q:{bg:"#fffbeb",bd:"#f59e0b",tc:"#92400e"},w:{bg:"#f5f3ff",bd:"#6366f1",tc:"#4338ca"},e:{bg:"#fef2f2",bd:C.error,tc:"#7b2d2d"}}[type]||{bg:"#f9fafb",bd:C.border,tc:C.textLight};
+          const cfgLight={g:{bg:"#f0faf5",bd:C.accent,tc:C.accent},q:{bg:"#fffbeb",bd:"#f59e0b",tc:"#92400e"},w:{bg:"#f5f3ff",bd:"#6366f1",tc:"#4338ca"},e:{bg:"#fef2f2",bd:C.error,tc:"#7b2d2d"}}[type]||{bg:"#f9fafb",bd:C.border,tc:C.textLight};
+          const cfgDark={g:{bg:"rgba(74,222,128,0.12)",bd:"rgba(74,222,128,0.4)",tc:"#4ade80"},q:{bg:"rgba(245,158,11,0.12)",bd:"rgba(245,158,11,0.4)",tc:"#fbbf24"},w:{bg:"rgba(99,102,241,0.12)",bd:"rgba(99,102,241,0.4)",tc:"#a78bfa"},e:{bg:"rgba(239,68,68,0.12)",bd:"rgba(239,68,68,0.4)",tc:"#fca5a5"}}[type]||{bg:"rgba(255,255,255,0.05)",bd:"rgba(255,255,255,0.1)",tc:"rgba(255,255,255,0.5)"};
+          const cfg = VB ? cfgDark : cfgLight;
           return (
-            <div style={{background:cfg.bg,border:"2px solid "+cfg.bd,borderRadius:10,padding:"12px 16px",marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:cfg.tc,marginBottom:8}}>{title}</div>
+            <div style={{background:cfg.bg,border:"2px solid "+cfg.bd,borderRadius:10,padding:VB?"16px 20px":"12px 16px",marginBottom:10}}>
+              <div style={{fontSize:VB?13:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:cfg.tc,marginBottom:VB?12:8}}>{title}</div>
               {children}
             </div>
           );
@@ -4222,9 +4226,68 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
                 </div>
               )}
               {wahlGeschlossen&&total>0&&<div style={{ paddingBottom:VB?12:6 }}>
-                {gewaehlteKandidaten.length>0&&gewaehlteKandidaten.map(g=><div key={g.id} style={{ fontSize:VB?20:14, fontWeight:800, color:col(C.text,"#fff"), marginBottom:2 }}><i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt: {g.name} · {Math.round(g.stimmen/total*100)}%</div>)}
-                {stichwahNötig&&!hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#92400e","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> {istFolgeWahlgang(wahl) ? "Einfache Mehrheit nicht erreicht" : "Absolute Mehrheit nicht erreicht — 2. Wahlgang erforderlich"}</div>}
-                {hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#f59e0b","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand — Stichwahl erforderlich</div>}
+                {(() => {
+                  const isBKRw = istBKRWahl(wahl);
+                  const bkrD = isBKRw ? berechneBKRErgebnisse(wahl, ergebnisse||[]) : null;
+                  const istFWGw = istFolgeWahlgang(wahl);
+                  const maxAuswahlw = parseInt(wahl?.maxAuswahl||1);
+                  const istMehrfachw = wahl?.mehrfach && maxAuswahlw>1;
+                  const gewNeu = isBKRw ? (bkrD?.gewaehlte||[])
+                    : (mehrheitErreicht&&!hatGleichstand)
+                      ? (istMehrfachw ? optErgebnisse.filter(e=>!e.istEnthaltung&&e.gewaehlt) : [fuehrend].filter(Boolean))
+                      : [];
+                  const quotaN = isBKRw ? (bkrD?.nichtGewaehlteQuota||[]) : [];
+                  const nichtGewN = optErgebnisse.filter(e=>!e.istEnthaltung&&!gewNeu.some(g=>g.id===e.id)&&!quotaN.some(g=>g.id===e.id));
+                  const offeneN = isBKRw?(bkrD?.offeneAemter||0):istMehrfachw?maxAuswahlw-gewNeu.length:(gewNeu.length===0?1:0);
+                  const braucht2WGn = offeneN>0&&!hatGleichstand&&!(istFWGw&&(!fuehrend||!pruefeFolgeWahlgang(fuehrend.stimmen,total)));
+                  const gescheitern = istFWGw&&fuehrend&&!pruefeFolgeWahlgang(fuehrend.stimmen,total)&&!hatGleichstand;
+
+                  const cfgL={g:{bg:"#f0faf5",bd:C.accent,tc:C.accent},q:{bg:"#fffbeb",bd:"#f59e0b",tc:"#92400e"},w:{bg:"#f5f3ff",bd:"#6366f1",tc:"#4338ca"},e:{bg:"#fef2f2",bd:C.error,tc:"#7b2d2d"}};
+                  const cfgD={g:{bg:"rgba(74,222,128,0.12)",bd:"rgba(74,222,128,0.4)",tc:"#4ade80"},q:{bg:"rgba(245,158,11,0.12)",bd:"rgba(245,158,11,0.4)",tc:"#fbbf24"},w:{bg:"rgba(99,102,241,0.12)",bd:"rgba(99,102,241,0.4)",tc:"#a78bfa"},e:{bg:"rgba(239,68,68,0.12)",bd:"rgba(239,68,68,0.4)",tc:"#fca5a5"}};
+
+                  function Blk({type,title,children}) {
+                    const cfg=(VB?cfgD:cfgL)[type]||{bg:"transparent",bd:"transparent",tc:VB?"#fff":C.text};
+                    return (
+                      <div style={{background:cfg.bg,border:"2px solid "+cfg.bd,borderRadius:10,padding:VB?"16px 20px":"12px 16px",marginBottom:10}}>
+                        <div style={{fontSize:VB?13:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:cfg.tc,marginBottom:VB?12:8}}>{title}</div>
+                        {children}
+                      </div>
+                    );
+                  }
+
+                  function Balk({opt,hl}) {
+                    const pct = maxStimmen>0?Math.round(opt.stimmen/maxStimmen*100):0;
+                    const tpct = total>0?Math.round(opt.stimmen/total*100):0;
+                    const barCol = hl==="g"?(VB?"#4ade80":C.accent):hl==="q"?"#f59e0b":hl==="w"?(VB?"#a78bfa":"#6366f1"):(VB?"rgba(255,255,255,0.15)":"#d1d5db");
+                    return (
+                      <div style={{marginBottom:VB?10:7}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            {hl==="g"&&<i className="ti ti-circle-check" style={{color:VB?"#4ade80":C.accent,fontSize:13}}/>}
+                            <span style={{fontSize:VB?18:14,fontWeight:hl==="g"?700:400,color:hl==="g"?(VB?"#fff":C.accent):(VB?"rgba(255,255,255,0.7)":C.textLight)}}>{opt.name}</span>
+                            {opt.istHauptamtlich&&<span style={{fontSize:10,background:VB?"rgba(59,130,246,0.3)":"#dbeafe",color:VB?"#93c5fd":"#1e40af",padding:"1px 5px",borderRadius:4,fontWeight:600}}>kirchl. Dienst</span>}
+                          </div>
+                          <span style={{fontSize:VB?17:13,fontWeight:600,color:hl==="g"?(VB?"#4ade80":C.accent):(VB?"rgba(255,255,255,0.5)":C.textLight)}}>{opt.stimmen} ({tpct}%)</span>
+                        </div>
+                        <div style={{background:VB?"rgba(255,255,255,0.1)":"#f3f4f6",borderRadius:4,height:VB?10:7,overflow:"hidden"}}>
+                          <div style={{width:pct+"%",height:"100%",background:barCol,borderRadius:4}}/>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div>
+                      {gewNeu.length>0&&<Blk type="g" title={"✓ Gewählt"+(istMehrfachw||isBKRw?" ("+gewNeu.length+" von "+maxAuswahlw+" Plätzen)":"")}>{gewNeu.map(o=><Balk key={o.id} opt={o} hl="g"/>)}</Blk>}
+                      {quotaN.length>0&&<Blk type="q" title="⚠ Quota — nicht berücksichtigt (§45 Abs. 2 LWG)">{quotaN.map(o=><Balk key={o.id} opt={o} hl="q"/>)}</Blk>}
+                      {!hatGleichstand&&braucht2WGn&&nichtGewN.length>0&&<Blk type="w" title={"⏳ "+offeneN+" Platz"+(offeneN>1?"e":"")+" offen — "+(istFWGw?"Stichwahl":"2. Wahlgang")+" erforderlich"}>{nichtGewN.map(o=><Balk key={o.id} opt={o} hl="w"/>)}</Blk>}
+                      {hatGleichstand&&<Blk type="w" title={"⚖ Gleichstand — "+(istFWGw?"Stichwahl":"2. Wahlgang")+" erforderlich"}>{optErgebnisse.filter(e=>!e.istEnthaltung&&!gewNeu.some(g=>g.id===e.id)).map(o=><Balk key={o.id} opt={o} hl="w"/>)}</Blk>}
+                      {gescheitern&&<Blk type="e" title="✕ Kein Kandidat hat 1/3 erreicht — neue Wahl in späterer Sitzung">{nichtGewN.map(o=><Balk key={o.id} opt={o} hl="n"/>)}</Blk>}
+                      {!braucht2WGn&&!hatGleichstand&&!gescheitern&&nichtGewN.length>0&&<div style={{marginTop:4}}>{nichtGewN.map(o=><Balk key={o.id} opt={o} hl="n"/>)}</div>}
+                      {optErgebnisse.filter(o=>o.istEnthaltung).map(o=><div key={o.id} style={{marginTop:4}}><Balk opt={o} hl="n"/></div>)}
+                    </div>
+                  );
+                })()}
               </div>}
               {letzteAktualisierung&&<div style={{ paddingBottom:VB?12:6, marginLeft:"auto" }}><div style={{ fontSize:12, color:col(C.textLight,"rgba(255,255,255,0.4)") }}>Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}</div><div style={{ fontSize:11, color:col(C.textLight,"rgba(255,255,255,0.3)") }}>Auto-Refresh alle 30 Sekunden</div></div>}
             </div>
