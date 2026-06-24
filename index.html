@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-067";
+const APP_VERSION = "v2.1 · Build 20260621-068";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -1547,21 +1547,15 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
                    </div>
                  )}
                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                   {si.label==="Vergangen"&&(
-                     <button onClick={ev=>{ ev.stopPropagation(); loescheWahltag(wt); }}
-                       style={{ display:"flex", alignItems:"center", gap:5, background:"#fef2f2", border:"1px solid #fca5a5", color:"#dc2626", cursor:"pointer",
-                         padding:"5px 10px", borderRadius:"7px", fontSize:12, fontWeight:600 }}>
-                       <i className="ti ti-trash" style={{fontSize:13}}/> Löschen
-                     </button>
-                   )}
-                   {si.label!=="Vergangen"&&<button onClick={ev=>{ ev.stopPropagation(); loescheWahltag(wt); }}
-                     style={{ background:"none", border:"none", cursor:"pointer", color:C.textLight,
-                       padding:"4px 6px", borderRadius:6, fontSize:16, lineHeight:1 }}
+                   <button onClick={ev=>{ ev.stopPropagation(); loescheWahltag(wt); }}
+                     style={si.label==="Vergangen"
+                       ? { display:"flex", alignItems:"center", gap:5, background:"#fef2f2", border:"1px solid #fca5a5", color:"#dc2626", cursor:"pointer", padding:"5px 10px", borderRadius:"7px", fontSize:12, fontWeight:600 }
+                       : { background:"none", border:"none", cursor:"pointer", color:C.textLight, padding:"4px 6px", borderRadius:6, fontSize:16, lineHeight:1 }}
                      title="Wahltag löschen"
-                     onMouseEnter={e=>e.currentTarget.style.color="#e24b4a"}
-                     onMouseLeave={e=>e.currentTarget.style.color=C.textLight}>
-                     <i className="ti ti-trash" aria-hidden="true"/>
-                   </button>}
+                     onMouseEnter={e=>e.currentTarget.style.opacity="0.7"}
+                     onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                     <i className="ti ti-trash" style={{fontSize:si.label==="Vergangen"?13:16}}/>{si.label==="Vergangen"&&" Löschen"}
+                   </button>
                    <i className="ti ti-chevron-right" aria-hidden="true" style={{ fontSize:20, color:C.textLight }}/>
                  </div>
                </div>
