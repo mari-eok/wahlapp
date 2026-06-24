@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-061";
+const APP_VERSION = "v2.1 · Build 20260621-062";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -4222,61 +4222,9 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
                 </div>
               )}
               {wahlGeschlossen&&total>0&&<div style={{ paddingBottom:VB?12:6 }}>
-                {gewaehlteKandidaten.length>0&&(
-                  <div style={{ background:VB?"rgba(74,222,128,0.12)":"#f0faf5", border:"2px solid "+(VB?"rgba(74,222,128,0.5)":C.accent), borderRadius:10, padding:VB?"14px 18px":"10px 14px", marginBottom:8 }}>
-                    <div style={{ fontSize:VB?12:10, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:VB?"#4ade80":C.accent, marginBottom:VB?10:6 }}>
-                      {"✓ Gewählt"+(wahl?.mehrfach||istBKRWahl(wahl)?" ("+gewaehlteKandidaten.length+" von "+(wahl?.maxAuswahl||1)+" Plätzen)":"")}
-                    </div>
-                    {gewaehlteKandidaten.map(g=>(
-                      <div key={g.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                        <span style={{ fontSize:VB?18:14, fontWeight:800, color:VB?"#fff":C.accent }}>✓ {g.name}</span>
-                        <span style={{ fontSize:VB?16:13, fontWeight:700, color:VB?"#4ade80":C.accent }}>{Math.round(g.stimmen/total*100)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {istBKRWahl(wahl)&&bkrDaten&&bkrDaten.nichtGewaehlteQuota.length>0&&(
-                  <div style={{ background:VB?"rgba(245,158,11,0.12)":"#fffbeb", border:"2px solid "+(VB?"rgba(245,158,11,0.5)":"#f59e0b"), borderRadius:10, padding:VB?"14px 18px":"10px 14px", marginBottom:8 }}>
-                    <div style={{ fontSize:VB?12:10, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:VB?"#fbbf24":"#92400e", marginBottom:VB?8:6 }}>
-                      {"⚠ Quota — nicht berücksichtigt (§45 Abs. 2 LWG)"}
-                    </div>
-                    {bkrDaten.nichtGewaehlteQuota.map(g=>(
-                      <div key={g.id} style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                        <span style={{ fontSize:VB?15:13, color:VB?"rgba(255,255,255,0.7)":C.textLight }}>{g.name}{g.istHauptamtlich&&<span style={{ fontSize:10, marginLeft:6, background:VB?"rgba(59,130,246,0.25)":"#dbeafe", color:VB?"#93c5fd":"#1e40af", padding:"1px 5px", borderRadius:4 }}>kirchl. Dienst</span>}</span>
-                        <span style={{ fontSize:VB?14:12, color:VB?"#fbbf24":"#92400e" }}>{Math.round(g.stimmen/total*100)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {stichwahNötig&&!hatGleichstand&&(
-                  <div style={{ background:VB?"rgba(99,102,241,0.12)":"#f5f3ff", border:"2px solid "+(VB?"rgba(99,102,241,0.5)":"#6366f1"), borderRadius:10, padding:VB?"14px 18px":"10px 14px" }}>
-                    <div style={{ fontSize:VB?12:10, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:VB?"#a78bfa":"#4338ca", marginBottom:VB?10:6 }}>
-                      {"⏳ "+(istFolgeWahlgang(wahl)?"Stichwahl":"2. Wahlgang")+" erforderlich"}
-                    </div>
-                    {nichtenthaltung.filter(g=>!gewaehlteKandidaten.some(w=>w.id===g.id)).map(g=>(
-                      <div key={g.id} style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                        <span style={{ fontSize:VB?15:13, color:VB?"rgba(255,255,255,0.7)":C.textLight }}>
-                          {g.name}
-                          {g.istHauptamtlich&&<span style={{ fontSize:10, marginLeft:6, background:VB?"rgba(59,130,246,0.25)":"#dbeafe", color:VB?"#93c5fd":"#1e40af", padding:"1px 5px", borderRadius:4 }}>kirchl. Dienst</span>}
-                        </span>
-                        <span style={{ fontSize:VB?14:12, color:VB?"rgba(255,255,255,0.5)":C.textLight }}>{Math.round(g.stimmen/total*100)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {hatGleichstand&&(
-                  <div style={{ background:VB?"rgba(245,158,11,0.12)":"#fffbeb", border:"2px solid "+(VB?"rgba(245,158,11,0.5)":"#f59e0b"), borderRadius:10, padding:VB?"14px 18px":"10px 14px" }}>
-                    <div style={{ fontSize:VB?12:10, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:VB?"#fbbf24":"#92400e", marginBottom:VB?8:6 }}>
-                      {"⚖ Gleichstand — "+(istFolgeWahlgang(wahl)?"Stichwahl":"2. Wahlgang")+" erforderlich"}
-                    </div>
-                    {nichtenthaltung.filter(g=>g.stimmen===fuehrend?.stimmen).map(g=>(
-                      <div key={g.id} style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                        <span style={{ fontSize:VB?15:13, color:VB?"rgba(255,255,255,0.7)":C.textLight }}>{g.name}</span>
-                        <span style={{ fontSize:VB?14:12, color:VB?"#fbbf24":"#92400e" }}>{Math.round(g.stimmen/total*100)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {gewaehlteKandidaten.length>0&&gewaehlteKandidaten.map(g=><div key={g.id} style={{ fontSize:VB?20:14, fontWeight:800, color:col(C.text,"#fff"), marginBottom:2 }}><i className="ti ti-trophy" aria-hidden="true" style={{color:C.warning}}/> Gewählt: {g.name} · {Math.round(g.stimmen/total*100)}%</div>)}
+                {stichwahNötig&&!hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#92400e","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> {istFolgeWahlgang(wahl) ? "Einfache Mehrheit nicht erreicht" : "Absolute Mehrheit nicht erreicht — 2. Wahlgang erforderlich"}</div>}
+                {hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#f59e0b","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand — Stichwahl erforderlich</div>}
               </div>}
               {letzteAktualisierung&&<div style={{ paddingBottom:VB?12:6, marginLeft:"auto" }}><div style={{ fontSize:12, color:col(C.textLight,"rgba(255,255,255,0.4)") }}>Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}</div><div style={{ fontSize:11, color:col(C.textLight,"rgba(255,255,255,0.3)") }}>Auto-Refresh alle 30 Sekunden</div></div>}
             </div>
