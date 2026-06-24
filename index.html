@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-059";
+const APP_VERSION = "v2.1 · Build 20260621-060";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -3672,25 +3672,23 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
           : berechneOptErgebnisse(wahl, ergebnisse);
         const bkrDaten = istBKRWahl(wahl) ? berechneBKRErgebnisse(wahl, ergebnisse) : null;
         const maxS = Math.max(...optErg.map(e=>e.stimmen), 1);
-        const mehrheitsregel = typeof wahl.mehrheitsregel==="object" ? (wahl.mehrheitsregel?.Value||"relativ") : (wahl.mehrheitsregel||"relativ");
         const nichtenthaltung = optErg.filter(e=>!e.istEnthaltung);
         const enthaltung = optErg.find(e=>e.istEnthaltung);
         const fuehrend = nichtenthaltung[0];
         const maxAuswahl = parseInt(wahl?.maxAuswahl||1);
         const istMehrfach = wahl?.mehrfach && maxAuswahl>1;
         const isBKR = istBKRWahl(wahl);
-        const istFWG = istFolgeWahlgang(wahl);
+        const istFWGw = istFolgeWahlgang(wahl);
         const wahlGeschlossen = !!wahl.geschlossen;
         const istLetzte = idx===alleWahlen.length-1;
         const hatNaechsteStichwahl = alleWahlen.some((w,i)=>i>idx&&getBasisTitel(w.titel)===getBasisTitel(wahl.titel));
 
-        // Kategorisierung der Ergebnisse
         const gewaehlteNeu = isBKR
           ? (bkrDaten?.gewaehlte||[])
           : nichtenthaltung.filter(e=>{
               if (!wahlGeschlossen||total===0) return false;
               if (istMehrfach) return !!e.gewaehlt;
-              if (istFWG) return e===fuehrend&&pruefeFolgeWahlgang(e.stimmen,total);
+              if (istFWGw) return e===fuehrend&&pruefeFolgeWahlgang(e.stimmen,total);
               return e===fuehrend&&pruefeMehrheitGO(e.stimmen,total);
             });
         const quotaGesperrtNeu = isBKR ? (bkrDaten?.nichtGewaehlteQuota||[]) : [];
@@ -3699,27 +3697,26 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
         );
         const mehrheitErreicht = gewaehlteNeu.length>0&&(isBKR?bkrDaten?.offeneAemter===0:(!istMehrfach||gewaehlteNeu.length>=maxAuswahl));
         const gleichstand = !isBKR&&!mehrheitErreicht&&fuehrend&&nichtenthaltung.filter(e=>e.stimmen===fuehrend.stimmen&&e.id!==fuehrend.id).length>0;
-        const keinDrittelGlobal = istFWG&&fuehrend&&!pruefeFolgeWahlgang(fuehrend.stimmen,total);
+        const keinDrittelGlobal = istFWGw&&fuehrend&&!pruefeFolgeWahlgang(fuehrend.stimmen,total);
         const offeneAemterNeu = isBKR?(bkrDaten?.offeneAemter||0):istMehrfach?maxAuswahl-gewaehlteNeu.length:(gewaehlteNeu.length===0?1:0);
         const braucht2WG = wahlGeschlossen&&total>0&&offeneAemterNeu>0&&!gleichstand&&!keinDrittelGlobal;
         const wahlgescheitert = wahlGeschlossen&&total>0&&keinDrittelGlobal&&!gleichstand;
 
-        // Balken-Renderer
-        function ErgebnisBalken({opt, highlight}) {
+        function ErgebnisBalken({opt,hl}) {
           const pct = maxS>0?Math.round(opt.stimmen/maxS*100):0;
           const tpct = total>0?Math.round(opt.stimmen/total*100):0;
-          const barColor = highlight==="g"?C.accent:highlight==="q"?"#f59e0b":highlight==="w"?"#6366f1":"#d1d5db";
+          const barColor = hl==="g"?C.accent:hl==="q"?"#f59e0b":hl==="w"?"#6366f1":"#d1d5db";
           return (
             <div style={{marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  {highlight==="g"&&<i className="ti ti-circle-check" style={{color:C.accent,fontSize:13}}/>}
-                  {highlight==="q"&&<i className="ti ti-lock" style={{color:"#f59e0b",fontSize:13}}/>}
-                  <span style={{fontSize:14,fontWeight:highlight==="g"?700:400,color:highlight==="g"?C.text:C.textLight}}>{opt.name}</span>
+                  {hl==="g"&&<i className="ti ti-circle-check" style={{color:C.accent,fontSize:13}}/>}
+                  {hl==="q"&&<i className="ti ti-lock" style={{color:"#f59e0b",fontSize:13}}/>}
+                  <span style={{fontSize:14,fontWeight:hl==="g"?700:400,color:hl==="g"?C.text:C.textLight}}>{opt.name}</span>
                   {opt.istHauptamtlich&&<span style={{...S.badge,background:"#dbeafe",color:"#1e40af",fontSize:10}}>kirchl. Dienst</span>}
                   {opt.istEnthaltung&&<span style={{...S.badge,...S.badgeGray,fontSize:10}}>Enthaltung</span>}
                 </div>
-                <span style={{fontSize:13,fontWeight:600,color:highlight==="g"?C.accent:C.textLight}}>{opt.stimmen} ({tpct}%)</span>
+                <span style={{fontSize:13,fontWeight:600,color:hl==="g"?C.accent:C.textLight}}>{opt.stimmen} ({tpct}%)</span>
               </div>
               <div style={{background:"#f3f4f6",borderRadius:4,height:8,overflow:"hidden"}}>
                 <div style={{width:pct+"%",height:"100%",background:barColor,borderRadius:4}}/>
@@ -3728,13 +3725,8 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
           );
         }
 
-        function ErgebnisBlock({type, title, children}) {
-          const cfg = {
-            g:{bg:"#f0faf5",bd:C.accent,tc:C.accent},
-            q:{bg:"#fffbeb",bd:"#f59e0b",tc:"#92400e"},
-            w:{bg:"#f5f3ff",bd:"#6366f1",tc:"#4338ca"},
-            e:{bg:"#fef2f2",bd:C.error,tc:"#7b2d2d"},
-          }[type]||{bg:"#f9fafb",bd:C.border,tc:C.textLight};
+        function ErgebnisBlock({type,title,children}) {
+          const cfg={g:{bg:"#f0faf5",bd:C.accent,tc:C.accent},q:{bg:"#fffbeb",bd:"#f59e0b",tc:"#92400e"},w:{bg:"#f5f3ff",bd:"#6366f1",tc:"#4338ca"},e:{bg:"#fef2f2",bd:C.error,tc:"#7b2d2d"}}[type]||{bg:"#f9fafb",bd:C.border,tc:C.textLight};
           return (
             <div style={{background:cfg.bg,border:"2px solid "+cfg.bd,borderRadius:10,padding:"12px 16px",marginBottom:10}}>
               <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",color:cfg.tc,marginBottom:8}}>{title}</div>
@@ -3748,9 +3740,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
             {idx>0&&(
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                 <div style={{flex:1,height:1,background:C.border}}/>
-                <span style={{fontSize:12,color:C.textLight,fontWeight:600,whiteSpace:"nowrap"}}>
-                  {ist2Wahlgang(wahl)?"2. Wahlgang":istStichwahl(wahl)?"Stichwahl":"Folgewahlgang"}
-                </span>
+                <span style={{fontSize:12,color:C.textLight,fontWeight:600,whiteSpace:"nowrap"}}>{ist2Wahlgang(wahl)?"2. Wahlgang":istStichwahl(wahl)?"Stichwahl":"Folgewahlgang"}</span>
                 <div style={{flex:1,height:1,background:C.border}}/>
               </div>
             )}
@@ -3766,85 +3756,48 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
               </div>
             </div>
             {isBKR&&istFolgeWahlgang(wahl)&&(()=>{
-              const maxHFolge = berechneBKRQuota(wahl);
-              return (
-                <div style={{...S.alert,background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1e40af",fontSize:12,marginBottom:12}}>
-                  <i className="ti ti-info-circle"/> <strong>Hinweis zur Quota (§45 Abs. 2 LWG):</strong> Die bereits gewählten Mitglieder aus dem vorherigen Wahlgang fließen in die Quota-Berechnung ein. Für diesen Wahlgang sind noch max. <strong>{maxHFolge} Person{maxHFolge!==1?"en":""} im kirchlichen Dienst</strong> wählbar.
-                </div>
-              );
+              const mhf=berechneBKRQuota(wahl);
+              return (<div style={{...S.alert,background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1e40af",fontSize:12,marginBottom:12}}><i className="ti ti-info-circle"/> <strong>Hinweis zur Quota (§45 Abs. 2 LWG):</strong> Bereits gewählte Mitglieder fließen in die Quota-Berechnung ein. Für diesen Wahlgang noch max. <strong>{mhf} Person{mhf!==1?"en":""} im kirchl. Dienst</strong> wählbar.</div>);
             })()}
             {wahlGeschlossen&&total>0 ? (
               <div>
-                {gewaehlteNeu.length>0&&(
-                  <ErgebnisBlock type="g" title={"✓ Gewählt"+(istMehrfach||isBKR?" ("+gewaehlteNeu.length+" von "+maxAuswahl+" Plätzen)":"")}>
-                    {gewaehlteNeu.map(opt=><ErgebnisBalken key={opt.id} opt={opt} highlight="g"/>)}
-                  </ErgebnisBlock>
-                )}
-                {quotaGesperrtNeu.length>0&&(
-                  <ErgebnisBlock type="q" title="⚠ Quota erreicht — nicht berücksichtigt (§45 Abs. 2 LWG)">
-                    <div style={{fontSize:11,color:"#92400e",marginBottom:8}}>Trotz ausreichender Stimmen nicht gewählt — Höchstzahl Personen im kirchlichen Dienst erreicht.</div>
-                    {quotaGesperrtNeu.map(opt=><ErgebnisBalken key={opt.id} opt={opt} highlight="q"/>)}
-                  </ErgebnisBlock>
-                )}
-                {!gleichstand&&braucht2WG&&nichtGewaehlteNeu.length>0&&(
-                  <ErgebnisBlock type="w" title={"⏳ "+offeneAemterNeu+" Platz"+(offeneAemterNeu>1?"e":"")+" offen — "+(istFWG?"Stichwahl":"2. Wahlgang")+" erforderlich"}>
-                    {nichtGewaehlteNeu.map(opt=><ErgebnisBalken key={opt.id} opt={opt} highlight="w"/>)}
-                  </ErgebnisBlock>
-                )}
-                {gleichstand&&(
-                  <ErgebnisBlock type="w" title={"⚖ Gleichstand — "+(istFWG?"Stichwahl":"2. Wahlgang")+" erforderlich"}>
-                    {nichtGewaehlteNeu.map(opt=><ErgebnisBalken key={opt.id} opt={opt} highlight="w"/>)}
-                  </ErgebnisBlock>
-                )}
-                {wahlgescheitert&&(
-                  <ErgebnisBlock type="e" title="✕ Kein Kandidat hat 1/3 erreicht — neue Wahl in späterer Sitzung erforderlich">
-                    {nichtGewaehlteNeu.map(opt=><ErgebnisBalken key={opt.id} opt={opt} highlight="none"/>)}
-                  </ErgebnisBlock>
-                )}
-                {!braucht2WG&&!gleichstand&&!wahlgescheitert&&nichtGewaehlteNeu.length>0&&(
-                  <div style={{marginTop:4}}>
-                    {nichtGewaehlteNeu.map(opt=><ErgebnisBalken key={opt.id} opt={opt} highlight="none"/>)}
-                  </div>
-                )}
-                {enthaltung&&<div style={{marginTop:4}}><ErgebnisBalken opt={enthaltung} highlight="none"/></div>}
-                {mehrheitErreicht&&!braucht2WG&&(
-                  <div style={{...S.alert,background:"#f0faf5",border:"1px solid "+C.accent,color:C.accent,fontSize:13,marginTop:4}}>
-                    <i className="ti ti-circle-check"/> {isBKR||istMehrfach?"Alle "+maxAuswahl+" Plätze besetzt.":"Wahl abgeschlossen."}
-                  </div>
-                )}
+                {gewaehlteNeu.length>0&&<ErgebnisBlock type="g" title={"✓ Gewählt"+(istMehrfach||isBKR?" ("+gewaehlteNeu.length+" von "+maxAuswahl+" Plätzen)":"")}>{gewaehlteNeu.map(o=><ErgebnisBalken key={o.id} opt={o} hl="g"/>)}</ErgebnisBlock>}
+                {quotaGesperrtNeu.length>0&&<ErgebnisBlock type="q" title="⚠ Quota erreicht — nicht berücksichtigt (§45 Abs. 2 LWG)"><div style={{fontSize:11,color:"#92400e",marginBottom:8}}>Trotz ausreichender Stimmen nicht gewählt.</div>{quotaGesperrtNeu.map(o=><ErgebnisBalken key={o.id} opt={o} hl="q"/>)}</ErgebnisBlock>}
+                {!gleichstand&&braucht2WG&&nichtGewaehlteNeu.length>0&&<ErgebnisBlock type="w" title={"⏳ "+offeneAemterNeu+" Platz"+(offeneAemterNeu>1?"e":"")+" offen — "+(istFWGw?"Stichwahl":"2. Wahlgang")+" erforderlich"}>{nichtGewaehlteNeu.map(o=><ErgebnisBalken key={o.id} opt={o} hl="w"/>)}</ErgebnisBlock>}
+                {gleichstand&&<ErgebnisBlock type="w" title={"⚖ Gleichstand — "+(istFWGw?"Stichwahl":"2. Wahlgang")+" erforderlich"}>{nichtGewaehlteNeu.map(o=><ErgebnisBalken key={o.id} opt={o} hl="w"/>)}</ErgebnisBlock>}
+                {wahlgescheitert&&<ErgebnisBlock type="e" title="✕ Kein Kandidat hat 1/3 erreicht — neue Wahl in späterer Sitzung">{nichtGewaehlteNeu.map(o=><ErgebnisBalken key={o.id} opt={o} hl="n"/>)}</ErgebnisBlock>}
+                {!braucht2WG&&!gleichstand&&!wahlgescheitert&&nichtGewaehlteNeu.length>0&&<div style={{marginTop:4}}>{nichtGewaehlteNeu.map(o=><ErgebnisBalken key={o.id} opt={o} hl="n"/>)}</div>}
+                {enthaltung&&<div style={{marginTop:4}}><ErgebnisBalken opt={enthaltung} hl="n"/></div>}
+                {mehrheitErreicht&&!braucht2WG&&<div style={{...S.alert,background:"#f0faf5",border:"1px solid "+C.accent,color:C.accent,fontSize:13,marginTop:4}}><i className="ti ti-circle-check"/> {isBKR||istMehrfach?"Alle "+maxAuswahl+" Plätze besetzt.":"Wahl abgeschlossen."}</div>}
               </div>
             ) : (
               <div>
-                {optErg.map(opt=><ErgebnisBalken key={opt.id} opt={opt} highlight="none"/>)}
+                {optErg.map(o=><ErgebnisBalken key={o.id} opt={o} hl="n"/>)}
                 {!wahlGeschlossen&&<p style={{fontSize:12,color:C.textLight,textAlign:"center",marginTop:8}}>Wahl läuft — Ergebnisse nach Schließen sichtbar.</p>}
               </div>
             )}
             {istLetzte&&wahlGeschlossen&&total>0&&(braucht2WG||gleichstand)&&isLeitung&&!hatNaechsteStichwahl&&(()=>{
-              const keinDrittelU2 = istFWG&&(!fuehrend||fuehrend.stimmen===0||keinDrittelGlobal);
-              const istGleichstandFWG = istFolgeWahlgang(wahl)&&gleichstand;
-              if (keinDrittelU2&&!istGleichstandFWG) return null;
-              const bkrWahlMitKumul = isBKR&&bkrDaten?{...wahl,_gewaehlteH:bkrDaten.gewaehlte.filter(g=>g.istHauptamtlich).length,_gewaehlteE:bkrDaten.gewaehlte.filter(g=>!g.istHauptamtlich).length}:wahl;
-              const bkrFolgeK = isBKR&&bkrDaten?nichtenthaltung.filter(e=>!gewaehlteNeu.some(g=>g.id===e.id)&&!quotaGesperrtNeu.some(g=>g.id===e.id)&&e.stimmen>0):null;
-              const folgeK = bkrFolgeK||(istMehrfach?nichtenthaltung.filter(e=>!e.gewaehlt&&e.stimmen>0):nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0));
-              if (isBKR&&folgeK.length===0) return (
-                <div style={{...S.alert,background:"#fef2f2",border:"1px solid "+C.error,color:"#7b2d2d",fontSize:13,marginTop:12}}>
-                  <i className="ti ti-circle-x"/> <strong>Kein weiterer Wahlgang möglich:</strong> Alle verbliebenen Kandidierenden stehen im kirchlichen Dienst, Quota ausgeschöpft. Besetzung in späterer Sitzung erforderlich.
-                </div>
-              );
+              const kDU=istFWGw&&(!fuehrend||fuehrend.stimmen===0||keinDrittelGlobal);
+              const iGF=istFolgeWahlgang(wahl)&&gleichstand;
+              if (kDU&&!iGF) return null;
+              const bMK=isBKR&&bkrDaten?{...wahl,_gewaehlteH:bkrDaten.gewaehlte.filter(g=>g.istHauptamtlich).length,_gewaehlteE:bkrDaten.gewaehlte.filter(g=>!g.istHauptamtlich).length}:wahl;
+              const bFK=isBKR&&bkrDaten?nichtenthaltung.filter(e=>!gewaehlteNeu.some(g=>g.id===e.id)&&!quotaGesperrtNeu.some(g=>g.id===e.id)&&e.stimmen>0):null;
+              const fK=bFK||(istMehrfach?nichtenthaltung.filter(e=>!e.gewaehlt&&e.stimmen>0):nichtenthaltung.slice(0,2).filter(e=>e.stimmen>0));
+              if (isBKR&&fK.length===0) return (<div style={{...S.alert,background:"#fef2f2",border:"1px solid "+C.error,color:"#7b2d2d",fontSize:13,marginTop:12}}><i className="ti ti-circle-x"/> <strong>Kein weiterer Wahlgang möglich:</strong> Quota ausgeschöpft. Besetzung in späterer Sitzung.</div>);
               return (
                 <div style={{marginTop:12}}>
-                  {istGleichstandFWG&&<div style={{...S.alert,...S.alertWarning,fontSize:12,marginBottom:10}}><i className="ti ti-alert-triangle"/> Gleichstand im {ist2Wahlgang(wahl)?"2. Wahlgang":"Stichwahl"} — Stichwahl erforderlich.</div>}
+                  {iGF&&<div style={{...S.alert,...S.alertWarning,fontSize:12,marginBottom:10}}><i className="ti ti-alert-triangle"/> Gleichstand im {ist2Wahlgang(wahl)?"2. Wahlgang":"Stichwahl"} — Stichwahl erforderlich.</div>}
                   {isBKR&&quotaGesperrtNeu.length>0&&<div style={{...S.alert,background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1e40af",fontSize:12,marginBottom:10}}><i className="ti ti-info-circle"/> Gem. §46 Abs. 4 Satz 2 LWG: Im weiteren Wahlgang nur andere Mitglieder berücksichtigt.</div>}
                   <StichwahVorbereiten
-                    wahl={bkrWahlMitKumul||wahl}
-                    kandidaten={folgeK}
+                    wahl={bMK}
+                    kandidaten={fK}
                     offeneAemter={isBKR&&bkrDaten?bkrDaten.offeneAemter:istMehrfach?offeneAemterNeu:1}
                     wahllokalID={wahllokalID}
                     isLeitung={isLeitung}
                     onDataChange={onDataChange}
                     wahlen={wahlen}
                     istBKR={isBKR}
-                    bkrWahl={bkrWahlMitKumul||wahl}
+                    bkrWahl={bMK}
                   />
                 </div>
               );
@@ -3855,6 +3808,7 @@ function KombinierteGruppenAnsicht({ gruppe, wahllokalID, isLeitung, onDataChang
     </div>
   );
 }
+
 
 function StichwahVorbereiten({ wahl, kandidaten, wahllokalID, isLeitung, onDataChange, wahlen, offeneAemter=1, istBKR=false, bkrWahl=null }) {
   const basisTitel = getBasisTitel(wahl?.titel || "");
@@ -4273,48 +4227,6 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
                 {hatGleichstand&&<div style={{ fontSize:VB?16:13, fontWeight:700, color:col("#f59e0b","#fbbf24") }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand — Stichwahl erforderlich</div>}
               </div>}
               {letzteAktualisierung&&<div style={{ paddingBottom:VB?12:6, marginLeft:"auto" }}><div style={{ fontSize:12, color:col(C.textLight,"rgba(255,255,255,0.4)") }}>Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}</div><div style={{ fontSize:11, color:col(C.textLight,"rgba(255,255,255,0.3)") }}>Auto-Refresh alle 30 Sekunden</div></div>}
-            </div>
-          </div>
-          {wahlGeschlossen
-            ? <BalkenDiagramm opts={optErgebnisse} totalStimmen={total} maxStimmen={maxS} gross={VB} gewinnerListe={gewaehlteKandidaten} gleichstandListe={hatGleichstand?[...gleichstandKandidaten,...(gewinner.slice(-1))]:[]}/>
-            : <div style={{ padding:"20px 0", textAlign:"center", color:C.textLight, fontSize:14, background:C.bg, borderRadius:8 }}>
-                <div style={{ fontSize:32, marginBottom:8 }}><i className="ti ti-lock" aria-hidden="true" style={{fontSize:32, color:C.textLight}}/></div>
-                <p style={{ margin:0, fontWeight:600 }}>Ergebnisse und Stimmverteilung werden erst nach dem Schließen der Wahl angezeigt.</p>
-              </div>
-          }
-          {wahlGeschlossen&&stichwahNötig&&!VB&&(
-            <div style={{ marginTop:24, padding:16, borderRadius:10, background:stichwahExistiert?"#f0fdf4":"#fff8e1", border:`1px solid ${stichwahExistiert?"#22c55e":"#f59e0b"}` }}>
-              {stichwahExistiert?<p style={{ fontWeight:700, color:"#166534" }}><i className="ti ti-circle-check" aria-hidden="true" style={{color:C.success}}/> Stichwahl bereits angelegt: "{stichwahSuchTitel}"</p>:<>
-                {hatGleichstand&&<p style={{ fontWeight:700, color:"#92400e", marginBottom:8 }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Gleichstand: {[...gleichstandKandidaten,...gewinner.slice(-1)].map(k=>k.name).join(", ")} — je {gewinnerSchwelle} Stimmen.</p>}
-                {!mehrheitErreicht&&!hatGleichstand&&!wahlIstStichwahl&&<p style={{ fontWeight:700, color:"#92400e", marginBottom:8 }}><i className="ti ti-alert-triangle" aria-hidden="true"/> Absolute Mehrheit (>50%) nicht erreicht.</p>}
-                {!mehrheitErreicht&&wahlIstStichwahl&&gewinner.length>0&&!pruefeStichwahl(gewinner[0].stimmen,total)&&(
-                  <><p style={{ fontWeight:700, color:C.error, marginBottom:4 }}><i className="ti ti-circle-x" aria-hidden="true"/> Kein Kandidat hat die erforderliche Mindestanzahl von 1/3 der Stimmen erreicht.</p>
-                  <p style={{ fontSize:12, color:"#7b2d2d", marginBottom:12 }}>Gem. Grundordnung § Abs. 1 Nr. 4 ist keine weitere automatische Stichwahl vorgesehen. Die Versammlung muss über das weitere Vorgehen beraten.</p></>
-                )}
-                {(!wahlIstStichwahl||(wahlIstStichwahl&&gewinner.length>0&&pruefeStichwahl(gewinner[0].stimmen,total)))&&<p style={{ fontSize:13, color:"#78350f", marginBottom:12 }}>Eine Stichwahl ist erforderlich.</p>}
-                {wahlenFrisch&&<StichwahVorbereiten
-                  wahl={wahl}
-                  kandidaten={hatGleichstand?[...gleichstandKandidaten,...gewinner.slice(-1)]:sichereGewinner}
-                  wahllokalID={wahllokalID}
-                  isLeitung={isLeitung}
-                  onDataChange={onDataChange}
-                  wahlen={wahlen}
-                />}
-              </>}
-            </div>
-          )}
-        </>
-      )}
-      {ergebnisse===null&&<div style={{ textAlign:"center", padding:48, color:col(C.textLight,"rgba(255,255,255,0.5)") }}>Wird geladen…</div>}
-      {ergebnisse!==null&&total===0&&<div style={{ textAlign:"center", padding:48, color:col(C.textLight,"rgba(255,255,255,0.5)") }}>Noch keine Stimmen abgegeben.</div>}
-    </div>
-  );
-}
-
-function StatCard({ num, label, color, hint=null, onHintClick=null }) {
-  return (
-    <div style={S.statCard}>
-      <div {letzteAktualisierung&&<div style={{ paddingBottom:VB?12:6, marginLeft:"auto" }}><div style={{ fontSize:12, color:col(C.textLight,"rgba(255,255,255,0.4)") }}>Letzte Aktualisierung: {letzteAktualisierung.toLocaleTimeString("de-DE")}</div><div style={{ fontSize:11, color:col(C.textLight,"rgba(255,255,255,0.3)") }}>Auto-Refresh alle 30 Sekunden</div></div>}
             </div>
           </div>
           {wahlGeschlossen
