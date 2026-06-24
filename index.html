@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-068";
+const APP_VERSION = "v2.1 · Build 20260624-069";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -1364,7 +1364,7 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
 
   useEffect(() => { laden(); }, []);
 
-  async function loescheWahltag(wt) {
+  async function loescheWahltag(wt, alleGeschlossen=false) {
     const datum = wt.datum ? new Date(wt.datum+"T12:00:00").toLocaleDateString("de-DE", {weekday:"long", day:"2-digit", month:"long", year:"numeric"}) : wt.datum;
     const ok = await new Promise(resolve => {
       const div = document.createElement("div");
@@ -1404,8 +1404,8 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
     if (!ok) return;
     showLoading("Wahltag wird gelöscht…");
     try {
-      const res = await callFlow("deleteWahltag", { apiKey:API.key, eventID, datum:wt.datum });
-      if (res?.status === "stimmen_vorhanden") {
+      const res = await callFlow("deleteWahltag", { apiKey:API.key, eventID, datum:wt.datum, alleGeschlossen });
+      if (!alleGeschlossen && res?.status === "stimmen_vorhanden") {
         hideLoading();
         const div = document.createElement("div");
         div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
@@ -1519,6 +1519,8 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
              const si = statusInfo(wt);
              const datum = wt.datum ? new Date(wt.datum+"T12:00:00").toLocaleDateString("de-DE", { weekday:"long", day:"2-digit", month:"long", year:"numeric" }) : "—";
              const istHeute = wt.datum?.slice(0,10) === today;
+             const wahlenDesWahltags = appData.wahlen.filter(w=>w.eventID===eventID && w.startzeit?.slice(0,10)===wt.datum?.slice(0,10));
+             const alleWahlenGeschlossen = wahlenDesWahltags.length > 0 && wahlenDesWahltags.every(w=>w.geschlossen);
              return (
                <div onClick={()=>onSelect(wt)}
                  style={{ ...S.card, cursor:"pointer",
@@ -1547,7 +1549,7 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
                    </div>
                  )}
                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                   <button onClick={ev=>{ ev.stopPropagation(); loescheWahltag(wt); }}
+                   <button onClick={ev=>{ ev.stopPropagation(); loescheWahltag(wt, si.label==="Vergangen" && alleWahlenGeschlossen); }}
                      style={si.label==="Vergangen"
                        ? { display:"flex", alignItems:"center", gap:5, background:"#fef2f2", border:"1px solid #fca5a5", color:"#dc2626", cursor:"pointer", padding:"5px 10px", borderRadius:"7px", fontSize:12, fontWeight:600 }
                        : { background:"none", border:"none", cursor:"pointer", color:C.textLight, padding:"4px 6px", borderRadius:6, fontSize:16, lineHeight:1 }}
