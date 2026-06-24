@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-065";
+const APP_VERSION = "v2.1 · Build 20260621-066";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -1369,17 +1369,35 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
     const ok = await new Promise(resolve => {
       const div = document.createElement("div");
       div.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";
-      div.innerHTML = `<div style="background:#fff;border-radius:12px;padding:28px 24px;max-width:420px;width:100%">
-        <div style="font-size:18px;font-weight:700;color:#1a3a5c;margin-bottom:12px">Wahltag löschen</div>
-        <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 8px"><strong>${datum}</strong></p>
-        <p style="font-size:13px;color:#e24b4a;margin:0 0 20px">Dieser Wahltag wird unwiderruflich gelöscht — inklusive aller Wahlen, Kandidaten und Tagestoken.</p>
+      div.innerHTML = `<div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <span style="font-size:22px">⚠️</span>
+          <div style="font-size:17px;font-weight:700;color:#1a3a5c">Wahltag unwiderruflich löschen?</div>
+        </div>
+        <p style="font-size:14px;color:#374151;font-weight:600;margin:0 0 4px">${datum}</p>
+        <p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0 0 16px">Alle Wahlergebnisse, Token und Daten werden dauerhaft entfernt und können nicht wiederhergestellt werden.</p>
+        <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:4px">⚠ Wahlanfechtungsfrist beachten</div>
+          <div style="font-size:12px;color:#92400e;line-height:1.5">Stellen Sie sicher, dass die Wahlanfechtungsfrist abgelaufen ist und die Ergebnisse ordnungsgemäß protokolliert wurden.</div>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:20px">
+          <input type="checkbox" id="dlg-check" style="margin-top:2px;width:16px;height:16px;cursor:pointer;accent-color:#e24b4a"/>
+          <span style="font-size:13px;color:#374151;line-height:1.5">Ich bestätige, dass die Wahlanfechtungsfrist abgelaufen ist und die Ergebnisse dokumentiert wurden.</span>
+        </label>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button id="dlg-c" style="padding:8px 16px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:14px">Abbrechen</button>
-          <button id="dlg-o" style="padding:8px 16px;background:#e24b4a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">Löschen</button>
+          <button id="dlg-c" style="padding:9px 18px;border:1px solid #d1d5db;background:#fff;border-radius:8px;cursor:pointer;font-size:14px;color:#374151">Abbrechen</button>
+          <button id="dlg-o" disabled style="padding:9px 18px;background:#d1d5db;color:#9ca3af;border:none;border-radius:8px;cursor:not-allowed;font-size:14px;font-weight:600;transition:background 0.2s,color 0.2s">Endgültig löschen</button>
         </div>
       </div>`;
       document.body.appendChild(div);
-      div.querySelector("#dlg-o").onclick = () => { document.body.removeChild(div); resolve(true); };
+      const dlgBtn = div.querySelector("#dlg-o");
+      div.querySelector("#dlg-check").onchange = (e) => {
+        dlgBtn.disabled = !e.target.checked;
+        dlgBtn.style.background = e.target.checked ? "#e24b4a" : "#d1d5db";
+        dlgBtn.style.color = e.target.checked ? "#fff" : "#9ca3af";
+        dlgBtn.style.cursor = e.target.checked ? "pointer" : "not-allowed";
+      };
+      dlgBtn.onclick = () => { if(!dlgBtn.disabled){ document.body.removeChild(div); resolve(true); } };
       div.querySelector("#dlg-c").onclick = () => { document.body.removeChild(div); resolve(false); };
       div.onclick = ev => { if(ev.target===div){ document.body.removeChild(div); resolve(false); } };
     });
@@ -1522,8 +1540,21 @@ function WahltageAuswahl({ appData, eventID, onSelect, onExit, isMobile }) {
                      {wt.kontrollcode && <span style={{ fontFamily:"monospace", color:C.primary, fontSize:12 }}>{wt.kontrollcode}</span>}
                    </div>
                  </div>
+                 {si.label==="Vergangen"&&(
+                   <div style={{ width:"100%", background:"#fef3c7", border:"1px solid #f59e0b", borderRadius:6, padding:"6px 10px", marginTop:4, fontSize:12, color:"#92400e" }}
+                     onClick={ev=>ev.stopPropagation()}>
+                     <i className="ti ti-alert-triangle" style={{marginRight:4}}/> <strong>Wahlanfechtungsfrist beachten</strong> — vor dem Löschen sicherstellen dass diese abgelaufen ist.
+                   </div>
+                 )}
                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                   <button onClick={ev=>{ ev.stopPropagation(); loescheWahltag(wt); }}
+                   {si.label==="Vergangen"&&(
+                     <button onClick={ev=>{ ev.stopPropagation(); loescheWahltag(wt); }}
+                       style={{ display:"flex", alignItems:"center", gap:5, background:"#fef2f2", border:"1px solid #fca5a5", color:"#dc2626", cursor:"pointer",
+                         padding:"5px 10px", borderRadius:"7px", fontSize:12, fontWeight:600 }}>
+                       <i className="ti ti-trash" style={{fontSize:13}}/> Löschen
+                     </button>
+                   )}
+                   {si.label!=="Vergangen"&&<button onClick={ev=>{ ev.stopPropagation(); loescheWahltag(wt); }}
                      style={{ background:"none", border:"none", cursor:"pointer", color:C.textLight,
                        padding:"4px 6px", borderRadius:6, fontSize:16, lineHeight:1 }}
                      title="Wahltag löschen"
