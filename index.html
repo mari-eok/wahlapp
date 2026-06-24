@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-const APP_VERSION = "v2.1 · Build 20260621-064";
+const APP_VERSION = "v2.1 · Build 20260621-065";
 const API = {
   key: "EKIBA_VOTING_2026!?",
   flows: {
@@ -4256,7 +4256,7 @@ function ErgebnisDashboard({ appData, wahllokalID, onBack, isLeitung=false, onDa
                   }
 
                   function Balk({opt,hl}) {
-                    const pct = maxStimmen>0?Math.round(opt.stimmen/maxStimmen*100):0;
+                    const pct = maxS>0?Math.round(opt.stimmen/maxS*100):0;
                     const tpct = total>0?Math.round(opt.stimmen/total*100):0;
                     const barCol = hl==="g"?(VB?"#4ade80":C.accent):hl==="q"?"#f59e0b":hl==="w"?(VB?"#a78bfa":"#6366f1"):(VB?"rgba(255,255,255,0.15)":"#d1d5db");
                     return (
